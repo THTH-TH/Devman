@@ -56,12 +56,33 @@ const mapActivity = r => ({
   timestamp: r.occurred_at,
 })
 
+const mapDocument = r => ({
+  id: r.id,
+  projectId: r.project_id || '',
+  name: r.name,
+  url: r.url || '',
+  category: r.category || 'other',
+  notes: r.notes || '',
+  addedBy: r.added_by || '',
+  createdAt: r.created_at,
+})
+
+const mapTeamMember = r => ({
+  id: r.id,
+  name: r.name,
+  role: r.role || '',
+  email: r.email || '',
+  phone: r.phone || '',
+})
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 const useStore = create((set, get) => ({
   projects: [],
   checklistItems: [],
   milestones: [],
   activityLog: [],
+  documents: [],
+  teamMembers: [],
   loading: true,
   error: null,
 
@@ -69,27 +90,32 @@ const useStore = create((set, get) => ({
   async initialize() {
     set({ loading: true, error: null })
     try {
-      const [p, c, m, a] = await Promise.all([
+      const [p, c, m, a, d, t] = await Promise.all([
         supabase.from('projects').select('*').order('created_at', { ascending: false }),
         supabase.from('checklist_items').select('*'),
         supabase.from('milestones').select('*'),
         supabase.from('activity_log').select('*').order('occurred_at', { ascending: false }).limit(500),
+        supabase.from('documents').select('*').order('created_at', { ascending: false }),
+        supabase.from('team_members').select('*').order('name'),
       ])
 
       if (p.error) throw p.error
       if (c.error) throw c.error
       if (m.error) throw m.error
       if (a.error) throw a.error
+      if (d.error) throw d.error
+      if (t.error) throw t.error
 
       set({
         projects: p.data.map(mapProject),
         checklistItems: c.data.map(mapItem),
         milestones: m.data.map(mapMilestone),
         activityLog: a.data.map(mapActivity),
+        documents: d.data.map(mapDocument),
+        teamMembers: t.data.map(mapTeamMember),
         loading: false,
       })
 
-      // Remove any existing channel before subscribing
       await supabase.removeAllChannels()
       get().subscribeToRealtime()
     } catch (err) {
@@ -133,6 +159,24 @@ const useStore = create((set, get) => ({
         if (payload.eventType === 'INSERT') {
           set(s => ({ activityLog: [mapActivity(payload.new), ...s.activityLog].slice(0, 500) }))
         }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, payload => {
+        const { eventType, new: row, old } = payload
+        set(s => {
+          if (eventType === 'INSERT') return { documents: [mapDocument(row), ...s.documents] }
+          if (eventType === 'UPDATE') return { documents: s.documents.map(d => d.id === row.id ? mapDocument(row) : d) }
+          if (eventType === 'DELETE') return { documents: s.documents.filter(d => d.id !== old.id) }
+          return s
+        })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members' }, payload => {
+        const { eventType, new: row, old } = payload
+        set(s => {
+          if (eventType === 'INSERT') return { teamMembers: [...s.teamMembers, mapTeamMember(row)] }
+          if (eventType === 'UPDATE') return { teamMembers: s.teamMembers.map(m => m.id === row.id ? mapTeamMember(row) : m) }
+          if (eventType === 'DELETE') return { teamMembers: s.teamMembers.filter(m => m.id !== old.id) }
+          return s
+        })
       })
       .subscribe()
   },
@@ -191,6 +235,7 @@ const useStore = create((set, get) => ({
       checklistItems: s.checklistItems.filter(i => i.projectId !== id),
       milestones: s.milestones.filter(m => m.projectId !== id),
       activityLog: s.activityLog.filter(a => a.projectId !== id),
+      documents: s.documents.filter(d => d.projectId !== id),
     }))
     const { error } = await supabase.from('projects').delete().eq('id', id)
     if (error) console.error('deleteProject error:', error)
@@ -328,6 +373,77 @@ const useStore = create((set, get) => ({
     set(s => ({ milestones: s.milestones.map(m => m.id === id ? { ...m, ...data } : m) }))
     const { error } = await supabase.from('milestones').update(updates).eq('id', id)
     if (error) console.error('updateMilestone error:', error)
+  },
+
+  // ── Documents ─────────────────────────────────────────────────────────────
+  async addDocument(data) {
+    const id = genId()
+    const row = {
+      id,
+      project_id: data.projectId || null,
+      name: data.name,
+      url: data.url || '',
+      category: data.category || 'other',
+      notes: data.notes || '',
+      added_by: data.addedBy || 'Tim',
+    }
+    const doc = mapDocument({ ...row, created_at: new Date().toISOString() })
+    set(s => ({ documents: [doc, ...s.documents] }))
+    const { error } = await supabase.from('documents').insert(row)
+    if (error) {
+      console.error('addDocument error:', error)
+      set(s => ({ documents: s.documents.filter(d => d.id !== id) }))
+    }
+    return doc
+  },
+
+  async updateDocument(id, data) {
+    const updates = {}
+    if (data.name !== undefined) updates.name = data.name
+    if (data.url !== undefined) updates.url = data.url
+    if (data.projectId !== undefined) updates.project_id = data.projectId || null
+    if (data.category !== undefined) updates.category = data.category
+    if (data.notes !== undefined) updates.notes = data.notes
+    set(s => ({ documents: s.documents.map(d => d.id === id ? { ...d, ...data } : d) }))
+    const { error } = await supabase.from('documents').update(updates).eq('id', id)
+    if (error) console.error('updateDocument error:', error)
+  },
+
+  async deleteDocument(id) {
+    set(s => ({ documents: s.documents.filter(d => d.id !== id) }))
+    const { error } = await supabase.from('documents').delete().eq('id', id)
+    if (error) console.error('deleteDocument error:', error)
+  },
+
+  // ── Team Members ──────────────────────────────────────────────────────────
+  async addTeamMember(data) {
+    const id = genId()
+    const row = { id, name: data.name, role: data.role || '', email: data.email || '', phone: data.phone || '' }
+    const member = mapTeamMember(row)
+    set(s => ({ teamMembers: [...s.teamMembers, member] }))
+    const { error } = await supabase.from('team_members').insert(row)
+    if (error) {
+      console.error('addTeamMember error:', error)
+      set(s => ({ teamMembers: s.teamMembers.filter(m => m.id !== id) }))
+    }
+    return member
+  },
+
+  async updateTeamMember(id, data) {
+    const updates = {}
+    if (data.name !== undefined) updates.name = data.name
+    if (data.role !== undefined) updates.role = data.role
+    if (data.email !== undefined) updates.email = data.email
+    if (data.phone !== undefined) updates.phone = data.phone
+    set(s => ({ teamMembers: s.teamMembers.map(m => m.id === id ? { ...m, ...data } : m) }))
+    const { error } = await supabase.from('team_members').update(updates).eq('id', id)
+    if (error) console.error('updateTeamMember error:', error)
+  },
+
+  async deleteTeamMember(id) {
+    set(s => ({ teamMembers: s.teamMembers.filter(m => m.id !== id) }))
+    const { error } = await supabase.from('team_members').delete().eq('id', id)
+    if (error) console.error('deleteTeamMember error:', error)
   },
 
   // ── Activity Log ───────────────────────────────────────────────────────────

@@ -63,8 +63,34 @@ create policy "allow_all" on checklist_items for all using (true) with check (tr
 create policy "allow_all" on milestones for all using (true) with check (true);
 create policy "allow_all" on activity_log for all using (true) with check (true);
 
+create table if not exists documents (
+  id text primary key,
+  project_id text references projects(id) on delete set null,
+  name text not null,
+  url text default '',
+  category text default 'other',
+  notes text default '',
+  added_by text default '',
+  created_at timestamptz default now()
+);
+
+create table if not exists team_members (
+  id text primary key,
+  name text not null,
+  role text default '',
+  email text default '',
+  phone text default ''
+);
+
+alter table documents enable row level security;
+alter table team_members enable row level security;
+create policy "allow_all" on documents for all using (true) with check (true);
+create policy "allow_all" on team_members for all using (true) with check (true);
+
 -- Enable real-time sync
 alter publication supabase_realtime add table projects;
 alter publication supabase_realtime add table checklist_items;
 alter publication supabase_realtime add table milestones;
 alter publication supabase_realtime add table activity_log;
+alter publication supabase_realtime add table documents;
+alter publication supabase_realtime add table team_members;

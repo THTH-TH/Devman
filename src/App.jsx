@@ -7,7 +7,11 @@ import NewProject from './pages/NewProject'
 import ProjectWorkspace from './pages/ProjectWorkspace'
 import Workflow from './pages/Workflow'
 import ChecklistPage from './pages/ChecklistPage'
-import Placeholder from './pages/Placeholder'
+import Tasks from './pages/Tasks'
+import Schedule from './pages/Schedule'
+import Documents from './pages/Documents'
+import Team from './pages/Team'
+import Settings from './pages/Settings'
 import useStore from './store/useStore'
 
 function LoadingScreen() {
@@ -68,11 +72,11 @@ export default function App() {
           <Route path="projects/:projectId" element={<ProjectWorkspace />} />
           <Route path="workflow" element={<Workflow />} />
           <Route path="checklist/:projectId" element={<ChecklistPage />} />
-          <Route path="documents" element={<Placeholder title="Documents" />} />
-          <Route path="schedule" element={<Placeholder title="Schedule" />} />
-          <Route path="tasks" element={<Placeholder title="Tasks" />} />
-          <Route path="team" element={<Placeholder title="Team" />} />
-          <Route path="settings" element={<Placeholder title="Settings" />} />
+          <Route path="tasks" element={<Tasks />} />
+          <Route path="schedule" element={<Schedule />} />
+          <Route path="documents" element={<Documents />} />
+          <Route path="team" element={<Team />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
     </BrowserRouter>

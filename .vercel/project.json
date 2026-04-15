@@ -1,0 +1,16 @@
+{
+  "projectId": "prj_1ZzYBkDKe1burpxIz24jjnL2yfZM",
+  "orgId": "team_m2M9rf86cPfKuT1v7LO5L1G5",
+  "projectName": "devman",
+  "settings": {
+    "createdAt": 1775527011914,
+    "framework": "vite",
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}

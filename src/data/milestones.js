@@ -1,0 +1,17 @@
+export const MILESTONE_TEMPLATE = [
+  { stageId: 'acquisition', label: 'Due diligence end' },
+  { stageId: 'acquisition', label: 'Acquisition complete' },
+  { stageId: 'funding-legal', label: 'Funding confirmed' },
+  { stageId: 'resource-consent', label: 'RC lodged' },
+  { stageId: 'resource-consent', label: 'RC approved' },
+  { stageId: 'building-consent', label: 'BC lodged' },
+  { stageId: 'building-consent', label: 'BC approved' },
+  { stageId: 'engineering-plan-approvals', label: 'EPA approved' },
+  { stageId: 'pricing', label: 'Pricing complete' },
+  { stageId: 'sales-marketing', label: 'Sales launch' },
+  { stageId: 'construction', label: 'Construction start' },
+  { stageId: 'construction', label: 'Practical completion' },
+  { stageId: 'settlement-handover', label: 'CCC / COC' },
+  { stageId: 'settlement-handover', label: 'Settlement' },
+  { stageId: 'settlement-handover', label: 'Handover' },
+]

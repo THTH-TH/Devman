@@ -118,7 +118,7 @@ export default function AIAssistant() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-40 w-12 h-12 bg-ocean-600 hover:bg-ocean-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+          className="fixed bottom-5 right-5 z-40 w-12 h-12 bg-forest-600 hover:bg-forest-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95"
           title="AI Assistant"
         >
           <Sparkles size={20} />
@@ -129,7 +129,7 @@ export default function AIAssistant() {
       {open && (
         <div className="fixed bottom-5 right-5 z-50 w-[380px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden" style={{ height: '520px' }}>
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-ocean-600 text-white shrink-0">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-forest-600 text-white shrink-0">
             <div className="flex items-center gap-2">
               <Sparkles size={16} />
               <span className="font-semibold text-sm">AI Assistant</span>
@@ -156,7 +156,7 @@ export default function AIAssistant() {
                     <button
                       key={s}
                       onClick={() => sendMessage(s)}
-                      className="w-full text-left text-xs text-gray-600 bg-gray-50 hover:bg-ocean-50 hover:text-ocean-700 px-3 py-2 rounded-lg border border-gray-100 hover:border-ocean-200 transition-colors"
+                      className="w-full text-left text-xs text-gray-600 bg-gray-50 hover:bg-forest-50 hover:text-forest-700 px-3 py-2 rounded-lg border border-gray-100 hover:border-forest-200 transition-colors"
                     >
                       {s}
                     </button>
@@ -169,7 +169,7 @@ export default function AIAssistant() {
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] px-3 py-2 rounded-xl text-sm leading-relaxed ${
                   msg.role === 'user'
-                    ? 'bg-ocean-600 text-white rounded-br-sm'
+                    ? 'bg-forest-600 text-white rounded-br-sm'
                     : 'bg-gray-100 text-gray-800 rounded-bl-sm'
                 }`}>
                   <span className="whitespace-pre-wrap">{msg.content}</span>
@@ -200,7 +200,7 @@ export default function AIAssistant() {
 
           {/* Input */}
           <div className="px-3 py-3 border-t border-gray-100 shrink-0">
-            <div className="flex items-end gap-2 bg-gray-50 rounded-xl border border-gray-200 px-3 py-2 focus-within:border-ocean-500 focus-within:ring-1 focus-within:ring-ocean-500 transition-all">
+            <div className="flex items-end gap-2 bg-gray-50 rounded-xl border border-gray-200 px-3 py-2 focus-within:border-forest-500 focus-within:ring-1 focus-within:ring-forest-500 transition-all">
               <textarea
                 ref={inputRef}
                 rows={1}
@@ -214,7 +214,7 @@ export default function AIAssistant() {
               <button
                 onClick={() => sendMessage()}
                 disabled={!input.trim() || loading}
-                className="w-7 h-7 bg-ocean-600 hover:bg-ocean-700 disabled:opacity-40 text-white rounded-lg flex items-center justify-center transition-colors shrink-0"
+                className="w-7 h-7 bg-forest-600 hover:bg-forest-700 disabled:opacity-40 text-white rounded-lg flex items-center justify-center transition-colors shrink-0"
               >
                 <Send size={13} />
               </button>

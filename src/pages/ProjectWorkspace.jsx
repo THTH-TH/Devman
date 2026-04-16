@@ -11,7 +11,7 @@ import ChecklistView from './ChecklistView'
 
 const TABS = ['Overview', 'Checklist', 'Tasks', 'Documents']
 
-const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-transparent'
+const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-forest-500 focus:border-transparent'
 
 // ── Edit Project Modal ────────────────────────────────────────────────────────
 
@@ -202,7 +202,7 @@ function TasksTab({ project }) {
                         type="checkbox"
                         checked={item.done}
                         onChange={() => toggleChecklistItem(item.id)}
-                        className="w-4 h-4 rounded border-gray-300 text-ocean-600 focus:ring-ocean-500"
+                        className="w-4 h-4 rounded border-gray-300 text-forest-600 focus:ring-forest-500"
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -233,7 +233,7 @@ function TasksTab({ project }) {
 // ── Documents Tab ─────────────────────────────────────────────────────────────
 
 const CAT_COLORS = {
-  contract: 'bg-ocean-50 text-ocean-700',
+  contract: 'bg-forest-50 text-forest-700',
   consent: 'bg-purple-50 text-purple-700',
   drawing: 'bg-teal-50 text-teal-700',
   report: 'bg-amber-50 text-amber-700',
@@ -337,7 +337,7 @@ function DocumentsTab({ project }) {
                 <div className="flex items-center gap-2">
                   {doc.url ? (
                     <a href={doc.url} target="_blank" rel="noopener noreferrer"
-                      className="font-medium text-gray-800 hover:text-ocean-600 flex items-center gap-1.5 text-sm transition-colors"
+                      className="font-medium text-gray-800 hover:text-forest-600 flex items-center gap-1.5 text-sm transition-colors"
                       onClick={e => e.stopPropagation()}
                     >
                       {doc.name}
@@ -556,7 +556,7 @@ export default function ProjectWorkspace() {
     return (
       <div className="flex flex-col items-center justify-center h-full py-24">
         <p className="text-gray-400 mb-4">Project not found.</p>
-        <Link to="/projects" className="text-ocean-600 text-sm hover:underline">Back to projects</Link>
+        <Link to="/projects" className="text-forest-600 text-sm hover:underline">Back to projects</Link>
       </div>
     )
   }
@@ -616,7 +616,7 @@ export default function ProjectWorkspace() {
             </div>
             <Link
               to={`/checklist/${project.id}`}
-              className="inline-flex items-center gap-1.5 text-xs text-ocean-600 hover:underline"
+              className="inline-flex items-center gap-1.5 text-xs text-forest-600 hover:underline"
             >
               <ExternalLink size={12} />
               Checklist
@@ -634,7 +634,7 @@ export default function ProjectWorkspace() {
           <span className="text-xs text-gray-400">Stage:</span>
           {editingStage ? (
             <select
-              className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ocean-500"
+              className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-forest-500"
               value={project.currentStage}
               autoFocus
               onChange={e => {

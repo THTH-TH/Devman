@@ -123,7 +123,7 @@ function StageSection({ stage, items, onToggle, onEdit, onAdd, projectId }) {
                 <input
                   type="text"
                   autoFocus
-                  className="flex-1 text-sm px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-ocean-500"
+                  className="flex-1 text-sm px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-forest-500"
                   placeholder="Item label…"
                   value={addLabel}
                   onChange={e => setAddLabel(e.target.value)}

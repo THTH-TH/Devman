@@ -24,7 +24,7 @@ function bucket(dateStr) {
 const BUCKETS = [
   { key: 'overdue', label: 'Overdue', headerCls: 'bg-red-50 text-red-700 border-red-200', rowCls: 'bg-red-50/40' },
   { key: 'this-week', label: 'This week', headerCls: 'bg-amber-50 text-amber-700 border-amber-200', rowCls: '' },
-  { key: 'this-month', label: 'This month', headerCls: 'bg-ocean-50 text-ocean-700 border-ocean-200', rowCls: '' },
+  { key: 'this-month', label: 'This month', headerCls: 'bg-forest-50 text-forest-700 border-forest-200', rowCls: '' },
   { key: 'later', label: 'Later', headerCls: 'bg-gray-50 text-gray-600 border-gray-200', rowCls: '' },
 ]
 
@@ -90,7 +90,7 @@ export default function Schedule() {
         <select
           value={filterProject}
           onChange={e => setFilterProject(e.target.value)}
-          className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500"
+          className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-forest-500"
         >
           <option value="">All projects</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -131,7 +131,7 @@ export default function Schedule() {
                       {item.project && (
                         <Link
                           to={`/projects/${item.project.id}`}
-                          className="text-xs text-ocean-600 hover:underline shrink-0 hidden sm:block"
+                          className="text-xs text-forest-600 hover:underline shrink-0 hidden sm:block"
                           onClick={e => e.stopPropagation()}
                         >
                           {item.project.name}

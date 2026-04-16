@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 import useStore from '../store/useStore'
 
-const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500'
+const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-forest-500'
 
 function MemberRow({ member, onSave, onDelete }) {
   const [editing, setEditing] = useState(false)
@@ -136,7 +136,7 @@ export default function Settings() {
           {!showAdd && (
             <button
               onClick={() => setShowAdd(true)}
-              className="inline-flex items-center gap-1.5 text-sm text-ocean-600 hover:text-ocean-700 font-medium"
+              className="inline-flex items-center gap-1.5 text-sm text-forest-600 hover:text-forest-700 font-medium"
             >
               <Plus size={14} />
               Add member
@@ -188,7 +188,7 @@ export default function Settings() {
           <div className="flex justify-between"><span>Version</span><span className="text-gray-400">0.1.0</span></div>
           <div className="flex justify-between"><span>Organisation</span><span className="text-gray-400">Archispace</span></div>
           <div className="flex justify-between"><span>Live URL</span>
-            <a href="https://devman-liart.vercel.app" target="_blank" rel="noopener noreferrer" className="text-ocean-600 hover:underline text-xs">devman-liart.vercel.app</a>
+            <a href="https://devman-liart.vercel.app" target="_blank" rel="noopener noreferrer" className="text-forest-600 hover:underline text-xs">devman-liart.vercel.app</a>
           </div>
         </div>
       </div>

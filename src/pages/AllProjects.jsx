@@ -55,7 +55,7 @@ export default function AllProjects() {
         </div>
         <Link
           to="/projects/new"
-          className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          className="inline-flex items-center gap-2 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
         >
           <Plus size={15} />
           New project
@@ -71,14 +71,14 @@ export default function AllProjects() {
             placeholder="Search projects…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="pl-8 pr-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-56"
+            className="pl-8 pr-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500 w-56"
           />
         </div>
 
         <select
           value={filterStage}
           onChange={e => setFilterStage(e.target.value)}
-          className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500"
         >
           <option value="">All stages</option>
           {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -87,7 +87,7 @@ export default function AllProjects() {
         <select
           value={filterStatus}
           onChange={e => setFilterStatus(e.target.value)}
-          className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500"
         >
           <option value="">All statuses</option>
           {['Active', 'On Hold', 'Blocked', 'Complete'].map(s => (
@@ -99,7 +99,7 @@ export default function AllProjects() {
           <select
             value={filterOwner}
             onChange={e => setFilterOwner(e.target.value)}
-            className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500"
           >
             <option value="">All owners</option>
             {owners.map(o => <option key={o} value={o}>{o}</option>)}

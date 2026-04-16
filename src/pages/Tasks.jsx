@@ -123,7 +123,7 @@ export default function Tasks() {
         <button
           onClick={handleAIPrioritise}
           disabled={aiLoading}
-          className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          className="inline-flex items-center gap-2 bg-ocean-600 hover:bg-ocean-700 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
         >
           <Sparkles size={14} />
           {aiLoading ? 'Thinking…' : 'AI Prioritise'}
@@ -132,13 +132,13 @@ export default function Tasks() {
 
       {/* AI suggestion */}
       {aiSuggestion && (
-        <div className="mb-5 bg-violet-50 border border-violet-200 rounded-xl p-4">
+        <div className="mb-5 bg-ocean-50 border border-ocean-200 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
-            <Sparkles size={14} className="text-violet-600" />
-            <span className="text-sm font-semibold text-violet-700">AI Priority Suggestion</span>
-            <button onClick={() => setAiSuggestion(null)} className="ml-auto text-violet-400 hover:text-violet-600 text-xs">Dismiss</button>
+            <Sparkles size={14} className="text-ocean-600" />
+            <span className="text-sm font-semibold text-ocean-700">AI Priority Suggestion</span>
+            <button onClick={() => setAiSuggestion(null)} className="ml-auto text-ocean-400 hover:text-ocean-600 text-xs">Dismiss</button>
           </div>
-          <p className="text-sm text-violet-800 whitespace-pre-wrap leading-relaxed">{aiSuggestion}</p>
+          <p className="text-sm text-ocean-700 whitespace-pre-wrap leading-relaxed">{aiSuggestion}</p>
         </div>
       )}
 
@@ -171,7 +171,7 @@ export default function Tasks() {
         <select
           value={filterProject}
           onChange={e => setFilter('project', e.target.value)}
-          className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500"
         >
           <option value="">All projects</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -179,7 +179,7 @@ export default function Tasks() {
         <select
           value={filterOwner}
           onChange={e => setFilter('owner', e.target.value)}
-          className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500"
         >
           <option value="">All owners</option>
           {owners.map(o => <option key={o} value={o}>{o}</option>)}

@@ -123,7 +123,7 @@ function StageSection({ stage, items, onToggle, onEdit, onAdd, projectId }) {
                 <input
                   type="text"
                   autoFocus
-                  className="flex-1 text-sm px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="flex-1 text-sm px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-ocean-500"
                   placeholder="Item label…"
                   value={addLabel}
                   onChange={e => setAddLabel(e.target.value)}
@@ -134,7 +134,7 @@ function StageSection({ stage, items, onToggle, onEdit, onAdd, projectId }) {
                 />
                 <button
                   onClick={handleAdd}
-                  className="text-xs bg-blue-600 text-white px-2.5 py-1 rounded hover:bg-blue-700"
+                  className="text-xs bg-forest-600 text-white px-2.5 py-1 rounded hover:bg-forest-700"
                 >
                   Add
                 </button>

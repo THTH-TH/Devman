@@ -43,7 +43,7 @@ function ErrorScreen({ message }) {
         </div>
         <button
           onClick={() => window.location.reload()}
-          className="mt-4 text-sm text-blue-600 hover:underline"
+          className="mt-4 text-sm text-ocean-600 hover:underline"
         >
           Retry
         </button>

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 import useStore from '../store/useStore'
 
-const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500'
+const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500'
 
 function MemberRow({ member, onSave, onDelete }) {
   const [editing, setEditing] = useState(false)
@@ -39,7 +39,7 @@ function MemberRow({ member, onSave, onDelete }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleSave} className="inline-flex items-center gap-1.5 text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors">
+          <button onClick={handleSave} className="inline-flex items-center gap-1.5 text-sm bg-forest-600 text-white px-3 py-1.5 rounded-lg hover:bg-forest-700 transition-colors">
             <Check size={13} /> Save
           </button>
           <button onClick={() => { setEditing(false); setForm({ name: member.name, role: member.role, email: member.email, phone: member.phone }) }} className="text-sm text-gray-500 hover:text-gray-700 px-2">
@@ -105,7 +105,7 @@ function AddMemberForm({ onAdd, onCancel }) {
         <button
           disabled={!form.name.trim()}
           onClick={() => { onAdd(form) }}
-          className="inline-flex items-center gap-1.5 text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm bg-forest-600 text-white px-3 py-1.5 rounded-lg hover:bg-forest-700 disabled:opacity-50 transition-colors"
         >
           <Check size={13} /> Add member
         </button>
@@ -136,7 +136,7 @@ export default function Settings() {
           {!showAdd && (
             <button
               onClick={() => setShowAdd(true)}
-              className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium"
+              className="inline-flex items-center gap-1.5 text-sm text-ocean-600 hover:text-ocean-700 font-medium"
             >
               <Plus size={14} />
               Add member
@@ -188,7 +188,7 @@ export default function Settings() {
           <div className="flex justify-between"><span>Version</span><span className="text-gray-400">0.1.0</span></div>
           <div className="flex justify-between"><span>Organisation</span><span className="text-gray-400">Archispace</span></div>
           <div className="flex justify-between"><span>Live URL</span>
-            <a href="https://devman-liart.vercel.app" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-xs">devman-liart.vercel.app</a>
+            <a href="https://devman-liart.vercel.app" target="_blank" rel="noopener noreferrer" className="text-ocean-600 hover:underline text-xs">devman-liart.vercel.app</a>
           </div>
         </div>
       </div>

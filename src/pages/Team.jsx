@@ -8,7 +8,7 @@ function initials(name) {
 }
 
 const AVATAR_COLORS = [
-  'bg-blue-500', 'bg-teal-500', 'bg-violet-500', 'bg-pink-500',
+  'bg-ocean-500', 'bg-teal-500', 'bg-forest-600', 'bg-pink-500',
   'bg-orange-500', 'bg-green-500', 'bg-indigo-500', 'bg-rose-500',
 ]
 
@@ -35,14 +35,14 @@ export default function Team() {
       <div className="p-6 max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-bold text-gray-900">Team</h1>
-          <Link to="/settings" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+          <Link to="/settings" className="inline-flex items-center gap-2 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
             <Settings size={15} />
             Manage team
           </Link>
         </div>
         <div className="text-center py-20 text-gray-400 text-sm">
           No team members yet.{' '}
-          <Link to="/settings" className="text-blue-600 hover:underline">Add your team in Settings.</Link>
+          <Link to="/settings" className="text-ocean-600 hover:underline">Add your team in Settings.</Link>
         </div>
       </div>
     )
@@ -83,13 +83,13 @@ export default function Team() {
             {/* Contact */}
             <div className="space-y-1.5 mb-4">
               {member.email && (
-                <a href={`mailto:${member.email}`} className="flex items-center gap-2 text-xs text-gray-500 hover:text-blue-600 transition-colors">
+                <a href={`mailto:${member.email}`} className="flex items-center gap-2 text-xs text-gray-500 hover:text-ocean-600 transition-colors">
                   <Mail size={12} className="shrink-0 text-gray-400" />
                   <span className="truncate">{member.email}</span>
                 </a>
               )}
               {member.phone && (
-                <a href={`tel:${member.phone}`} className="flex items-center gap-2 text-xs text-gray-500 hover:text-blue-600 transition-colors">
+                <a href={`tel:${member.phone}`} className="flex items-center gap-2 text-xs text-gray-500 hover:text-ocean-600 transition-colors">
                   <Phone size={12} className="shrink-0 text-gray-400" />
                   {member.phone}
                 </a>
@@ -120,7 +120,7 @@ export default function Team() {
             {member.openTasks > 0 && (
               <Link
                 to={`/tasks?owner=${encodeURIComponent(member.name)}`}
-                className="mt-3 flex items-center gap-1.5 text-xs text-blue-600 hover:underline"
+                className="mt-3 flex items-center gap-1.5 text-xs text-ocean-600 hover:underline"
               >
                 <ListTodo size={12} />
                 View their tasks

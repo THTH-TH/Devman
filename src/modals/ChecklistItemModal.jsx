@@ -4,7 +4,7 @@ import useStore from '../store/useStore'
 import { STAGES } from '../data/stages'
 
 const inputCls =
-  'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+  'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-transparent'
 
 const STATUS_OPTIONS = ['not-started', 'in-progress', 'waiting', 'complete', 'blocked']
 const STATUS_LABELS = {
@@ -146,7 +146,7 @@ export default function ChecklistItemModal({ item, onClose }) {
                 type="checkbox"
                 checked={form.requiredToProgress}
                 onChange={e => set('requiredToProgress', e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="w-4 h-4 rounded border-gray-300 text-ocean-600 focus:ring-ocean-500"
               />
               <span className="text-sm text-gray-600">Required to progress</span>
             </label>
@@ -210,7 +210,7 @@ export default function ChecklistItemModal({ item, onClose }) {
             </button>
             <button
               onClick={handleSave}
-              className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 text-sm font-medium bg-forest-600 text-white rounded-lg hover:bg-forest-700 transition-colors"
             >
               Save
             </button>

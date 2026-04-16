@@ -21,7 +21,7 @@ function Field({ label, required, children }) {
 }
 
 const inputCls =
-  'w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition'
+  'w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-transparent transition'
 
 export default function NewProject() {
   const navigate = useNavigate()
@@ -174,7 +174,7 @@ export default function NewProject() {
             {teamMembers.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {teamMembers.map(m => (
-                  <span key={m} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full">
+                  <span key={m} className="inline-flex items-center gap-1 bg-ocean-50 text-ocean-700 text-xs px-2.5 py-1 rounded-full">
                     {m}
                     <button type="button" onClick={() => removeTeamMember(m)}>
                       <X size={12} />
@@ -251,7 +251,7 @@ export default function NewProject() {
           <button
             type="submit"
             disabled={submitting}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition-colors"
+            className="bg-forest-600 hover:bg-forest-700 disabled:opacity-60 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition-colors"
           >
             {submitting ? 'Creating…' : 'Create project'}
           </button>

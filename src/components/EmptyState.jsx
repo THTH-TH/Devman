@@ -28,7 +28,7 @@ export default function EmptyState({
       {showCreate && (
         <Link
           to="/projects/new"
-          className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-3 rounded-lg transition-colors text-sm"
+          className="inline-flex items-center gap-2 bg-forest-600 hover:bg-forest-700 text-white font-medium px-6 py-3 rounded-lg transition-colors text-sm"
         >
           <Plus size={16} />
           Create project

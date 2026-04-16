@@ -47,8 +47,7 @@ function NavItem({ to, label, icon: Icon, end }) {
 export default function Sidebar() {
   return (
     <aside
-      className="flex flex-col w-56 shrink-0 h-full"
-      style={{ background: '#1a1f2e' }}
+      className="flex flex-col w-56 shrink-0 h-full bg-forest-600"
     >
       {/* Wordmark */}
       <div className="px-5 py-5 border-b border-white/10">

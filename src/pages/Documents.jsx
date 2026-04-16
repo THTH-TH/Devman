@@ -5,7 +5,7 @@ import useStore from '../store/useStore'
 const CATEGORIES = ['contract', 'consent', 'drawing', 'report', 'invoice', 'photo', 'other']
 const CAT_LABELS = { contract: 'Contract', consent: 'Consent', drawing: 'Drawing', report: 'Report', invoice: 'Invoice', photo: 'Photo', other: 'Other' }
 const CAT_COLORS = {
-  contract: 'bg-forest-50 text-forest-700',
+  contract: 'bg-ocean-50 text-ocean-700',
   consent: 'bg-purple-50 text-purple-700',
   drawing: 'bg-teal-50 text-teal-700',
   report: 'bg-amber-50 text-amber-700',
@@ -14,7 +14,7 @@ const CAT_COLORS = {
   other: 'bg-gray-100 text-gray-600',
 }
 
-const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-forest-500'
+const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500'
 
 function DocModal({ doc, projects, onClose, onSave }) {
   const [form, setForm] = useState({
@@ -126,14 +126,14 @@ export default function Documents() {
             placeholder="Search…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="pl-8 pr-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-forest-500 w-48"
+            className="pl-8 pr-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500 w-48"
           />
         </div>
-        <select value={filterProject} onChange={e => setFilterProject(e.target.value)} className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-forest-500">
+        <select value={filterProject} onChange={e => setFilterProject(e.target.value)} className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500">
           <option value="">All projects</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-forest-500">
+        <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500">
           <option value="">All categories</option>
           {CATEGORIES.map(c => <option key={c} value={c}>{CAT_LABELS[c]}</option>)}
         </select>
@@ -170,7 +170,7 @@ export default function Documents() {
                         href={doc.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-medium text-gray-800 hover:text-forest-600 flex items-center gap-1.5 group"
+                        className="font-medium text-gray-800 hover:text-ocean-600 flex items-center gap-1.5 group"
                         onClick={e => e.stopPropagation()}
                       >
                         {doc.name}

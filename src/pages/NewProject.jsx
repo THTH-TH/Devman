@@ -21,7 +21,7 @@ function Field({ label, required, children }) {
 }
 
 const inputCls =
-  'w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-forest-500 focus:border-transparent transition'
+  'w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-transparent transition'
 
 export default function NewProject() {
   const navigate = useNavigate()
@@ -174,7 +174,7 @@ export default function NewProject() {
             {teamMembers.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {teamMembers.map(m => (
-                  <span key={m} className="inline-flex items-center gap-1 bg-forest-50 text-forest-700 text-xs px-2.5 py-1 rounded-full">
+                  <span key={m} className="inline-flex items-center gap-1 bg-ocean-50 text-ocean-700 text-xs px-2.5 py-1 rounded-full">
                     {m}
                     <button type="button" onClick={() => removeTeamMember(m)}>
                       <X size={12} />

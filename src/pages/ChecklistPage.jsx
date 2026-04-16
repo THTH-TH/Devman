@@ -12,7 +12,7 @@ export default function ChecklistPage() {
     return (
       <div className="flex flex-col items-center justify-center h-full py-24">
         <p className="text-gray-400 mb-4">Project not found.</p>
-        <Link to="/projects" className="text-forest-600 text-sm hover:underline">Back to projects</Link>
+        <Link to="/projects" className="text-ocean-600 text-sm hover:underline">Back to projects</Link>
       </div>
     )
   }

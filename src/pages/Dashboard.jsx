@@ -98,7 +98,7 @@ export default function Dashboard() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Active projects" value={stats.active} icon={TrendingUp} iconColor="bg-forest-500" />
+        <StatCard label="Active projects" value={stats.active} icon={TrendingUp} iconColor="bg-ocean-500" />
         <StatCard
           label="Overdue tasks"
           value={stats.overdue}
@@ -121,7 +121,7 @@ export default function Dashboard() {
         <div className="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="font-semibold text-gray-800 text-sm">Projects</h2>
-            <Link to="/projects" className="text-xs text-forest-600 hover:underline">View all</Link>
+            <Link to="/projects" className="text-xs text-ocean-600 hover:underline">View all</Link>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -187,7 +187,7 @@ export default function Dashboard() {
                         {project && (
                           <Link
                             to={`/projects/${project.id}`}
-                            className="text-xs text-forest-500 hover:underline mt-0.5 inline-block"
+                            className="text-xs text-ocean-500 hover:underline mt-0.5 inline-block"
                           >
                             {project.name}
                           </Link>

@@ -28,6 +28,7 @@ const mapItem = r => ({
   label: r.label,
   description: r.description || '',
   owner: r.owner || '',
+  startDate: r.start_date || '',
   dueDate: r.due_date || '',
   status: r.status || 'not-started',
   priority: r.priority || 'medium',
@@ -301,6 +302,7 @@ const useStore = create((set, get) => ({
     if (data.stageId !== undefined) updates.stage_id = data.stageId
     if (data.description !== undefined) updates.description = data.description
     if (data.owner !== undefined) updates.owner = data.owner
+    if (data.startDate !== undefined) updates.start_date = data.startDate
     if (data.dueDate !== undefined) updates.due_date = data.dueDate
     if (data.status !== undefined) updates.status = data.status
     if (data.priority !== undefined) updates.priority = data.priority

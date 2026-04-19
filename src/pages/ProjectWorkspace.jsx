@@ -8,8 +8,9 @@ import StageTracker from '../components/StageTracker'
 import ChecklistItemModal from '../modals/ChecklistItemModal'
 import { STAGE_MAP, STAGES } from '../data/stages'
 import ChecklistView from './ChecklistView'
+import ScheduleTab from '../components/ProjectScheduleTab'
 
-const TABS = ['Overview', 'Checklist', 'Tasks', 'Documents']
+const TABS = ['Overview', 'Checklist', 'Tasks', 'Schedule', 'Documents']
 
 const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-transparent'
 
@@ -698,6 +699,7 @@ export default function ProjectWorkspace() {
           {activeTab === 'Overview' && <OverviewTab project={project} />}
           {activeTab === 'Checklist' && <ChecklistView projectId={project.id} />}
           {activeTab === 'Tasks' && <TasksTab project={project} />}
+          {activeTab === 'Schedule' && <ScheduleTab project={project} />}
           {activeTab === 'Documents' && <DocumentsTab project={project} />}
         </div>
       </div>

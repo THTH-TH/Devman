@@ -353,6 +353,32 @@ const useStore = create((set, get) => ({
   },
 
   // ── Milestones ─────────────────────────────────────────────────────────────
+  async addMilestone(data) {
+    const id = genId()
+    const row = {
+      id,
+      project_id: data.projectId,
+      stage_id: data.stageId || '',
+      label: data.label,
+      date: data.date || '',
+      complete: false,
+    }
+    const ms = mapMilestone(row)
+    set(s => ({ milestones: [...s.milestones, ms] }))
+    const { error } = await supabase.from('milestones').insert(row)
+    if (error) {
+      console.error('addMilestone error:', error)
+      set(s => ({ milestones: s.milestones.filter(m => m.id !== id) }))
+    }
+    return ms
+  },
+
+  async deleteMilestone(id) {
+    set(s => ({ milestones: s.milestones.filter(m => m.id !== id) }))
+    const { error } = await supabase.from('milestones').delete().eq('id', id)
+    if (error) console.error('deleteMilestone error:', error)
+  },
+
   async addBatchMilestones(milestones) {
     const rows = milestones.map(m => ({
       id: genId(),
@@ -372,6 +398,7 @@ const useStore = create((set, get) => ({
     const updates = {}
     if (data.date !== undefined) updates.date = data.date
     if (data.complete !== undefined) updates.complete = data.complete
+    if (data.label !== undefined) updates.label = data.label
     set(s => ({ milestones: s.milestones.map(m => m.id === id ? { ...m, ...data } : m) }))
     const { error } = await supabase.from('milestones').update(updates).eq('id', id)
     if (error) console.error('updateMilestone error:', error)

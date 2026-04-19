@@ -14,8 +14,9 @@ export default function Workflow() {
     return projects.map(p => {
       const items = checklistItems.filter(i => i.projectId === p.id)
       const done = items.filter(i => i.done).length
+      const overdue = items.filter(i => i.dueDate && !i.done && new Date(i.dueDate) < new Date()).length
       const pct = items.length ? Math.round((done / items.length) * 100) : 0
-      return { ...p, pct }
+      return { ...p, pct, totalTasks: items.length, doneTasks: done, overdue }
     })
   }, [projects, checklistItems])
 
@@ -41,12 +42,23 @@ export default function Workflow() {
               >
                 {/* Column header */}
                 <div className={`px-4 py-3 border-b border-gray-200 ${stage.light}`}>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between mb-1">
                     <span className={`text-xs font-semibold ${stage.text}`}>{stage.label}</span>
                     <span className={`text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center ${stage.bg} text-white`}>
                       {stageProjects.length}
                     </span>
                   </div>
+                  {stageProjects.length > 0 && (() => {
+                    const total = stageProjects.reduce((s, p) => s + p.totalTasks, 0)
+                    const done = stageProjects.reduce((s, p) => s + p.doneTasks, 0)
+                    const overdue = stageProjects.reduce((s, p) => s + p.overdue, 0)
+                    return (
+                      <div className="flex items-center gap-2 text-[10px]">
+                        <span className={`${stage.text} opacity-70`}>{done}/{total} tasks</span>
+                        {overdue > 0 && <span className="text-red-500 font-medium">{overdue} overdue</span>}
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 {/* Cards */}
@@ -67,9 +79,10 @@ export default function Workflow() {
                           <span className="text-xs text-gray-400">{p.pct}%</span>
                         </div>
                         <ProgressBar value={p.pct} color={stage.bg} height="h-1" className="mt-2" />
-                        {p.owner && (
-                          <div className="text-[10px] text-gray-300 mt-2">{p.owner}</div>
-                        )}
+                        <div className="flex items-center justify-between mt-2">
+                          {p.owner && <div className="text-[10px] text-gray-300">{p.owner}</div>}
+                          {p.overdue > 0 && <div className="text-[10px] text-red-400 font-medium">{p.overdue} overdue</div>}
+                        </div>
                       </div>
                     ))
                   )}

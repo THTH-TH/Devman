@@ -32,38 +32,44 @@ export default function Team() {
 
   if (teamMembers.length === 0) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-bold text-gray-900">Team</h1>
-          <Link to="/settings" className="inline-flex items-center gap-2 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-            <Settings size={15} />
-            Manage team
-          </Link>
+      <div className="flex flex-col h-full">
+        <div className="bg-white border-b border-gray-100 px-6 py-4 shrink-0">
+          <div className="flex items-center justify-between max-w-7xl mx-auto">
+            <h1 className="text-lg font-bold text-gray-900">Team</h1>
+            <Link to="/settings" className="inline-flex items-center gap-2 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+              <Settings size={15} />
+              Manage team
+            </Link>
+          </div>
         </div>
-        <div className="text-center py-20 text-gray-400 text-sm">
+        <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
           No team members yet.{' '}
-          <Link to="/settings" className="text-ocean-600 hover:underline">Add your team in Settings.</Link>
+          <Link to="/settings" className="ml-1 text-ocean-600 hover:underline">Add your team in Settings.</Link>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Team</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{teamMembers.length} member{teamMembers.length !== 1 ? 's' : ''}</p>
+      <div className="bg-white border-b border-gray-100 px-6 py-4 shrink-0">
+        <div className="flex items-center justify-between max-w-7xl mx-auto">
+          <div>
+            <h1 className="text-lg font-bold text-gray-900">Team</h1>
+            <p className="text-sm text-gray-400 mt-0.5">{teamMembers.length} member{teamMembers.length !== 1 ? 's' : ''}</p>
+          </div>
+          <Link
+            to="/settings"
+            className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Settings size={14} />
+            Manage team
+          </Link>
         </div>
-        <Link
-          to="/settings"
-          className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          <Settings size={14} />
-          Manage team
-        </Link>
       </div>
+      <div className="flex-1 overflow-auto">
+      <div className="p-6 max-w-7xl mx-auto">
 
       {/* Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -129,6 +135,8 @@ export default function Team() {
           </div>
         ))}
       </div>
+    </div>
+    </div>
     </div>
   )
 }

@@ -19,7 +19,7 @@ function MemberRow({ member, onSave, onDelete }) {
 
   if (editing) {
     return (
-      <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 space-y-3">
+      <div className="p-4 bg-forest-50 rounded-xl border border-gray-200 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Name *</label>
@@ -82,7 +82,7 @@ function AddMemberForm({ onAdd, onCancel }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   return (
-    <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 space-y-3 mt-2">
+    <div className="p-4 bg-forest-50 rounded-xl border border-gray-200 space-y-3 mt-2">
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Name *</label>
@@ -120,11 +120,15 @@ export default function Settings() {
   const [showAdd, setShowAdd] = useState(false)
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-400 mt-0.5">Manage your team and app preferences</p>
+    <div className="flex flex-col h-full">
+      <div className="bg-white border-b border-gray-100 px-6 py-4 shrink-0">
+        <div className="max-w-3xl mx-auto">
+          <h1 className="text-lg font-bold text-gray-900">Settings</h1>
+          <p className="text-sm text-gray-400 mt-0.5">Manage your team and app preferences</p>
+        </div>
       </div>
+      <div className="flex-1 overflow-auto">
+      <div className="p-6 max-w-3xl mx-auto">
 
       {/* Team Members */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -192,6 +196,8 @@ export default function Settings() {
           </div>
         </div>
       </div>
+    </div>
+    </div>
     </div>
   )
 }

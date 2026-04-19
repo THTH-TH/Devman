@@ -101,21 +101,25 @@ export default function Documents() {
   const fmtDate = d => new Date(d).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Documents</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{documents.length} document{documents.length !== 1 ? 's' : ''}</p>
+      <div className="bg-white border-b border-gray-100 px-6 py-4 shrink-0">
+        <div className="flex items-center justify-between max-w-7xl mx-auto">
+          <div>
+            <h1 className="text-lg font-bold text-gray-900">Documents</h1>
+            <p className="text-sm text-gray-400 mt-0.5">{documents.length} document{documents.length !== 1 ? 's' : ''}</p>
+          </div>
+          <button
+            onClick={() => setModal('add')}
+            className="inline-flex items-center gap-2 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <Plus size={15} />
+            Add document
+          </button>
         </div>
-        <button
-          onClick={() => setModal('add')}
-          className="inline-flex items-center gap-2 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          <Plus size={15} />
-          Add document
-        </button>
       </div>
+      <div className="flex-1 overflow-auto">
+      <div className="p-6 max-w-7xl mx-auto">
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-5">
@@ -174,7 +178,7 @@ export default function Documents() {
                         onClick={e => e.stopPropagation()}
                       >
                         {doc.name}
-                        <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-400" />
+                        <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 transition-opacity text-ocean-400" />
                       </a>
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell">
@@ -228,6 +232,8 @@ export default function Documents() {
           }}
         />
       )}
+    </div>
+    </div>
     </div>
   )
 }

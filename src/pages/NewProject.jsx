@@ -31,7 +31,7 @@ export default function NewProject() {
     name: '',
     address: '',
     clientEntity: '',
-    owner: 'Tim',
+    owner: '',
     startDate: '',
     targetCompletion: '',
     currentStage: 'feasibility',

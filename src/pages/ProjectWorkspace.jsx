@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, ExternalLink, AlertTriangle, Pencil, X, Plus, Trash2, ExternalLink as LinkIcon } from 'lucide-react'
+import { ArrowLeft, ExternalLink, AlertTriangle, Pencil, X, Plus, Trash2, ExternalLink as LinkIcon, AlertOctagon } from 'lucide-react'
 import useStore from '../store/useStore'
 import StatusPill from '../components/StatusPill'
 import ProgressBar from '../components/ProgressBar'
@@ -15,8 +15,9 @@ const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 round
 
 // ── Edit Project Modal ────────────────────────────────────────────────────────
 
-function EditProjectModal({ project, onClose }) {
+function EditProjectModal({ project, onClose, onDelete }) {
   const { updateProject, logActivity } = useStore()
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [form, setForm] = useState({
     name: project.name,
     address: project.address,
@@ -108,15 +109,31 @@ function EditProjectModal({ project, onClose }) {
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
-          <button
-            onClick={handleSave}
-            disabled={saving || !form.name.trim()}
-            className="px-4 py-2 text-sm font-medium bg-forest-600 text-white rounded-lg hover:bg-forest-700 disabled:opacity-50 transition-colors"
-          >
-            {saving ? 'Saving…' : 'Save changes'}
-          </button>
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+          <div>
+            {confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-red-600 font-medium">Delete this project?</span>
+                <button onClick={onDelete} className="text-xs text-red-600 font-semibold hover:text-red-800 border border-red-200 px-2 py-1 rounded-lg hover:bg-red-50">Yes, delete</button>
+                <button onClick={() => setConfirmDelete(false)} className="text-xs text-gray-500 px-2 py-1">Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 transition-colors">
+                <Trash2 size={12} />
+                Delete project
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+            <button
+              onClick={handleSave}
+              disabled={saving || !form.name.trim()}
+              className="px-4 py-2 text-sm font-medium bg-forest-600 text-white rounded-lg hover:bg-forest-700 disabled:opacity-50 transition-colors"
+            >
+              {saving ? 'Saving…' : 'Save changes'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -305,7 +322,7 @@ function DocumentsTab({ project }) {
   const projectDocs = documents.filter(d => d.projectId === project.id)
 
   const handleAdd = async (data) => {
-    await addDocument({ ...data, projectId: project.id, addedBy: 'Tim' })
+    await addDocument({ ...data, projectId: project.id, addedBy: '' })
     setShowForm(false)
   }
 
@@ -540,7 +557,7 @@ function OverviewTab({ project }) {
 export default function ProjectWorkspace() {
   const { projectId } = useParams()
   const navigate = useNavigate()
-  const { projects, checklistItems, updateProject } = useStore()
+  const { projects, checklistItems, updateProject, deleteProject } = useStore()
   const [activeTab, setActiveTab] = useState('Overview')
   const [editingStage, setEditingStage] = useState(false)
   const [editingStatus, setEditingStatus] = useState(false)
@@ -686,7 +703,14 @@ export default function ProjectWorkspace() {
       </div>
 
       {showEditProject && (
-        <EditProjectModal project={project} onClose={() => setShowEditProject(false)} />
+        <EditProjectModal
+          project={project}
+          onClose={() => setShowEditProject(false)}
+          onDelete={async () => {
+            await deleteProject(project.id)
+            navigate('/projects')
+          }}
+        />
       )}
     </div>
   )

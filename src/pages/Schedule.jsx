@@ -80,22 +80,26 @@ export default function Schedule() {
   const total = items.length
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Schedule</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{total} upcoming item{total !== 1 ? 's' : ''} with due dates</p>
+      <div className="bg-white border-b border-gray-100 px-6 py-4 shrink-0">
+        <div className="flex items-center justify-between max-w-5xl mx-auto">
+          <div>
+            <h1 className="text-lg font-bold text-gray-900">Schedule</h1>
+            <p className="text-sm text-gray-400 mt-0.5">{total} upcoming item{total !== 1 ? 's' : ''} with due dates</p>
+          </div>
+          <select
+            value={filterProject}
+            onChange={e => setFilterProject(e.target.value)}
+            className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500"
+          >
+            <option value="">All projects</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
         </div>
-        <select
-          value={filterProject}
-          onChange={e => setFilterProject(e.target.value)}
-          className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500"
-        >
-          <option value="">All projects</option>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
       </div>
+      <div className="flex-1 overflow-auto">
+      <div className="p-6 max-w-5xl mx-auto">
 
       {total === 0 ? (
         <div className="text-center py-20 text-gray-400 text-sm">
@@ -162,6 +166,8 @@ export default function Schedule() {
           })}
         </div>
       )}
+    </div>
+    </div>
     </div>
   )
 }

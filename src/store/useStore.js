@@ -11,6 +11,24 @@ const mapProject = r => ({
   address: r.address || '',
   clientEntity: r.client_entity || '',
   owner: r.owner || '',
+  bcNumber: r.bc_number || '',
+  legalDescription: r.legal_description || '',
+  ownerContactPerson: r.owner_contact_person || '',
+  ownerMailingAddress: r.owner_mailing_address || '',
+  ownerPhone: r.owner_phone || '',
+  ownerEmail: r.owner_email || '',
+  buildingWorkDescription: r.building_work_description || '',
+  placeId: r.place_id || '',
+  latitude: r.latitude ?? null,
+  longitude: r.longitude ?? null,
+  suburb: r.suburb || '',
+  city: r.city || '',
+  region: r.region || '',
+  postalCode: r.postal_code || '',
+  country: r.country || '',
+  propertySnapshot: r.property_snapshot || null,
+  driveFolderUrl: r.drive_folder_url || '',
+  driveRootFolderId: r.drive_root_folder_id || '',
   teamMembers: r.team_members || [],
   startDate: r.start_date || '',
   targetCompletion: r.target_completion || '',
@@ -60,11 +78,14 @@ const mapActivity = r => ({
 const mapDocument = r => ({
   id: r.id,
   projectId: r.project_id || '',
-  name: r.name,
-  url: r.url || '',
+  name: r.name || r.title || r.filename || '',
+  url: r.url || r.drive_url || r.file_url || '',
   category: r.category || 'other',
   notes: r.notes || '',
   addedBy: r.added_by || '',
+  source: r.source || (r.drive_file_id || r.drive_url ? 'google_drive' : 'manual_link'),
+  driveFileId: r.drive_file_id || '',
+  driveUrl: r.drive_url || '',
   createdAt: r.created_at,
 })
 
@@ -129,6 +150,44 @@ const stripEnhancedScheduleColumns = row => {
 const missingEnhancedScheduleColumn = error =>
   error?.code === 'PGRST204' ||
   /actual_start|actual_end|dependency_id|lag_days|internal_owner|is_milestone|notes/i.test(error?.message || '')
+
+const stripEnhancedProjectColumns = row => {
+  const {
+    bc_number,
+    legal_description,
+    owner_contact_person,
+    owner_mailing_address,
+    owner_phone,
+    owner_email,
+    building_work_description,
+    place_id,
+    latitude,
+    longitude,
+    suburb,
+    city,
+    region,
+    postal_code,
+    country,
+    property_snapshot,
+    drive_folder_url,
+    drive_root_folder_id,
+    ...legacy
+  } = row
+  return legacy
+}
+
+const missingEnhancedProjectColumn = error =>
+  error?.code === 'PGRST204' ||
+  /bc_number|legal_description|owner_contact_person|owner_mailing_address|owner_phone|owner_email|building_work_description|place_id|latitude|longitude|suburb|city|region|postal_code|country|property_snapshot|drive_folder_url|drive_root_folder_id/i.test(error?.message || '')
+
+const stripEnhancedDocumentColumns = row => {
+  const { drive_file_id, drive_url, source, ...legacy } = row
+  return legacy
+}
+
+const missingEnhancedDocumentColumn = error =>
+  error?.code === 'PGRST204' ||
+  /drive_file_id|drive_url|source/i.test(error?.message || '')
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 const useStore = create((set, get) => ({
@@ -285,6 +344,24 @@ const useStore = create((set, get) => ({
       address: data.address || '',
       client_entity: data.clientEntity || '',
       owner: data.owner || '',
+      bc_number: data.bcNumber || '',
+      legal_description: data.legalDescription || '',
+      owner_contact_person: data.ownerContactPerson || '',
+      owner_mailing_address: data.ownerMailingAddress || '',
+      owner_phone: data.ownerPhone || '',
+      owner_email: data.ownerEmail || '',
+      building_work_description: data.buildingWorkDescription || '',
+      place_id: data.placeId || '',
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
+      suburb: data.suburb || '',
+      city: data.city || '',
+      region: data.region || '',
+      postal_code: data.postalCode || '',
+      country: data.country || '',
+      property_snapshot: data.propertySnapshot || null,
+      drive_folder_url: data.driveFolderUrl || '',
+      drive_root_folder_id: data.driveRootFolderId || '',
       team_members: data.teamMembers || [],
       start_date: data.startDate || '',
       target_completion: data.targetCompletion || '',
@@ -298,6 +375,11 @@ const useStore = create((set, get) => ({
     set(s => ({ projects: [project, ...s.projects] }))
     const { error } = await supabase.from('projects').insert(row)
     if (error) {
+      if (missingEnhancedProjectColumn(error)) {
+        const { error: fallbackError } = await supabase.from('projects').insert(stripEnhancedProjectColumns(row))
+        if (!fallbackError) return project
+        console.error('addProject fallback error:', fallbackError)
+      }
       console.error('addProject error:', error)
       set(s => ({ projects: s.projects.filter(p => p.id !== id) }))
       return null
@@ -311,6 +393,24 @@ const useStore = create((set, get) => ({
     if (data.address !== undefined) updates.address = data.address
     if (data.clientEntity !== undefined) updates.client_entity = data.clientEntity
     if (data.owner !== undefined) updates.owner = data.owner
+    if (data.bcNumber !== undefined) updates.bc_number = data.bcNumber
+    if (data.legalDescription !== undefined) updates.legal_description = data.legalDescription
+    if (data.ownerContactPerson !== undefined) updates.owner_contact_person = data.ownerContactPerson
+    if (data.ownerMailingAddress !== undefined) updates.owner_mailing_address = data.ownerMailingAddress
+    if (data.ownerPhone !== undefined) updates.owner_phone = data.ownerPhone
+    if (data.ownerEmail !== undefined) updates.owner_email = data.ownerEmail
+    if (data.buildingWorkDescription !== undefined) updates.building_work_description = data.buildingWorkDescription
+    if (data.placeId !== undefined) updates.place_id = data.placeId
+    if (data.latitude !== undefined) updates.latitude = data.latitude
+    if (data.longitude !== undefined) updates.longitude = data.longitude
+    if (data.suburb !== undefined) updates.suburb = data.suburb
+    if (data.city !== undefined) updates.city = data.city
+    if (data.region !== undefined) updates.region = data.region
+    if (data.postalCode !== undefined) updates.postal_code = data.postalCode
+    if (data.country !== undefined) updates.country = data.country
+    if (data.propertySnapshot !== undefined) updates.property_snapshot = data.propertySnapshot
+    if (data.driveFolderUrl !== undefined) updates.drive_folder_url = data.driveFolderUrl
+    if (data.driveRootFolderId !== undefined) updates.drive_root_folder_id = data.driveRootFolderId
     if (data.teamMembers !== undefined) updates.team_members = data.teamMembers
     if (data.startDate !== undefined) updates.start_date = data.startDate
     if (data.targetCompletion !== undefined) updates.target_completion = data.targetCompletion
@@ -320,7 +420,14 @@ const useStore = create((set, get) => ({
 
     set(s => ({ projects: s.projects.map(p => p.id === id ? { ...p, ...data, updatedAt: updates.updated_at } : p) }))
     const { error } = await supabase.from('projects').update(updates).eq('id', id)
-    if (error) console.error('updateProject error:', error)
+    if (error) {
+      if (missingEnhancedProjectColumn(error)) {
+        const { error: fallbackError } = await supabase.from('projects').update(stripEnhancedProjectColumns(updates)).eq('id', id)
+        if (!fallbackError) return
+        console.error('updateProject fallback error:', fallbackError)
+      }
+      console.error('updateProject error:', error)
+    }
   },
 
   async deleteProject(id) {
@@ -641,11 +748,19 @@ const useStore = create((set, get) => ({
       category: data.category || 'other',
       notes: data.notes || '',
       added_by: data.addedBy || '',
+      source: data.source || (data.url?.includes('drive.google.com') ? 'google_drive' : 'manual_link'),
+      drive_url: data.driveUrl || (data.url?.includes('drive.google.com') ? data.url : ''),
+      drive_file_id: data.driveFileId || '',
     }
     const doc = mapDocument({ ...row, created_at: new Date().toISOString() })
     set(s => ({ documents: [doc, ...s.documents] }))
     const { error } = await supabase.from('documents').insert(row)
     if (error) {
+      if (missingEnhancedDocumentColumn(error)) {
+        const { error: fallbackError } = await supabase.from('documents').insert(stripEnhancedDocumentColumns(row))
+        if (!fallbackError) return doc
+        console.error('addDocument fallback error:', fallbackError)
+      }
       console.error('addDocument error:', error)
       set(s => ({ documents: s.documents.filter(d => d.id !== id) }))
     }
@@ -659,9 +774,19 @@ const useStore = create((set, get) => ({
     if (data.projectId !== undefined) updates.project_id = data.projectId || null
     if (data.category !== undefined) updates.category = data.category
     if (data.notes !== undefined) updates.notes = data.notes
+    if (data.source !== undefined) updates.source = data.source
+    if (data.driveUrl !== undefined) updates.drive_url = data.driveUrl
+    if (data.driveFileId !== undefined) updates.drive_file_id = data.driveFileId
     set(s => ({ documents: s.documents.map(d => d.id === id ? { ...d, ...data } : d) }))
     const { error } = await supabase.from('documents').update(updates).eq('id', id)
-    if (error) console.error('updateDocument error:', error)
+    if (error) {
+      if (missingEnhancedDocumentColumn(error)) {
+        const { error: fallbackError } = await supabase.from('documents').update(stripEnhancedDocumentColumns(updates)).eq('id', id)
+        if (!fallbackError) return
+        console.error('updateDocument fallback error:', fallbackError)
+      }
+      console.error('updateDocument error:', error)
+    }
   },
 
   async deleteDocument(id) {

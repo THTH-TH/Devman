@@ -1,6 +1,20 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, ExternalLink, AlertTriangle, Pencil, X, Plus, Trash2, ExternalLink as LinkIcon, AlertOctagon } from 'lucide-react'
+import {
+  ArrowLeft,
+  ExternalLink,
+  AlertTriangle,
+  Pencil,
+  X,
+  Plus,
+  Trash2,
+  ExternalLink as LinkIcon,
+  AlertOctagon,
+  Building2,
+  FileText,
+  FolderOpen,
+  MapPin,
+} from 'lucide-react'
 import useStore from '../store/useStore'
 import StatusPill from '../components/StatusPill'
 import ProgressBar from '../components/ProgressBar'
@@ -24,6 +38,14 @@ function EditProjectModal({ project, onClose, onDelete }) {
     address: project.address,
     clientEntity: project.clientEntity,
     owner: project.owner,
+    bcNumber: project.bcNumber || '',
+    legalDescription: project.legalDescription || '',
+    ownerContactPerson: project.ownerContactPerson || '',
+    ownerMailingAddress: project.ownerMailingAddress || '',
+    ownerPhone: project.ownerPhone || '',
+    ownerEmail: project.ownerEmail || '',
+    buildingWorkDescription: project.buildingWorkDescription || '',
+    driveFolderUrl: project.driveFolderUrl || '',
     startDate: project.startDate,
     targetCompletion: project.targetCompletion,
     status: project.status,
@@ -41,6 +63,14 @@ function EditProjectModal({ project, onClose, onDelete }) {
       address: form.address.trim(),
       clientEntity: form.clientEntity.trim(),
       owner: form.owner.trim(),
+      bcNumber: form.bcNumber.trim(),
+      legalDescription: form.legalDescription.trim(),
+      ownerContactPerson: form.ownerContactPerson.trim(),
+      ownerMailingAddress: form.ownerMailingAddress.trim(),
+      ownerPhone: form.ownerPhone.trim(),
+      ownerEmail: form.ownerEmail.trim(),
+      buildingWorkDescription: form.buildingWorkDescription.trim(),
+      driveFolderUrl: form.driveFolderUrl.trim(),
       startDate: form.startDate,
       targetCompletion: form.targetCompletion,
       status: form.status,
@@ -82,6 +112,36 @@ function EditProjectModal({ project, onClose, onDelete }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">BC / Consent number</label>
+              <input className={inputCls} value={form.bcNumber} onChange={e => set('bcNumber', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Legal description</label>
+              <input className={inputCls} value={form.legalDescription} onChange={e => set('legalDescription', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Owner contact</label>
+              <input className={inputCls} value={form.ownerContactPerson} onChange={e => set('ownerContactPerson', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Owner email</label>
+              <input className={inputCls} value={form.ownerEmail} onChange={e => set('ownerEmail', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Owner phone</label>
+              <input className={inputCls} value={form.ownerPhone} onChange={e => set('ownerPhone', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Owner mailing address</label>
+              <input className={inputCls} value={form.ownerMailingAddress} onChange={e => set('ownerMailingAddress', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
               <label className="block text-xs font-medium text-gray-600 mb-1.5">Start date</label>
               <input type="date" className={inputCls} value={form.startDate} onChange={e => set('startDate', e.target.value)} />
             </div>
@@ -97,6 +157,20 @@ function EditProjectModal({ project, onClose, onDelete }) {
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Google Drive project folder</label>
+            <input className={inputCls} value={form.driveFolderUrl} onChange={e => set('driveFolderUrl', e.target.value)} placeholder="https://drive.google.com/drive/folders/..." />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Building work</label>
+            <textarea
+              className={inputCls + ' resize-none'}
+              rows={2}
+              value={form.buildingWorkDescription}
+              onChange={e => set('buildingWorkDescription', e.target.value)}
+              placeholder="Short description of the consent or building work"
+            />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">Description / notes</label>
@@ -466,7 +540,15 @@ function DocForm({ doc, projectId, onClose, onSave }) {
 
   const handleSave = () => {
     if (!form.name.trim()) return
-    onSave({ ...form, name: form.name.trim(), url: form.url.trim(), notes: form.notes.trim() })
+    const url = form.url.trim()
+    onSave({
+      ...form,
+      name: form.name.trim(),
+      url,
+      notes: form.notes.trim(),
+      source: url.includes('drive.google.com') ? 'google_drive' : 'manual_link',
+      driveUrl: url.includes('drive.google.com') ? url : '',
+    })
   }
 
   return (
@@ -508,10 +590,12 @@ function DocForm({ doc, projectId, onClose, onSave }) {
 }
 
 function DocumentsTab({ project }) {
-  const { documents, addDocument, updateDocument, deleteDocument } = useStore()
+  const { documents, addDocument, updateDocument, deleteDocument, updateProject } = useStore()
   const [showForm, setShowForm] = useState(false)
   const [editDoc, setEditDoc] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [editingDriveFolder, setEditingDriveFolder] = useState(false)
+  const [driveFolderUrl, setDriveFolderUrl] = useState(project.driveFolderUrl || '')
 
   const projectDocs = documents.filter(d => d.projectId === project.id)
 
@@ -525,8 +609,55 @@ function DocumentsTab({ project }) {
     setEditDoc(null)
   }
 
+  const saveDriveFolder = async () => {
+    await updateProject(project.id, { driveFolderUrl: driveFolderUrl.trim() })
+    setEditingDriveFolder(false)
+  }
+
   return (
     <div>
+      <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 flex flex-col lg:flex-row lg:items-center gap-3">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          <div className="w-9 h-9 rounded-lg bg-forest-50 text-forest-700 flex items-center justify-center shrink-0">
+            <FolderOpen size={16} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-gray-900">Project Drive folder</div>
+            {project.driveFolderUrl ? (
+              <a href={project.driveFolderUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-ocean-600 hover:underline truncate block">
+                {project.driveFolderUrl}
+              </a>
+            ) : (
+              <div className="text-xs text-gray-400">No Drive folder linked.</div>
+            )}
+          </div>
+        </div>
+        {editingDriveFolder ? (
+          <div className="flex flex-col sm:flex-row gap-2 lg:w-[520px]">
+            <input
+              className={inputCls}
+              value={driveFolderUrl}
+              onChange={e => setDriveFolderUrl(e.target.value)}
+              placeholder="https://drive.google.com/drive/folders/..."
+            />
+            <button onClick={saveDriveFolder} className="px-3 py-2 text-sm font-medium bg-forest-600 text-white rounded-lg hover:bg-forest-700">Save</button>
+            <button onClick={() => { setDriveFolderUrl(project.driveFolderUrl || ''); setEditingDriveFolder(false) }} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
+          </div>
+        ) : (
+          <div className="flex gap-2 shrink-0">
+            {project.driveFolderUrl && (
+              <a href={project.driveFolderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50">
+                Open Drive
+                <ExternalLink size={12} />
+              </a>
+            )}
+            <button onClick={() => setEditingDriveFolder(true)} className="px-3 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50">
+              {project.driveFolderUrl ? 'Edit folder' : 'Link folder'}
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-gray-500">{projectDocs.length} document{projectDocs.length !== 1 ? 's' : ''}</p>
         <button
@@ -560,6 +691,12 @@ function DocumentsTab({ project }) {
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CAT_COLORS[doc.category] || CAT_COLORS.other}`}>
                     {CAT_LABELS[doc.category] || doc.category}
                   </span>
+                  {doc.source === 'google_drive' && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-forest-50 text-forest-700 px-2 py-0.5 rounded-full">
+                      <FolderOpen size={10} />
+                      Drive
+                    </span>
+                  )}
                 </div>
                 {doc.notes && <p className="text-xs text-gray-400 mt-0.5 truncate">{doc.notes}</p>}
               </div>
@@ -655,6 +792,64 @@ function OverviewTab({ project }) {
             <p className="text-sm text-gray-600 mt-3 pt-3 border-t border-gray-50">{project.description}</p>
           )}
         </div>
+
+        {(project.legalDescription || project.bcNumber || project.driveFolderUrl || project.latitude || project.buildingWorkDescription) && (
+          <div className="bg-white rounded-xl border border-gray-100 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Building2 size={15} className="text-forest-600" />
+              <h3 className="text-sm font-semibold text-gray-700">Property key</h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-4 text-sm">
+              {project.bcNumber && (
+                <div>
+                  <div className="text-xs text-gray-400 mb-0.5">BC / Consent</div>
+                  <div className="font-medium text-gray-800">{project.bcNumber}</div>
+                </div>
+              )}
+              {project.legalDescription && (
+                <div className="lg:col-span-2">
+                  <div className="text-xs text-gray-400 mb-0.5">Legal description</div>
+                  <div className="font-medium text-gray-800">{project.legalDescription}</div>
+                </div>
+              )}
+              {(project.suburb || project.region || project.postalCode) && (
+                <div>
+                  <div className="text-xs text-gray-400 mb-0.5">Location</div>
+                  <div className="font-medium text-gray-800">{[project.suburb, project.region, project.postalCode].filter(Boolean).join(', ')}</div>
+                </div>
+              )}
+              {project.latitude && project.longitude && (
+                <div>
+                  <div className="text-xs text-gray-400 mb-0.5">Coordinates</div>
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${project.latitude},${project.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-xs text-ocean-600 hover:underline inline-flex items-center gap-1"
+                  >
+                    {Number(project.latitude).toFixed(6)}, {Number(project.longitude).toFixed(6)}
+                    <ExternalLink size={11} />
+                  </a>
+                </div>
+              )}
+              {project.driveFolderUrl && (
+                <div className="lg:col-span-2">
+                  <div className="text-xs text-gray-400 mb-0.5">Google Drive folder</div>
+                  <a href={project.driveFolderUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-ocean-600 hover:underline inline-flex items-center gap-1">
+                    Open project folder
+                    <ExternalLink size={11} />
+                  </a>
+                </div>
+              )}
+              {project.buildingWorkDescription && (
+                <div className="lg:col-span-4">
+                  <div className="text-xs text-gray-400 mb-0.5">Building work</div>
+                  <div className="text-gray-700">{project.buildingWorkDescription}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Overall stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search } from 'lucide-react'
+import { FolderOpen, MapPin, Plus, Search } from 'lucide-react'
 import useStore from '../store/useStore'
 import EmptyState from '../components/EmptyState'
 import StatusPill from '../components/StatusPill'
@@ -141,10 +141,17 @@ export default function AllProjects() {
 
               {/* Stage badge */}
               {p.stage && (
-                <div className="mb-3">
+                <div className="mb-3 flex items-center gap-2 flex-wrap">
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${p.stage.light} ${p.stage.text}`}>
                     {p.stage.label}
                   </span>
+                  {p.bcNumber && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{p.bcNumber}</span>}
+                  {p.driveFolderUrl && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-forest-50 text-forest-700">
+                      <FolderOpen size={10} />
+                      Drive
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -159,7 +166,10 @@ export default function AllProjects() {
 
               {/* Footer */}
               <div className="flex items-center justify-between text-xs text-gray-400">
-                <span>{p.owner || '—'}</span>
+                <span className="inline-flex items-center gap-1 min-w-0">
+                  {p.suburb && <MapPin size={10} className="shrink-0" />}
+                  <span className="truncate">{p.suburb || p.owner || '-'}</span>
+                </span>
                 <div className="flex items-center gap-3">
                   {p.overdue > 0 && (
                     <span className="text-red-500 font-medium">{p.overdue} overdue</span>

@@ -262,6 +262,199 @@ const CAT_COLORS = {
 const CAT_LABELS = { contract: 'Contract', consent: 'Consent', drawing: 'Drawing', report: 'Report', invoice: 'Invoice', photo: 'Photo', other: 'Other' }
 const CATEGORIES = ['contract', 'consent', 'drawing', 'report', 'invoice', 'photo', 'other']
 
+const ASSIGNED_TASK_STATUS_LABELS = { open: 'Open', 'in-progress': 'In progress', waiting: 'Waiting', done: 'Done' }
+const ASSIGNED_TASK_PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 }
+
+function AssignedTaskForm({ project, task, onClose }) {
+  const { addTask, updateTask, deleteTask, teamMembers, currentUser } = useStore()
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [form, setForm] = useState({
+    title: task?.title || '',
+    description: task?.description || '',
+    assignee: task?.assignee || currentUser || '',
+    dueDate: task?.dueDate || '',
+    priority: task?.priority || 'medium',
+    status: task?.status || 'open',
+  })
+
+  const set = (key, value) => setForm(f => ({ ...f, [key]: value }))
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return
+    const payload = { ...form, projectId: project.id, title: form.title.trim(), description: form.description.trim() }
+    if (task) await updateTask(task.id, payload)
+    else await addTask(payload)
+    onClose()
+  }
+
+  const handleDelete = async () => {
+    await deleteTask(task.id)
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-900">{task ? 'Edit task' : 'New task'}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Task *</label>
+            <input className={inputCls} value={form.title} onChange={e => set('title', e.target.value)} autoFocus />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Assignee</label>
+              <select className={inputCls} value={form.assignee} onChange={e => set('assignee', e.target.value)}>
+                <option value="">Unassigned</option>
+                {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Due</label>
+              <input type="date" className={inputCls} value={form.dueDate} onChange={e => set('dueDate', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Priority</label>
+              <select className={inputCls} value={form.priority} onChange={e => set('priority', e.target.value)}>
+                {['low', 'medium', 'high', 'critical'].map(p => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Status</label>
+            <select className={inputCls} value={form.status} onChange={e => set('status', e.target.value)}>
+              {Object.entries(ASSIGNED_TASK_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Notes</label>
+            <textarea className={`${inputCls} resize-none`} rows={3} value={form.description} onChange={e => set('description', e.target.value)} />
+          </div>
+        </div>
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+          {task ? (
+            confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <button onClick={handleDelete} className="text-xs text-red-600 font-semibold border border-red-200 px-2 py-1 rounded-lg hover:bg-red-50">Delete</button>
+                <button onClick={() => setConfirmDelete(false)} className="text-xs text-gray-400">Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmDelete(true)} className="inline-flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700">
+                <Trash2 size={12} /> Delete
+              </button>
+            )
+          ) : <span />}
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
+            <button onClick={handleSave} disabled={!form.title.trim()} className="px-4 py-2 text-sm font-medium bg-forest-600 text-white rounded-lg hover:bg-forest-700 disabled:opacity-50">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AssignedTasksTab({ project }) {
+  const { tasks, updateTask } = useStore()
+  const [filterStatus, setFilterStatus] = useState('active')
+  const [showNew, setShowNew] = useState(false)
+  const [editTask, setEditTask] = useState(null)
+
+  const projectTasks = useMemo(() => tasks.filter(t => t.projectId === project.id), [tasks, project.id])
+  const counts = useMemo(() => {
+    const now = new Date()
+    return {
+      active: projectTasks.filter(t => t.status !== 'done').length,
+      overdue: projectTasks.filter(t => t.dueDate && t.status !== 'done' && new Date(t.dueDate) < now).length,
+      done: projectTasks.filter(t => t.status === 'done').length,
+      all: projectTasks.length,
+    }
+  }, [projectTasks])
+
+  const items = useMemo(() => {
+    const now = new Date()
+    return projectTasks
+      .filter(t => {
+        if (filterStatus === 'active') return t.status !== 'done'
+        if (filterStatus === 'overdue') return t.dueDate && t.status !== 'done' && new Date(t.dueDate) < now
+        if (filterStatus === 'done') return t.status === 'done'
+        return true
+      })
+      .sort((a, b) => (ASSIGNED_TASK_PRIORITY_ORDER[a.priority] ?? 2) - (ASSIGNED_TASK_PRIORITY_ORDER[b.priority] ?? 2))
+  }, [projectTasks, filterStatus])
+
+  const toggleDone = task => updateTask(task.id, { status: task.status === 'done' ? 'open' : 'done' })
+  const priorityColor = p => ({ critical: 'text-red-600', high: 'text-orange-500', medium: 'text-gray-400', low: 'text-gray-300' }[p] || 'text-gray-400')
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+          {['active', 'overdue', 'done', 'all'].map(tab => (
+            <button key={tab} onClick={() => setFilterStatus(tab)} className={`px-3 py-1.5 text-xs font-medium rounded-md capitalize transition-colors ${filterStatus === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+              {tab} {counts[tab] > 0 && <span className="ml-1 opacity-60">{counts[tab]}</span>}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => setShowNew(true)} className="inline-flex items-center gap-2 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors">
+          <Plus size={14} /> New task
+        </button>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-xl border border-gray-100">
+          <p className="text-sm font-medium text-gray-600 mb-1">No assigned tasks in this view</p>
+          <p className="text-xs text-gray-400">Use Checklist for stage gates. Use Tasks for day-to-day assigned work.</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100">
+                <th className="w-8 px-4 py-2.5" />
+                <th className="text-left px-4 py-2.5 font-medium">Task</th>
+                <th className="text-left px-4 py-2.5 font-medium hidden md:table-cell">Assignee</th>
+                <th className="text-left px-4 py-2.5 font-medium hidden md:table-cell">Due</th>
+                <th className="text-left px-4 py-2.5 font-medium">Priority</th>
+                <th className="text-left px-4 py-2.5 font-medium hidden lg:table-cell">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {items.map(task => {
+                const isDone = task.status === 'done'
+                const isOverdue = task.dueDate && !isDone && new Date(task.dueDate) < new Date()
+                return (
+                  <tr key={task.id} className={`hover:bg-gray-50 cursor-pointer ${isOverdue ? 'bg-red-50/50' : ''}`} onClick={() => setEditTask(task)}>
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={isDone} onChange={() => toggleDone(task)} className="w-4 h-4 rounded border-gray-300 text-ocean-600 focus:ring-ocean-500" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className={`font-medium ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}`}>{task.title}</div>
+                      {task.description && <div className="text-xs text-gray-400 mt-0.5 line-clamp-1">{task.description}</div>}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500 hidden md:table-cell">{task.assignee || '-'}</td>
+                    <td className={`px-4 py-3 text-xs hidden md:table-cell ${isOverdue ? 'text-red-500 font-medium' : 'text-gray-500'}`}>
+                      {task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : '-'}
+                    </td>
+                    <td className={`px-4 py-3 text-xs font-medium capitalize ${priorityColor(task.priority)}`}>{task.priority}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500 hidden lg:table-cell">{ASSIGNED_TASK_STATUS_LABELS[task.status] || task.status}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showNew && <AssignedTaskForm project={project} onClose={() => setShowNew(false)} />}
+      {editTask && <AssignedTaskForm project={project} task={editTask} onClose={() => setEditTask(null)} />}
+    </div>
+  )
+}
+
 function DocForm({ doc, projectId, onClose, onSave }) {
   const [form, setForm] = useState({
     name: doc?.name || '',
@@ -698,7 +891,7 @@ export default function ProjectWorkspace() {
         <div className="p-6 max-w-7xl mx-auto">
           {activeTab === 'Overview' && <OverviewTab project={project} />}
           {activeTab === 'Checklist' && <ChecklistView projectId={project.id} />}
-          {activeTab === 'Tasks' && <TasksTab project={project} />}
+          {activeTab === 'Tasks' && <AssignedTasksTab project={project} />}
           {activeTab === 'Schedule' && <ScheduleTab project={project} />}
           {activeTab === 'Documents' && <DocumentsTab project={project} />}
         </div>

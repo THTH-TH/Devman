@@ -20,7 +20,7 @@ function StatCard({ label, value, color = 'text-gray-800', accent = 'bg-gray-200
 }
 
 export default function Dashboard() {
-  const { projects, checklistItems, milestones, activityLog } = useStore()
+  const { projects, checklistItems, milestones, activityLog, tasks, currentUser } = useStore()
   const navigate = useNavigate()
 
   const stats = useMemo(() => {
@@ -32,13 +32,28 @@ export default function Dashboard() {
       const d = new Date(m.date)
       return d >= today && d <= in30
     }).length
-    const overdue = checklistItems.filter(i => {
-      if (!i.dueDate || i.done) return false
+    const overdueTasks = tasks.filter(i => {
+      if (!i.dueDate || i.status === 'done') return false
       return new Date(i.dueDate) < today
     }).length
+    const myTasks = currentUser ? tasks.filter(t => t.assignee === currentUser && t.status !== 'done').length : 0
     const blockerItems = checklistItems.filter(i => i.isBlocker && !i.done).length
-    return { active, upcomingMilestones, overdue, blockerItems }
-  }, [projects, checklistItems, milestones])
+    return { active, upcomingMilestones, overdueTasks, myTasks, blockerItems }
+  }, [projects, checklistItems, milestones, tasks, currentUser])
+
+  const myOpenTasks = useMemo(() => {
+    if (!currentUser) return []
+    return tasks
+      .filter(t => t.assignee === currentUser && t.status !== 'done')
+      .map(t => ({ ...t, project: projects.find(p => p.id === t.projectId) }))
+      .sort((a, b) => {
+        if (a.dueDate && b.dueDate) return new Date(a.dueDate) - new Date(b.dueDate)
+        if (a.dueDate) return -1
+        if (b.dueDate) return 1
+        return 0
+      })
+      .slice(0, 6)
+  }, [tasks, projects, currentUser])
 
   const projectProgress = useMemo(() => {
     return projects.map(p => {
@@ -96,11 +111,12 @@ export default function Dashboard() {
           {/* Stat cards */}
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard label="Active projects" value={stats.active} accent="bg-ocean-500" />
+            <StatCard label="My tasks" value={stats.myTasks} accent="bg-forest-600" />
             <StatCard
               label="Overdue tasks"
-              value={stats.overdue}
-              color={stats.overdue ? 'text-red-600' : 'text-gray-800'}
-              accent={stats.overdue ? 'bg-red-400' : 'bg-gray-200'}
+              value={stats.overdueTasks}
+              color={stats.overdueTasks ? 'text-red-600' : 'text-gray-800'}
+              accent={stats.overdueTasks ? 'bg-red-400' : 'bg-gray-200'}
             />
             <StatCard label="Milestones (30d)" value={stats.upcomingMilestones} accent="bg-purple-400" />
             <StatCard
@@ -162,6 +178,37 @@ export default function Dashboard() {
               </div>
             </div>
 
+            <div className="space-y-6">
+            {/* My tasks */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h2 className="font-semibold text-gray-800 text-sm">My tasks</h2>
+                <Link to={currentUser ? `/tasks?status=mine` : '/settings'} className="text-xs text-ocean-600 hover:underline">
+                  {currentUser ? 'View all' : 'Set user'}
+                </Link>
+              </div>
+              {!currentUser ? (
+                <div className="px-5 py-8 text-center text-sm text-gray-400">Set your current user in Settings to show assigned tasks here.</div>
+              ) : myOpenTasks.length === 0 ? (
+                <div className="px-5 py-8 text-center text-sm text-gray-400">No tasks assigned to you.</div>
+              ) : (
+                <div className="divide-y divide-gray-50">
+                  {myOpenTasks.map(task => {
+                    const overdue = task.dueDate && new Date(task.dueDate) < new Date()
+                    return (
+                      <Link key={task.id} to={`/tasks?status=mine`} className="block px-5 py-3 hover:bg-gray-50">
+                        <div className="text-xs font-medium text-gray-800 line-clamp-1">{task.title}</div>
+                        <div className="flex items-center gap-2 mt-1 text-[10px]">
+                          <span className="text-gray-400">{task.project?.name || 'General'}</span>
+                          {task.dueDate && <span className={overdue ? 'text-red-500 font-medium' : 'text-gray-400'}>{new Date(task.dueDate).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>}
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
             {/* Activity feed */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100">
@@ -195,6 +242,7 @@ export default function Dashboard() {
                   })}
                 </div>
               )}
+            </div>
             </div>
           </div>
 

@@ -116,7 +116,7 @@ function AddMemberForm({ onAdd, onCancel }) {
 }
 
 export default function Settings() {
-  const { teamMembers, addTeamMember, updateTeamMember, deleteTeamMember } = useStore()
+  const { teamMembers, addTeamMember, updateTeamMember, deleteTeamMember, currentUser, setCurrentUser } = useStore()
   const [showAdd, setShowAdd] = useState(false)
 
   return (
@@ -183,6 +183,19 @@ export default function Settings() {
             />
           )}
         </div>
+      </div>
+
+      <div className="mt-6 bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+        <h2 className="font-semibold text-gray-800 text-sm mb-3">My dashboard</h2>
+        <p className="text-sm text-gray-400 mb-3">Choose who you are so your assigned tasks show on the dashboard.</p>
+        <select
+          value={currentUser}
+          onChange={e => setCurrentUser(e.target.value)}
+          className="w-full sm:w-72 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500"
+        >
+          <option value="">Not set</option>
+          {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+        </select>
       </div>
 
       {/* App info */}

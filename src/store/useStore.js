@@ -76,6 +76,35 @@ const mapTeamMember = r => ({
   phone: r.phone || '',
 })
 
+const mapTask = r => ({
+  id: r.id,
+  projectId: r.project_id || '',
+  title: r.title,
+  description: r.description || '',
+  assignee: r.assignee || '',
+  dueDate: r.due_date || '',
+  priority: r.priority || 'medium',
+  status: r.status || 'open',
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+})
+
+const mapScheduleTask = r => ({
+  id: r.id,
+  projectId: r.project_id,
+  name: r.name || '',
+  phase: r.phase || '',
+  assignee: r.assignee || '',
+  startDate: r.start_date || '',
+  endDate: r.end_date || '',
+  durationDays: r.duration_days ?? null,
+  status: r.status || 'not-started',
+  progress: r.progress ?? 0,
+  sortOrder: r.sort_order ?? 0,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+})
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 const useStore = create((set, get) => ({
   projects: [],
@@ -84,6 +113,9 @@ const useStore = create((set, get) => ({
   activityLog: [],
   documents: [],
   teamMembers: [],
+  tasks: [],
+  scheduleTasks: [],
+  currentUser: localStorage.getItem('devman_current_user') || '',
   loading: true,
   error: null,
 
@@ -116,6 +148,18 @@ const useStore = create((set, get) => ({
         teamMembers: t.data.map(mapTeamMember),
         loading: false,
       })
+
+      // New tables — load gracefully (tables may not exist yet)
+      try {
+        const [tr, sr] = await Promise.all([
+          supabase.from('tasks').select('*').order('created_at', { ascending: false }),
+          supabase.from('schedule_tasks').select('*').order('sort_order'),
+        ])
+        if (!tr.error) set({ tasks: tr.data.map(mapTask) })
+        if (!sr.error) set({ scheduleTasks: sr.data.map(mapScheduleTask) })
+      } catch {
+        console.warn('tasks / schedule_tasks tables not yet created — run SQL in Supabase')
+      }
 
       await supabase.removeAllChannels()
       get().subscribeToRealtime()
@@ -179,7 +223,31 @@ const useStore = create((set, get) => ({
           return s
         })
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, payload => {
+        const { eventType, new: row, old } = payload
+        set(s => {
+          if (eventType === 'INSERT') return { tasks: [mapTask(row), ...s.tasks] }
+          if (eventType === 'UPDATE') return { tasks: s.tasks.map(t => t.id === row.id ? mapTask(row) : t) }
+          if (eventType === 'DELETE') return { tasks: s.tasks.filter(t => t.id !== old.id) }
+          return s
+        })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_tasks' }, payload => {
+        const { eventType, new: row, old } = payload
+        set(s => {
+          if (eventType === 'INSERT') return { scheduleTasks: [...s.scheduleTasks, mapScheduleTask(row)] }
+          if (eventType === 'UPDATE') return { scheduleTasks: s.scheduleTasks.map(t => t.id === row.id ? mapScheduleTask(row) : t) }
+          if (eventType === 'DELETE') return { scheduleTasks: s.scheduleTasks.filter(t => t.id !== old.id) }
+          return s
+        })
+      })
       .subscribe()
+  },
+
+  // ── Current user ───────────────────────────────────────────────────────────
+  setCurrentUser(name) {
+    localStorage.setItem('devman_current_user', name)
+    set({ currentUser: name })
   },
 
   // ── Projects ───────────────────────────────────────────────────────────────
@@ -237,6 +305,8 @@ const useStore = create((set, get) => ({
       milestones: s.milestones.filter(m => m.projectId !== id),
       activityLog: s.activityLog.filter(a => a.projectId !== id),
       documents: s.documents.filter(d => d.projectId !== id),
+      tasks: s.tasks.filter(t => t.projectId !== id),
+      scheduleTasks: s.scheduleTasks.filter(t => t.projectId !== id),
     }))
     const { error } = await supabase.from('projects').delete().eq('id', id)
     if (error) console.error('deleteProject error:', error)
@@ -404,6 +474,111 @@ const useStore = create((set, get) => ({
     if (error) console.error('updateMilestone error:', error)
   },
 
+  // ── Tasks ──────────────────────────────────────────────────────────────────
+  async addTask(data) {
+    const id = genId()
+    const now = new Date().toISOString()
+    const row = {
+      id,
+      project_id: data.projectId || null,
+      title: data.title,
+      description: data.description || '',
+      assignee: data.assignee || '',
+      due_date: data.dueDate || null,
+      priority: data.priority || 'medium',
+      status: data.status || 'open',
+      created_at: now,
+      updated_at: now,
+    }
+    const task = mapTask(row)
+    set(s => ({ tasks: [task, ...s.tasks] }))
+    const { error } = await supabase.from('tasks').insert(row)
+    if (error) {
+      console.error('addTask error:', error)
+      set(s => ({ tasks: s.tasks.filter(t => t.id !== id) }))
+    }
+    return task
+  },
+
+  async updateTask(id, data) {
+    const updates = { updated_at: new Date().toISOString() }
+    if (data.title !== undefined) updates.title = data.title
+    if (data.description !== undefined) updates.description = data.description
+    if (data.assignee !== undefined) updates.assignee = data.assignee
+    if (data.dueDate !== undefined) updates.due_date = data.dueDate || null
+    if (data.priority !== undefined) updates.priority = data.priority
+    if (data.status !== undefined) updates.status = data.status
+    if (data.projectId !== undefined) updates.project_id = data.projectId || null
+    set(s => ({ tasks: s.tasks.map(t => t.id === id ? { ...t, ...data } : t) }))
+    const { error } = await supabase.from('tasks').update(updates).eq('id', id)
+    if (error) console.error('updateTask error:', error)
+  },
+
+  async deleteTask(id) {
+    set(s => ({ tasks: s.tasks.filter(t => t.id !== id) }))
+    const { error } = await supabase.from('tasks').delete().eq('id', id)
+    if (error) console.error('deleteTask error:', error)
+  },
+
+  // ── Schedule Tasks ─────────────────────────────────────────────────────────
+  async addScheduleTask(data) {
+    const id = genId()
+    const now = new Date().toISOString()
+    const phaseCount = get().scheduleTasks.filter(t => t.projectId === data.projectId && t.phase === (data.phase || '')).length
+    const row = {
+      id,
+      project_id: data.projectId,
+      name: data.name || '',
+      phase: data.phase || '',
+      assignee: data.assignee || '',
+      start_date: data.startDate || null,
+      end_date: data.endDate || null,
+      duration_days: data.durationDays ?? null,
+      status: data.status || 'not-started',
+      progress: data.progress ?? 0,
+      sort_order: data.sortOrder ?? phaseCount,
+      created_at: now,
+      updated_at: now,
+    }
+    const task = mapScheduleTask(row)
+    set(s => ({ scheduleTasks: [...s.scheduleTasks, task] }))
+    const { error } = await supabase.from('schedule_tasks').insert(row)
+    if (error) {
+      console.error('addScheduleTask error:', error)
+      set(s => ({ scheduleTasks: s.scheduleTasks.filter(t => t.id !== id) }))
+    }
+    return task
+  },
+
+  async updateScheduleTask(id, data) {
+    const updates = { updated_at: new Date().toISOString() }
+    if (data.name !== undefined) updates.name = data.name
+    if (data.phase !== undefined) updates.phase = data.phase
+    if (data.assignee !== undefined) updates.assignee = data.assignee
+    if (data.startDate !== undefined) updates.start_date = data.startDate || null
+    if (data.endDate !== undefined) updates.end_date = data.endDate || null
+    if (data.durationDays !== undefined) updates.duration_days = data.durationDays ?? null
+    if (data.status !== undefined) updates.status = data.status
+    if (data.progress !== undefined) updates.progress = data.progress
+    if (data.sortOrder !== undefined) updates.sort_order = data.sortOrder
+    set(s => ({ scheduleTasks: s.scheduleTasks.map(t => t.id === id ? { ...t, ...data } : t) }))
+    const { error } = await supabase.from('schedule_tasks').update(updates).eq('id', id)
+    if (error) console.error('updateScheduleTask error:', error)
+  },
+
+  async deleteScheduleTask(id) {
+    set(s => ({ scheduleTasks: s.scheduleTasks.filter(t => t.id !== id) }))
+    const { error } = await supabase.from('schedule_tasks').delete().eq('id', id)
+    if (error) console.error('deleteScheduleTask error:', error)
+  },
+
+  async renamePhase(projectId, oldPhase, newPhase) {
+    // Rename all tasks in a phase
+    const affected = get().scheduleTasks.filter(t => t.projectId === projectId && t.phase === oldPhase)
+    set(s => ({ scheduleTasks: s.scheduleTasks.map(t => t.projectId === projectId && t.phase === oldPhase ? { ...t, phase: newPhase } : t) }))
+    await Promise.all(affected.map(t => supabase.from('schedule_tasks').update({ phase: newPhase }).eq('id', t.id)))
+  },
+
   // ── Documents ─────────────────────────────────────────────────────────────
   async addDocument(data) {
     const id = genId()
@@ -414,7 +589,7 @@ const useStore = create((set, get) => ({
       url: data.url || '',
       category: data.category || 'other',
       notes: data.notes || '',
-      added_by: data.addedBy || 'Tim',
+      added_by: data.addedBy || '',
     }
     const doc = mapDocument({ ...row, created_at: new Date().toISOString() })
     set(s => ({ documents: [doc, ...s.documents] }))
@@ -476,7 +651,7 @@ const useStore = create((set, get) => ({
   },
 
   // ── Activity Log ───────────────────────────────────────────────────────────
-  async logActivity(projectId, action, detail, user = 'Tim') {
+  async logActivity(projectId, action, detail, user = '') {
     const id = genId()
     const entry = { id, projectId, action, detail, user, timestamp: new Date().toISOString() }
     set(s => ({ activityLog: [entry, ...s.activityLog].slice(0, 500) }))

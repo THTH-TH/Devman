@@ -82,10 +82,43 @@ create table if not exists team_members (
   phone text default ''
 );
 
+create table if not exists tasks (
+  id text primary key,
+  project_id text references projects(id) on delete cascade,
+  title text not null,
+  description text default '',
+  assignee text default '',
+  due_date text default '',
+  priority text default 'medium',
+  status text default 'open',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists schedule_tasks (
+  id text primary key,
+  project_id text not null references projects(id) on delete cascade,
+  name text not null default '',
+  phase text default '',
+  assignee text default '',
+  start_date text default '',
+  end_date text default '',
+  duration_days integer,
+  status text default 'not-started',
+  progress integer default 0,
+  sort_order integer default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 alter table documents enable row level security;
 alter table team_members enable row level security;
+alter table tasks enable row level security;
+alter table schedule_tasks enable row level security;
 create policy "allow_all" on documents for all using (true) with check (true);
 create policy "allow_all" on team_members for all using (true) with check (true);
+create policy "allow_all" on tasks for all using (true) with check (true);
+create policy "allow_all" on schedule_tasks for all using (true) with check (true);
 
 -- Enable real-time sync
 alter publication supabase_realtime add table projects;
@@ -94,3 +127,5 @@ alter publication supabase_realtime add table milestones;
 alter publication supabase_realtime add table activity_log;
 alter publication supabase_realtime add table documents;
 alter publication supabase_realtime add table team_members;
+alter publication supabase_realtime add table tasks;
+alter publication supabase_realtime add table schedule_tasks;

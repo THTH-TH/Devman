@@ -1,105 +1,223 @@
-import { useState, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Sparkles, AlertTriangle } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { AlertTriangle, Check, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import useStore from '../store/useStore'
-import StatusPill from '../components/StatusPill'
-import ChecklistItemModal from '../modals/ChecklistItemModal'
-import { STAGE_MAP } from '../data/stages'
 
 const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 }
+const STATUS_LABELS = {
+  open: 'Open',
+  'in-progress': 'In progress',
+  waiting: 'Waiting',
+  done: 'Done',
+}
 
-const priorityColor = p => ({
-  critical: 'text-red-600 font-semibold',
-  high: 'text-orange-500 font-medium',
-  medium: 'text-gray-500',
-  low: 'text-gray-400',
-}[p] || 'text-gray-500')
+const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500'
+
+function priorityColor(priority) {
+  return {
+    critical: 'text-red-600 font-semibold',
+    high: 'text-orange-500 font-medium',
+    medium: 'text-gray-500',
+    low: 'text-gray-400',
+  }[priority] || 'text-gray-500'
+}
+
+function fmtDate(date) {
+  return date ? new Date(date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : ''
+}
+
+function TaskModal({ task, projects, teamMembers, currentUser, onClose }) {
+  const { addTask, updateTask, deleteTask } = useStore()
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({
+    title: task?.title || '',
+    description: task?.description || '',
+    projectId: task?.projectId || '',
+    assignee: task?.assignee || currentUser || '',
+    dueDate: task?.dueDate || '',
+    priority: task?.priority || 'medium',
+    status: task?.status || 'open',
+  })
+
+  const set = (key, value) => setForm(f => ({ ...f, [key]: value }))
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return
+    setSaving(true)
+    const payload = { ...form, title: form.title.trim(), description: form.description.trim() }
+    if (task) await updateTask(task.id, payload)
+    else await addTask(payload)
+    setSaving(false)
+    onClose()
+  }
+
+  const handleDelete = async () => {
+    await deleteTask(task.id)
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900">{task ? 'Edit task' : 'New task'}</h2>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Task *</label>
+            <input className={inputCls} value={form.title} onChange={e => set('title', e.target.value)} autoFocus />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Project</label>
+              <select className={inputCls} value={form.projectId} onChange={e => set('projectId', e.target.value)}>
+                <option value="">General</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Assignee</label>
+              <select className={inputCls} value={form.assignee} onChange={e => set('assignee', e.target.value)}>
+                <option value="">Unassigned</option>
+                {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Due date</label>
+              <input type="date" className={inputCls} value={form.dueDate} onChange={e => set('dueDate', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Priority</label>
+              <select className={inputCls} value={form.priority} onChange={e => set('priority', e.target.value)}>
+                {['low', 'medium', 'high', 'critical'].map(p => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Status</label>
+              <select className={inputCls} value={form.status} onChange={e => set('status', e.target.value)}>
+                {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Notes</label>
+            <textarea className={`${inputCls} resize-none`} rows={3} value={form.description} onChange={e => set('description', e.target.value)} />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+          {task ? (
+            confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <button onClick={handleDelete} className="text-xs text-red-600 font-semibold border border-red-200 px-2 py-1 rounded-lg hover:bg-red-50">Delete</button>
+                <button onClick={() => setConfirmDelete(false)} className="text-xs text-gray-400 px-1">Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmDelete(true)} className="inline-flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700">
+                <Trash2 size={12} /> Delete
+              </button>
+            )
+          ) : <span />}
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
+            <button onClick={handleSave} disabled={saving || !form.title.trim()} className="px-4 py-2 text-sm font-medium bg-forest-600 text-white rounded-lg hover:bg-forest-700 disabled:opacity-50">
+              {saving ? 'Saving...' : 'Save task'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function Tasks() {
-  const { projects, checklistItems, teamMembers, toggleChecklistItem } = useStore()
+  const { projects, tasks, teamMembers, currentUser, updateTask } = useStore()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [editItem, setEditItem] = useState(null)
+  const [modalTask, setModalTask] = useState(null)
+  const [showNew, setShowNew] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiSuggestion, setAiSuggestion] = useState(null)
 
   const filterProject = searchParams.get('project') || ''
   const filterOwner = searchParams.get('owner') || ''
-  const filterStatus = searchParams.get('status') || 'active'
+  const filterStatus = searchParams.get('status') || 'open'
 
-  const setFilter = (key, val) => {
+  const today = useMemo(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }, [])
+  const in7 = useMemo(() => new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000), [today])
+
+  const setFilter = (key, value) => {
     const next = new URLSearchParams(searchParams)
-    if (val) next.set(key, val)
+    if (value) next.set(key, value)
     else next.delete(key)
     setSearchParams(next)
   }
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const in7 = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const enriched = useMemo(() => tasks.map(task => ({
+    ...task,
+    project: projects.find(p => p.id === task.projectId),
+    isDone: task.status === 'done',
+    isOverdue: task.dueDate && task.status !== 'done' && new Date(task.dueDate) < today,
+    isDueSoon: task.dueDate && task.status !== 'done' && new Date(task.dueDate) >= today && new Date(task.dueDate) <= in7,
+  })), [tasks, projects, today, in7])
 
-  const enriched = useMemo(() => {
-    return checklistItems.map(i => ({
-      ...i,
-      project: projects.find(p => p.id === i.projectId),
-      stage: STAGE_MAP[i.stageId],
-      isOverdue: i.dueDate && !i.done && new Date(i.dueDate) < today,
-      isDueSoon: i.dueDate && !i.done && new Date(i.dueDate) >= today && new Date(i.dueDate) <= in7,
-    }))
-  }, [checklistItems, projects])
+  const filtered = useMemo(() => enriched.filter(task => {
+    if (filterProject && task.projectId !== filterProject) return false
+    if (filterOwner && task.assignee !== filterOwner) return false
+    if (filterStatus === 'mine') return task.assignee === currentUser && !task.isDone
+    if (filterStatus === 'open') return !task.isDone
+    if (filterStatus === 'overdue') return task.isOverdue
+    if (filterStatus === 'due-soon') return task.isDueSoon
+    if (filterStatus === 'done') return task.isDone
+    return true
+  }).sort((a, b) => {
+    if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1
+    const pa = PRIORITY_ORDER[a.priority] ?? 2
+    const pb = PRIORITY_ORDER[b.priority] ?? 2
+    if (pa !== pb) return pa - pb
+    if (a.dueDate && b.dueDate) return new Date(a.dueDate) - new Date(b.dueDate)
+    if (a.dueDate) return -1
+    if (b.dueDate) return 1
+    return 0
+  }), [enriched, filterProject, filterOwner, filterStatus, currentUser])
 
-  const filtered = useMemo(() => {
-    return enriched.filter(i => {
-      if (filterProject && i.projectId !== filterProject) return false
-      if (filterOwner && i.owner !== filterOwner) return false
-      if (filterStatus === 'active') return !i.done
-      if (filterStatus === 'overdue') return i.isOverdue
-      if (filterStatus === 'due-soon') return i.isDueSoon
-      if (filterStatus === 'blocked') return i.isBlocker && !i.done
-      if (filterStatus === 'done') return i.done
-      return true
-    }).sort((a, b) => {
-      if (a.isOverdue && !b.isOverdue) return -1
-      if (!a.isOverdue && b.isOverdue) return 1
-      if (a.isBlocker && !b.isBlocker) return -1
-      if (!a.isBlocker && b.isBlocker) return 1
-      const pa = PRIORITY_ORDER[a.priority] ?? 2
-      const pb = PRIORITY_ORDER[b.priority] ?? 2
-      if (pa !== pb) return pa - pb
-      if (a.dueDate && b.dueDate) return new Date(a.dueDate) - new Date(b.dueDate)
-      if (a.dueDate) return -1
-      if (b.dueDate) return 1
-      return 0
-    })
-  }, [enriched, filterProject, filterOwner, filterStatus])
-
-  const owners = useMemo(() => {
-    const s = new Set(checklistItems.map(i => i.owner).filter(Boolean))
-    return [...s].sort()
-  }, [checklistItems])
+  const assignees = useMemo(() => {
+    const names = new Set([...teamMembers.map(m => m.name), ...tasks.map(t => t.assignee)].filter(Boolean))
+    return [...names].sort()
+  }, [teamMembers, tasks])
 
   const counts = useMemo(() => ({
-    active: enriched.filter(i => !i.done).length,
-    overdue: enriched.filter(i => i.isOverdue).length,
-    dueSoon: enriched.filter(i => i.isDueSoon).length,
-    blocked: enriched.filter(i => i.isBlocker && !i.done).length,
-  }), [enriched])
+    mine: enriched.filter(t => currentUser && t.assignee === currentUser && !t.isDone).length,
+    open: enriched.filter(t => !t.isDone).length,
+    overdue: enriched.filter(t => t.isOverdue).length,
+    dueSoon: enriched.filter(t => t.isDueSoon).length,
+    done: enriched.filter(t => t.isDone).length,
+  }), [enriched, currentUser])
 
   const handleAIPrioritise = async () => {
     setAiLoading(true)
     setAiSuggestion(null)
-    const overdueItems = enriched.filter(i => i.isOverdue).slice(0, 10)
-    const blockers = enriched.filter(i => i.isBlocker && !i.done).slice(0, 5)
-    const dueSoon = enriched.filter(i => i.isDueSoon).slice(0, 10)
-
-    const context = `Projects: ${projects.map(p => `${p.name} (${p.currentStage}, ${p.status})`).join(', ')}\n\nOverdue tasks (${overdueItems.length}): ${overdueItems.map(i => `"${i.label}" on ${i.project?.name} due ${i.dueDate}`).join('; ')}\n\nBlockers (${blockers.length}): ${blockers.map(i => `"${i.label}" on ${i.project?.name}`).join('; ')}\n\nDue this week: ${dueSoon.map(i => `"${i.label}" on ${i.project?.name} due ${i.dueDate}`).join('; ')}`
+    const context = filtered.slice(0, 20).map(t => {
+      return `${t.title} | project: ${t.project?.name || 'General'} | assignee: ${t.assignee || 'Unassigned'} | due: ${t.dueDate || 'none'} | priority: ${t.priority} | status: ${t.status}`
+    }).join('\n')
 
     try {
       const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          system: `You are a project manager assistant for Archispace, a property development firm. Today is ${new Date().toLocaleDateString('en-NZ')}. Be concise and practical.`,
-          messages: [{ role: 'user', content: `Based on this data, what are the top 5 most important tasks to action today and why?\n\n${context}` }],
+          system: `You are a practical project manager for Archispace. Today is ${new Date().toLocaleDateString('en-NZ')}. Be concise.`,
+          messages: [{ role: 'user', content: `Prioritise these tasks into the top 5 actions for today. Explain why each matters.\n\n${context || 'No tasks.'}` }],
         }),
       })
       const data = await res.json()
@@ -110,162 +228,130 @@ export default function Tasks() {
     setAiLoading(false)
   }
 
-  const fmtDate = d => d ? new Date(d).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : ''
+  const toggleDone = (task) => updateTask(task.id, { status: task.status === 'done' ? 'open' : 'done' })
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="bg-white border-b border-gray-100 px-6 py-4 shrink-0">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div>
             <h1 className="text-lg font-bold text-gray-900">Tasks</h1>
-            <p className="text-sm text-gray-400 mt-0.5">All tasks across every project</p>
+            <p className="text-sm text-gray-400 mt-0.5">Assigned work separate from the project checklist</p>
           </div>
-          <button
-            onClick={handleAIPrioritise}
-            disabled={aiLoading}
-            className="inline-flex items-center gap-2 bg-ocean-600 hover:bg-ocean-700 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-          >
-            <Sparkles size={14} />
-            {aiLoading ? 'Thinking…' : 'AI Prioritise'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleAIPrioritise} disabled={aiLoading} className="inline-flex items-center gap-2 bg-ocean-600 hover:bg-ocean-700 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+              <Sparkles size={14} />
+              {aiLoading ? 'Thinking...' : 'AI Prioritise'}
+            </button>
+            <button onClick={() => setShowNew(true)} className="inline-flex items-center gap-2 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+              <Plus size={14} /> New task
+            </button>
+          </div>
         </div>
       </div>
+
       <div className="flex-1 overflow-auto">
-      <div className="p-6 max-w-7xl mx-auto">
+        <div className="p-6 max-w-7xl mx-auto">
+          {aiSuggestion && (
+            <div className="mb-5 bg-ocean-50 border border-ocean-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles size={14} className="text-ocean-600" />
+                <span className="text-sm font-semibold text-ocean-700">AI priority suggestion</span>
+                <button onClick={() => setAiSuggestion(null)} className="ml-auto text-ocean-400 hover:text-ocean-600 text-xs">Dismiss</button>
+              </div>
+              <p className="text-sm text-ocean-700 whitespace-pre-wrap leading-relaxed">{aiSuggestion}</p>
+            </div>
+          )}
 
-      {/* AI suggestion */}
-      {aiSuggestion && (
-        <div className="mb-5 bg-ocean-50 border border-ocean-200 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles size={14} className="text-ocean-600" />
-            <span className="text-sm font-semibold text-ocean-700">AI Priority Suggestion</span>
-            <button onClick={() => setAiSuggestion(null)} className="ml-auto text-ocean-400 hover:text-ocean-600 text-xs">Dismiss</button>
-          </div>
-          <p className="text-sm text-ocean-700 whitespace-pre-wrap leading-relaxed">{aiSuggestion}</p>
-        </div>
-      )}
-
-      {/* Status tabs */}
-      <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">
-        {[
-          { key: 'active', label: `Active (${counts.active})` },
-          { key: 'overdue', label: `Overdue (${counts.overdue})`, danger: counts.overdue > 0 },
-          { key: 'due-soon', label: `Due this week (${counts.dueSoon})` },
-          { key: 'blocked', label: `Blocked (${counts.blocked})`, danger: counts.blocked > 0 },
-          { key: 'done', label: 'Done' },
-          { key: 'all', label: 'All' },
-        ].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setFilter('status', tab.key)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-              filterStatus === tab.key
-                ? 'bg-white shadow-sm text-gray-800'
-                : tab.danger ? 'text-red-500 hover:text-red-700' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-4">
-        <select
-          value={filterProject}
-          onChange={e => setFilter('project', e.target.value)}
-          className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500"
-        >
-          <option value="">All projects</option>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <select
-          value={filterOwner}
-          onChange={e => setFilter('owner', e.target.value)}
-          className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500"
-        >
-          <option value="">All owners</option>
-          {owners.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-        {(filterProject || filterOwner) && (
-          <button onClick={() => { setFilter('project', ''); setFilter('owner', '') }} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">
-            Clear
-          </button>
-        )}
-      </div>
-
-      {/* Table */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-20 text-gray-400 text-sm">No tasks match your filters.</div>
-      ) : (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100">
-                <th className="w-8 px-4 py-3"></th>
-                <th className="text-left px-4 py-3 font-medium">Task</th>
-                <th className="text-left px-4 py-3 font-medium">Project</th>
-                <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Stage</th>
-                <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">Owner</th>
-                <th className="text-left px-4 py-3 font-medium">Due</th>
-                <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Priority</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map(item => (
-                <tr
-                  key={item.id}
-                  className={`hover:bg-gray-50 cursor-pointer transition-colors ${item.isOverdue ? 'bg-red-50 hover:bg-red-50' : ''}`}
-                  onClick={() => setEditItem(item)}
-                >
-                  <td className="px-4 py-3" onClick={e => { e.stopPropagation(); toggleChecklistItem(item.id, item.projectId) }}>
-                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${item.done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-blue-400'}`}>
-                      {item.done && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 10 8"><path d="M1 4l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={item.done ? 'line-through text-gray-400' : 'text-gray-800'}>
-                      {item.label}
-                    </span>
-                    {item.isBlocker && !item.done && (
-                      <span className="ml-2 inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-500 uppercase">
-                        <AlertTriangle size={10} /> Blocker
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{item.project?.name || '—'}</td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    {item.stage && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${item.stage.light} ${item.stage.text}`}>
-                        {item.stage.short}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-500 hidden lg:table-cell">{item.owner || '—'}</td>
-                  <td className="px-4 py-3 text-xs">
-                    {item.dueDate ? (
-                      <span className={item.isOverdue ? 'text-red-600 font-medium' : item.isDueSoon ? 'text-amber-600' : 'text-gray-500'}>
-                        {fmtDate(item.dueDate)}
-                      </span>
-                    ) : '—'}
-                  </td>
-                  <td className={`px-4 py-3 text-xs hidden sm:table-cell ${priorityColor(item.priority)}`}>
-                    {item.priority ? item.priority.charAt(0).toUpperCase() + item.priority.slice(1) : '—'}
-                  </td>
-                </tr>
+          <div className="flex flex-wrap gap-3 items-center mb-4">
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+              {[
+                { key: 'mine', label: `Mine (${counts.mine})`, hidden: !currentUser },
+                { key: 'open', label: `Open (${counts.open})` },
+                { key: 'overdue', label: `Overdue (${counts.overdue})`, danger: counts.overdue > 0 },
+                { key: 'due-soon', label: `Due this week (${counts.dueSoon})` },
+                { key: 'done', label: `Done (${counts.done})` },
+                { key: 'all', label: 'All' },
+              ].filter(t => !t.hidden).map(tab => (
+                <button key={tab.key} onClick={() => setFilter('status', tab.key)} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${filterStatus === tab.key ? 'bg-white shadow-sm text-gray-800' : tab.danger ? 'text-red-500 hover:text-red-700' : 'text-gray-500 hover:text-gray-700'}`}>
+                  {tab.label}
+                </button>
               ))}
-            </tbody>
-          </table>
-          <div className="px-4 py-2 border-t border-gray-50 text-xs text-gray-400">
-            {filtered.length} task{filtered.length !== 1 ? 's' : ''}
+            </div>
+            <select value={filterProject} onChange={e => setFilter('project', e.target.value)} className={inputCls + ' w-48'}>
+              <option value="">All projects</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <select value={filterOwner} onChange={e => setFilter('owner', e.target.value)} className={inputCls + ' w-44'}>
+              <option value="">All assignees</option>
+              {assignees.map(name => <option key={name} value={name}>{name}</option>)}
+            </select>
           </div>
-        </div>
-      )}
 
-      {editItem && <ChecklistItemModal item={editItem} onClose={() => setEditItem(null)} />}
-    </div>
-    </div>
+          {filtered.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-100 py-16 text-center">
+              <p className="text-sm font-medium text-gray-600">No tasks match this view.</p>
+              <button onClick={() => setShowNew(true)} className="mt-4 inline-flex items-center gap-2 text-sm text-ocean-600 hover:text-ocean-700">
+                <Plus size={14} /> Add a task
+              </button>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100">
+                    <th className="w-8 px-4 py-3" />
+                    <th className="text-left px-4 py-3 font-medium">Task</th>
+                    <th className="text-left px-4 py-3 font-medium">Project</th>
+                    <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Assignee</th>
+                    <th className="text-left px-4 py-3 font-medium">Due</th>
+                    <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Priority</th>
+                    <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">Status</th>
+                    <th className="w-10 px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {filtered.map(task => (
+                    <tr key={task.id} className={`hover:bg-gray-50 transition-colors ${task.isOverdue ? 'bg-red-50/50' : ''}`}>
+                      <td className="px-4 py-3">
+                        <button onClick={() => toggleDone(task)} className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${task.isDone ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-green-400'}`}>
+                          {task.isDone && <Check size={10} />}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className={`font-medium ${task.isDone ? 'line-through text-gray-400' : 'text-gray-800'}`}>{task.title}</div>
+                        {task.description && <div className="text-xs text-gray-400 mt-0.5 line-clamp-1">{task.description}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {task.project ? <Link to={`/projects/${task.project.id}`} className="text-ocean-600 hover:underline">{task.project.name}</Link> : <span className="text-gray-400">General</span>}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500 hidden md:table-cell">{task.assignee || '-'}</td>
+                      <td className="px-4 py-3 text-xs">
+                        {task.dueDate ? (
+                          <span className={task.isOverdue ? 'inline-flex items-center gap-1 text-red-600 font-medium' : task.isDueSoon ? 'text-amber-600' : 'text-gray-500'}>
+                            {task.isOverdue && <AlertTriangle size={11} />}
+                            {fmtDate(task.dueDate)}
+                          </span>
+                        ) : <span className="text-gray-300">-</span>}
+                      </td>
+                      <td className={`px-4 py-3 text-xs hidden sm:table-cell ${priorityColor(task.priority)}`}>{task.priority}</td>
+                      <td className="px-4 py-3 text-xs hidden lg:table-cell">{STATUS_LABELS[task.status] || task.status}</td>
+                      <td className="px-4 py-3">
+                        <button onClick={() => setModalTask(task)} className="p-1.5 text-gray-300 hover:text-ocean-600 rounded hover:bg-ocean-50">
+                          <Pencil size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {showNew && <TaskModal projects={projects} teamMembers={teamMembers} currentUser={currentUser} onClose={() => setShowNew(false)} />}
+      {modalTask && <TaskModal task={modalTask} projects={projects} teamMembers={teamMembers} currentUser={currentUser} onClose={() => setModalTask(null)} />}
     </div>
   )
 }

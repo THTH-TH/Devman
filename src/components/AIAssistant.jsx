@@ -11,7 +11,7 @@ const SUGGESTIONS = [
   'What tasks are due this week?',
 ]
 
-function buildSystemPrompt(projects, checklistItems, milestones) {
+function buildSystemPrompt(projects, checklistItems, milestones, tasks, scheduleTasks) {
   const today = new Date().toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   const now = new Date()
 
@@ -40,6 +40,22 @@ function buildSystemPrompt(projects, checklistItems, milestones) {
       return `  - "${i.label}" on ${p?.name || 'Unknown'}${i.owner ? `, owner: ${i.owner}` : ''}`
     }).join('\n')
 
+  const assignedTasks = tasks
+    .filter(t => t.status !== 'done')
+    .slice(0, 20)
+    .map(t => {
+      const p = projects.find(p => p.id === t.projectId)
+      return `  - "${t.title}" on ${p?.name || 'General'}, status: ${t.status}, priority: ${t.priority}${t.dueDate ? `, due ${t.dueDate}` : ''}${t.assignee ? `, assignee: ${t.assignee}` : ''}`
+    }).join('\n')
+
+  const upcomingScheduleTasks = scheduleTasks
+    .filter(t => t.startDate || t.endDate)
+    .slice(0, 20)
+    .map(t => {
+      const p = projects.find(p => p.id === t.projectId)
+      return `  - "${t.name}" on ${p?.name || 'Unknown'}, phase: ${t.phase || 'Unphased'}, status: ${t.status}${t.startDate ? `, starts ${t.startDate}` : ''}${t.endDate ? `, ends ${t.endDate}` : ''}`
+    }).join('\n')
+
   return `You are an AI project management assistant for Archispace, a property development company based in Papamoa, Tauranga, New Zealand. Today is ${today}.
 
 ACTIVE PROJECTS (${projects.filter(p => p.status === 'Active').length} of ${projects.length}):
@@ -51,11 +67,17 @@ ${overdueItems || 'None.'}
 ACTIVE BLOCKERS:
 ${blockerItems || 'None.'}
 
+ASSIGNED TASKS:
+${assignedTasks || 'None.'}
+
+SCHEDULE TASKS:
+${upcomingScheduleTasks || 'None.'}
+
 Be concise, practical, and direct. Use NZ English. When giving priorities, be specific about what needs to be done and why. Format lists clearly.`
 }
 
 export default function AIAssistant() {
-  const { projects, checklistItems, milestones } = useStore()
+  const { projects, checklistItems, milestones, tasks, scheduleTasks } = useStore()
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -90,7 +112,7 @@ export default function AIAssistant() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          system: buildSystemPrompt(projects, checklistItems, milestones),
+          system: buildSystemPrompt(projects, checklistItems, milestones, tasks, scheduleTasks),
           messages: nextMessages,
         }),
       })

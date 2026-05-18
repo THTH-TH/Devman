@@ -13,11 +13,11 @@ const AVATAR_COLORS = [
 ]
 
 export default function Team() {
-  const { teamMembers, projects, checklistItems } = useStore()
+  const { teamMembers, projects, tasks } = useStore()
 
   const enriched = useMemo(() => {
     return teamMembers.map((m, idx) => {
-      const openTasks = checklistItems.filter(i => i.owner === m.name && !i.done)
+      const openTasks = tasks.filter(i => i.assignee === m.name && i.status !== 'done')
       const overdueTasks = openTasks.filter(i => i.dueDate && new Date(i.dueDate) < new Date())
       const activeProjects = projects.filter(p =>
         p.status === 'Active' && (
@@ -28,7 +28,7 @@ export default function Team() {
       )
       return { ...m, openTasks: openTasks.length, overdueTasks: overdueTasks.length, activeProjects: activeProjects.length, colorIdx: idx % AVATAR_COLORS.length }
     })
-  }, [teamMembers, projects, checklistItems])
+  }, [teamMembers, projects, tasks])
 
   if (teamMembers.length === 0) {
     return (

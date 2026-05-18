@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, ExternalLink, FolderOpen, Link2, Loader2, Mail, RefreshCw, Search } from 'lucide-react'
-import { supabase } from '../lib/supabase'
-
 const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500'
 
 function statusLabel(status) {
@@ -24,10 +22,13 @@ export default function GoogleWorkspacePanel({ projects, addDocument, updateProj
   )
 
   const invoke = async (action, payload = {}) => {
-    const { data, error } = await supabase.functions.invoke('google-workspace', {
-      body: { action, ...payload },
+    const response = await fetch('/api/google-workspace', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...payload }),
     })
-    if (error) throw error
+    const data = await response.json()
+    if (!response.ok) throw new Error(data?.error || 'Google Workspace request failed')
     if (data?.error) throw new Error(data.error)
     return data
   }
@@ -53,6 +54,7 @@ export default function GoogleWorkspacePanel({ projects, addDocument, updateProj
   const connectGoogle = async () => {
     const data = await invoke('auth_url', {
       redirect_url: `${window.location.origin}/documents`,
+      origin: window.location.origin,
     })
     window.location.href = data.auth_url
   }

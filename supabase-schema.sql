@@ -92,7 +92,21 @@ create table if not exists documents (
   drive_file_id text default '',
   drive_url text default '',
   source text default 'manual_link',
+  gmail_message_id text default '',
+  gmail_thread_id text default '',
   created_at timestamptz default now()
+);
+
+create table if not exists google_workspace_connections (
+  id text primary key default 'default',
+  provider_account_email text default '',
+  access_token text not null,
+  refresh_token text default '',
+  token_expires_at timestamptz not null,
+  scopes text[] default '{}',
+  root_folder_id text default '',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
 );
 
 create table if not exists team_members (

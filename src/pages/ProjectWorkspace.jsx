@@ -331,10 +331,11 @@ const CAT_COLORS = {
   report: 'bg-amber-50 text-amber-700',
   invoice: 'bg-green-50 text-green-700',
   photo: 'bg-pink-50 text-pink-700',
+  email: 'bg-sky-50 text-sky-700',
   other: 'bg-gray-100 text-gray-600',
 }
-const CAT_LABELS = { contract: 'Contract', consent: 'Consent', drawing: 'Drawing', report: 'Report', invoice: 'Invoice', photo: 'Photo', other: 'Other' }
-const CATEGORIES = ['contract', 'consent', 'drawing', 'report', 'invoice', 'photo', 'other']
+const CAT_LABELS = { contract: 'Contract', consent: 'Consent', drawing: 'Drawing', report: 'Report', invoice: 'Invoice', photo: 'Photo', email: 'Email', other: 'Other' }
+const CATEGORIES = ['contract', 'consent', 'drawing', 'report', 'invoice', 'photo', 'email', 'other']
 
 const ASSIGNED_TASK_STATUS_LABELS = { open: 'Open', 'in-progress': 'In progress', waiting: 'Waiting', done: 'Done' }
 const ASSIGNED_TASK_PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 }

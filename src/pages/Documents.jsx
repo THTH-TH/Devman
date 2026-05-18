@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react'
-import { Plus, ExternalLink, Trash2, Pencil, X, Search, FolderOpen, Link2 } from 'lucide-react'
+import { Plus, ExternalLink, Trash2, Pencil, X, Search, FolderOpen } from 'lucide-react'
 import useStore from '../store/useStore'
+import GoogleWorkspacePanel from '../components/GoogleWorkspacePanel'
 
-const CATEGORIES = ['contract', 'consent', 'drawing', 'report', 'invoice', 'photo', 'other']
-const CAT_LABELS = { contract: 'Contract', consent: 'Consent', drawing: 'Drawing', report: 'Report', invoice: 'Invoice', photo: 'Photo', other: 'Other' }
+const CATEGORIES = ['contract', 'consent', 'drawing', 'report', 'invoice', 'photo', 'email', 'other']
+const CAT_LABELS = { contract: 'Contract', consent: 'Consent', drawing: 'Drawing', report: 'Report', invoice: 'Invoice', photo: 'Photo', email: 'Email', other: 'Other' }
 const CAT_COLORS = {
   contract: 'bg-ocean-50 text-ocean-700',
   consent: 'bg-purple-50 text-purple-700',
@@ -11,6 +12,7 @@ const CAT_COLORS = {
   report: 'bg-amber-50 text-amber-700',
   invoice: 'bg-green-50 text-green-700',
   photo: 'bg-pink-50 text-pink-700',
+  email: 'bg-sky-50 text-sky-700',
   other: 'bg-gray-100 text-gray-600',
 }
 
@@ -95,8 +97,6 @@ export default function Documents() {
   const [filterCategory, setFilterCategory] = useState('')
   const [modal, setModal] = useState(null) // null | 'add' | doc object
   const [deleteConfirm, setDeleteConfirm] = useState(null)
-  const [driveProjectId, setDriveProjectId] = useState('')
-  const [driveFolderUrl, setDriveFolderUrl] = useState('')
 
   const filtered = useMemo(() => {
     return documents.filter(d => {
@@ -108,18 +108,6 @@ export default function Documents() {
   }, [documents, filterProject, filterCategory, search])
 
   const fmtDate = d => new Date(d).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
-  const selectedDriveProject = projects.find(p => p.id === driveProjectId)
-
-  const chooseDriveProject = projectId => {
-    setDriveProjectId(projectId)
-    const project = projects.find(p => p.id === projectId)
-    setDriveFolderUrl(project?.driveFolderUrl || '')
-  }
-
-  const saveDriveFolder = async () => {
-    if (!driveProjectId) return
-    await updateProject(driveProjectId, { driveFolderUrl: driveFolderUrl.trim() })
-  }
 
   return (
     <div className="flex flex-col h-full">
@@ -167,67 +155,7 @@ export default function Documents() {
         )}
       </div>
 
-      {/* Google Drive project folders */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 mb-5">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-          <div className="flex items-start gap-3 flex-1">
-            <div className="w-10 h-10 rounded-lg bg-forest-50 text-forest-700 flex items-center justify-center shrink-0">
-              <FolderOpen size={18} />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-gray-900">Google Drive folders</h2>
-              <p className="text-xs text-gray-500 mt-1">Link each project to its Drive folder, then attach individual files as document links.</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr_auto_auto] gap-2 lg:w-[720px]">
-            <select
-              value={driveProjectId}
-              onChange={e => chooseDriveProject(e.target.value)}
-              className={inputCls}
-            >
-              <option value="">Select project</option>
-              {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
-            </select>
-            <input
-              value={driveFolderUrl}
-              onChange={e => setDriveFolderUrl(e.target.value)}
-              className={inputCls}
-              placeholder="https://drive.google.com/drive/folders/..."
-            />
-            <button
-              onClick={saveDriveFolder}
-              disabled={!driveProjectId}
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium bg-forest-600 text-white rounded-lg hover:bg-forest-700 disabled:opacity-50"
-            >
-              <Link2 size={14} />
-              Link
-            </button>
-            {selectedDriveProject?.driveFolderUrl && (
-              <a href={selectedDriveProject.driveFolderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50">
-                Open
-                <ExternalLink size={12} />
-              </a>
-            )}
-          </div>
-        </div>
-        {projects.some(project => project.driveFolderUrl) && (
-          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-50">
-            {projects.filter(project => project.driveFolderUrl).map(project => (
-              <a
-                key={project.id}
-                href={project.driveFolderUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-full bg-forest-50 text-forest-700 px-3 py-1 text-xs font-medium hover:bg-forest-100"
-              >
-                <FolderOpen size={12} />
-                {project.name}
-                <ExternalLink size={10} />
-              </a>
-            ))}
-          </div>
-        )}
-      </div>
+      <GoogleWorkspacePanel projects={projects} addDocument={addDocument} updateProject={updateProject} />
 
       {/* Table */}
       {filtered.length === 0 ? (

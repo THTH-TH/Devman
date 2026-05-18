@@ -86,6 +86,8 @@ const mapDocument = r => ({
   source: r.source || (r.drive_file_id || r.drive_url ? 'google_drive' : 'manual_link'),
   driveFileId: r.drive_file_id || '',
   driveUrl: r.drive_url || '',
+  gmailMessageId: r.gmail_message_id || '',
+  gmailThreadId: r.gmail_thread_id || '',
   createdAt: r.created_at,
 })
 
@@ -181,13 +183,13 @@ const missingEnhancedProjectColumn = error =>
   /bc_number|legal_description|owner_contact_person|owner_mailing_address|owner_phone|owner_email|building_work_description|place_id|latitude|longitude|suburb|city|region|postal_code|country|property_snapshot|drive_folder_url|drive_root_folder_id/i.test(error?.message || '')
 
 const stripEnhancedDocumentColumns = row => {
-  const { drive_file_id, drive_url, source, ...legacy } = row
+  const { drive_file_id, drive_url, source, gmail_message_id, gmail_thread_id, ...legacy } = row
   return legacy
 }
 
 const missingEnhancedDocumentColumn = error =>
   error?.code === 'PGRST204' ||
-  /drive_file_id|drive_url|source/i.test(error?.message || '')
+  /drive_file_id|drive_url|source|gmail_message_id|gmail_thread_id/i.test(error?.message || '')
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 const useStore = create((set, get) => ({
@@ -751,6 +753,8 @@ const useStore = create((set, get) => ({
       source: data.source || (data.url?.includes('drive.google.com') ? 'google_drive' : 'manual_link'),
       drive_url: data.driveUrl || (data.url?.includes('drive.google.com') ? data.url : ''),
       drive_file_id: data.driveFileId || '',
+      gmail_message_id: data.gmailMessageId || '',
+      gmail_thread_id: data.gmailThreadId || '',
     }
     const doc = mapDocument({ ...row, created_at: new Date().toISOString() })
     set(s => ({ documents: [doc, ...s.documents] }))
@@ -777,6 +781,8 @@ const useStore = create((set, get) => ({
     if (data.source !== undefined) updates.source = data.source
     if (data.driveUrl !== undefined) updates.drive_url = data.driveUrl
     if (data.driveFileId !== undefined) updates.drive_file_id = data.driveFileId
+    if (data.gmailMessageId !== undefined) updates.gmail_message_id = data.gmailMessageId
+    if (data.gmailThreadId !== undefined) updates.gmail_thread_id = data.gmailThreadId
     set(s => ({ documents: s.documents.map(d => d.id === id ? { ...d, ...data } : d) }))
     const { error } = await supabase.from('documents').update(updates).eq('id', id)
     if (error) {

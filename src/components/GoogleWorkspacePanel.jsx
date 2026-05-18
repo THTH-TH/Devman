@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, ExternalLink, FolderOpen, Link2, Loader2, Mail, RefreshCw, Search } from 'lucide-react'
+import { googleWorkspaceCallbackOrigin, invokeGoogleWorkspace } from '../lib/googleWorkspaceApi'
 const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500'
 
 function statusLabel(status) {
@@ -21,22 +22,10 @@ export default function GoogleWorkspacePanel({ projects, addDocument, updateProj
     [projects, selectedProjectId]
   )
 
-  const invoke = async (action, payload = {}) => {
-    const response = await fetch('/api/google-workspace', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, ...payload }),
-    })
-    const data = await response.json()
-    if (!response.ok) throw new Error(data?.error || 'Google Workspace request failed')
-    if (data?.error) throw new Error(data.error)
-    return data
-  }
-
   const refreshStatus = async () => {
     setStatus(current => ({ ...current, loading: true, error: '' }))
     try {
-      const data = await invoke('status')
+      const data = await invokeGoogleWorkspace('status')
       setStatus({ loading: false, connected: Boolean(data.connected), email: data.email || '', error: '' })
     } catch (err) {
       setStatus({ loading: false, connected: false, email: '', error: err.message || 'Could not check Google connection' })
@@ -52,9 +41,9 @@ export default function GoogleWorkspacePanel({ projects, addDocument, updateProj
   }, [])
 
   const connectGoogle = async () => {
-    const data = await invoke('auth_url', {
+    const data = await invokeGoogleWorkspace('auth_url', {
       redirect_url: `${window.location.origin}/documents`,
-      origin: window.location.origin,
+      origin: googleWorkspaceCallbackOrigin(),
     })
     window.location.href = data.auth_url
   }
@@ -63,7 +52,7 @@ export default function GoogleWorkspacePanel({ projects, addDocument, updateProj
     if (!selectedProjectId) return
     setFolderBusy(true)
     try {
-      const data = await invoke('create_project_folders', { project_id: selectedProjectId })
+      const data = await invokeGoogleWorkspace('create_project_folders', { project_id: selectedProjectId })
       await updateProject(selectedProjectId, {
         driveFolderUrl: data.root_folder_url,
         driveRootFolderId: data.root_folder_id,
@@ -78,7 +67,7 @@ export default function GoogleWorkspacePanel({ projects, addDocument, updateProj
   const searchGmail = async () => {
     setGmailBusy(true)
     try {
-      const data = await invoke('gmail_search', { query: gmailQuery, max_results: 10 })
+      const data = await invokeGoogleWorkspace('gmail_search', { query: gmailQuery, max_results: 10 })
       setGmailMessages(data.messages || [])
     } catch (err) {
       setStatus(current => ({ ...current, error: err.message || 'Gmail search failed' }))

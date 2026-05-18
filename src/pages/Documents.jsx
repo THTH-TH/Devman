@@ -1,14 +1,8 @@
 import { useState, useMemo } from 'react'
-import { Plus, ExternalLink, Trash2, Pencil, X, Search, FolderOpen, Folder, FileText } from 'lucide-react'
+import { Plus, ExternalLink, Trash2, Pencil, X, Search, FolderOpen } from 'lucide-react'
 import useStore from '../store/useStore'
 import GoogleWorkspacePanel from '../components/GoogleWorkspacePanel'
-import {
-  ARCHISPACE_DRIVE_ROOT,
-  ARCHISPACE_LIBRARY,
-  ARCHISPACE_PROJECT_FOLDERS,
-  PROJECT_FILES_ROOT,
-  PROJECT_TEMPLATE_FOLDER,
-} from '../data/driveLibrary'
+import DriveBrowser from '../components/DriveBrowser'
 
 const CATEGORIES = ['contract', 'consent', 'drawing', 'report', 'invoice', 'photo', 'email', 'other']
 const CAT_LABELS = { contract: 'Contract', consent: 'Consent', drawing: 'Drawing', report: 'Report', invoice: 'Invoice', photo: 'Photo', email: 'Email', other: 'Other' }
@@ -97,124 +91,6 @@ function DocModal({ doc, projects, onClose, onSave }) {
   )
 }
 
-function DriveLibrarySection() {
-  const childCount = ARCHISPACE_LIBRARY.reduce((count, folder) => count + folder.children.length, 0)
-
-  return (
-    <section className="mb-7">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between mb-3">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-900">Archispace Drive</h2>
-          <p className="text-xs text-gray-500 mt-1">{ARCHISPACE_LIBRARY.length} folders / {childCount} quick links</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <a
-            href={ARCHISPACE_DRIVE_ROOT.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:border-forest-300 hover:text-forest-700"
-          >
-            <FolderOpen size={14} />
-            Open Drive root
-          </a>
-          <a
-            href={PROJECT_TEMPLATE_FOLDER.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:border-forest-300 hover:text-forest-700"
-          >
-            <FileText size={14} />
-            Project template
-          </a>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4">
-        <div className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm">
-          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50">
-            <div className="flex items-center gap-2 text-sm font-semibold text-gray-800 min-w-0">
-              <FolderOpen size={15} className="shrink-0 text-forest-600" />
-              <span className="truncate">Company folders</span>
-            </div>
-            <a
-              href={PROJECT_FILES_ROOT.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden sm:inline text-xs font-medium text-forest-700 hover:text-forest-800"
-            >
-              Project files
-            </a>
-          </div>
-          <div className="divide-y divide-gray-50">
-            {ARCHISPACE_LIBRARY.map(folder => (
-              <div key={folder.name} className="px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <a
-                    href={folder.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="min-w-0 inline-flex items-center gap-2 text-sm font-medium text-gray-800 hover:text-forest-700"
-                  >
-                    <Folder size={14} className="shrink-0 text-gray-400" />
-                    <span className="truncate">{folder.name}</span>
-                    <ExternalLink size={11} className="shrink-0 text-gray-300" />
-                  </a>
-                  <span className="shrink-0 text-[11px] text-gray-400">{folder.children.length || 0}</span>
-                </div>
-                {folder.children.length > 0 && (
-                  <div className="mt-2 hidden sm:flex flex-wrap gap-1.5 pl-6">
-                    {folder.children.map(child => (
-                      <a
-                        key={`${folder.name}-${child.name}`}
-                        href={child.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="max-w-full truncate rounded-md bg-gray-50 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-forest-50 hover:text-forest-700"
-                        title={child.name}
-                      >
-                        {child.name}
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm">
-          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50">
-            <div className="flex items-center gap-2 text-sm font-semibold text-gray-800 min-w-0">
-              <FolderOpen size={15} className="shrink-0 text-forest-600" />
-              <span className="truncate">Project folders</span>
-            </div>
-            <span className="text-xs text-gray-400">{ARCHISPACE_PROJECT_FOLDERS.length}</span>
-          </div>
-          <div className="divide-y divide-gray-50">
-            {ARCHISPACE_PROJECT_FOLDERS.map(folder => (
-              <a
-                key={folder.url}
-                href={folder.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50"
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium text-gray-800">{folder.name}</div>
-                  <div className="mt-0.5 truncate text-xs text-gray-400">
-                    {folder.code}{folder.client ? ` / ${folder.client}` : ''}
-                  </div>
-                </div>
-                <ExternalLink size={13} className="shrink-0 text-gray-300" />
-              </a>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
 export default function Documents() {
   const { projects, documents, addDocument, updateDocument, deleteDocument, updateProject } = useStore()
   const [search, setSearch] = useState('')
@@ -255,7 +131,7 @@ export default function Documents() {
       <div className="flex-1 overflow-auto">
       <div className="p-6 max-w-7xl mx-auto">
 
-      <DriveLibrarySection />
+      <DriveBrowser projects={projects} addDocument={addDocument} />
 
       {/* Filters */}
       <div className="mb-3">

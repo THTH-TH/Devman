@@ -4,9 +4,29 @@ const CONNECTION_ID = 'default'
 const SCOPES = [
   'openid',
   'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/drive',
   'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/gmail.readonly',
 ]
+
+const ARCHISPACE_DRIVE_ROOT_ID = '0ANrUzbkL3mQAUk9PVA'
+const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder'
+const DRIVE_FILE_FIELDS = [
+  'id',
+  'name',
+  'mimeType',
+  'webViewLink',
+  'webContentLink',
+  'iconLink',
+  'thumbnailLink',
+  'modifiedTime',
+  'createdTime',
+  'size',
+  'parents',
+  'shared',
+  'owners(displayName,emailAddress)',
+  'lastModifyingUser(displayName,emailAddress)',
+].join(',')
 
 const STAGE_FOLDERS = [
   'Feasibility',
@@ -27,6 +47,57 @@ function supabaseAdmin() {
 
 function json(res, status, body) {
   return res.status(status).json(body)
+}
+
+function setCors(req, res) {
+  const origin = req.headers.origin || ''
+  const allowed =
+    !origin ||
+    /^https:\/\/devman-liart\.vercel\.app$/.test(origin) ||
+    /^https:\/\/[a-z0-9-]+-thth-ths-projects\.vercel\.app$/.test(origin) ||
+    /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)
+
+  if (allowed && origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Vary', 'Origin')
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+}
+
+function escapeDriveQuery(value) {
+  return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+}
+
+function normalizeDriveFile(file) {
+  const isFolder = file.mimeType === DRIVE_FOLDER_MIME
+  return {
+    id: file.id,
+    name: file.name,
+    mimeType: file.mimeType,
+    type: isFolder ? 'folder' : 'file',
+    url: file.webViewLink || '',
+    webViewLink: file.webViewLink || '',
+    webContentLink: file.webContentLink || '',
+    iconLink: file.iconLink || '',
+    thumbnailLink: file.thumbnailLink || '',
+    modifiedTime: file.modifiedTime || '',
+    createdTime: file.createdTime || '',
+    size: file.size || '',
+    parents: file.parents || [],
+    shared: Boolean(file.shared),
+    owner: file.owners?.[0]?.displayName || file.owners?.[0]?.emailAddress || '',
+    modifiedBy: file.lastModifyingUser?.displayName || file.lastModifyingUser?.emailAddress || '',
+    previewUrl: isFolder ? '' : drivePreviewUrl(file),
+  }
+}
+
+function drivePreviewUrl(file) {
+  if (!file?.id) return ''
+  if (file.mimeType === 'application/vnd.google-apps.document') return `https://docs.google.com/document/d/${file.id}/preview`
+  if (file.mimeType === 'application/vnd.google-apps.spreadsheet') return `https://docs.google.com/spreadsheets/d/${file.id}/preview`
+  if (file.mimeType === 'application/vnd.google-apps.presentation') return `https://docs.google.com/presentation/d/${file.id}/preview`
+  return `https://drive.google.com/file/d/${file.id}/preview`
 }
 
 async function getConnection(supabase) {
@@ -88,6 +159,103 @@ async function createDriveFolder(accessToken, name, parentId) {
   return data
 }
 
+async function driveGetFile(accessToken, fileId) {
+  const params = new URLSearchParams({
+    fields: DRIVE_FILE_FIELDS,
+    supportsAllDrives: 'true',
+  })
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.error?.message || 'Could not read Drive item.')
+  return normalizeDriveFile(data)
+}
+
+async function driveListFolder(accessToken, folderId, pageToken) {
+  const safeFolderId = escapeDriveQuery(folderId || ARCHISPACE_DRIVE_ROOT_ID)
+  const params = new URLSearchParams({
+    q: `'${safeFolderId}' in parents and trashed = false`,
+    pageSize: '100',
+    orderBy: 'folder,name',
+    fields: `nextPageToken,files(${DRIVE_FILE_FIELDS})`,
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true',
+    corpora: 'allDrives',
+  })
+  if (pageToken) params.set('pageToken', pageToken)
+
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.error?.message || 'Could not list Drive folder.')
+
+  let folder = { id: folderId || ARCHISPACE_DRIVE_ROOT_ID, name: 'Archispace Drive', type: 'folder' }
+  try {
+    folder = await driveGetFile(accessToken, folderId || ARCHISPACE_DRIVE_ROOT_ID)
+  } catch {
+    // Shared drive roots can be awkward to read directly; listing the children is what matters.
+  }
+
+  return {
+    folder,
+    files: (data.files || []).map(normalizeDriveFile),
+    nextPageToken: data.nextPageToken || '',
+  }
+}
+
+async function driveSearch(accessToken, query, pageToken) {
+  const cleanQuery = escapeDriveQuery(String(query || '').trim())
+  if (!cleanQuery) return { files: [], nextPageToken: '' }
+
+  const params = new URLSearchParams({
+    q: `trashed = false and (name contains '${cleanQuery}' or fullText contains '${cleanQuery}')`,
+    pageSize: '50',
+    fields: `nextPageToken,files(${DRIVE_FILE_FIELDS})`,
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true',
+    corpora: 'allDrives',
+  })
+  if (pageToken) params.set('pageToken', pageToken)
+
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.error?.message || 'Drive search failed.')
+  return {
+    files: (data.files || []).map(normalizeDriveFile),
+    nextPageToken: data.nextPageToken || '',
+  }
+}
+
+async function driveShare(accessToken, fileId, email, role) {
+  if (!fileId) throw new Error('file_id is required.')
+  if (!email) throw new Error('email is required.')
+  const safeRole = ['reader', 'commenter', 'writer'].includes(role) ? role : 'reader'
+  const params = new URLSearchParams({
+    sendNotificationEmail: 'true',
+    supportsAllDrives: 'true',
+    fields: 'id,type,role,emailAddress,displayName',
+  })
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions?${params}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      type: 'user',
+      role: safeRole,
+      emailAddress: email,
+    }),
+  })
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.error?.message || 'Could not share Drive item.')
+  return data
+}
+
 async function gmailSearch(accessToken, query, maxResults) {
   const params = new URLSearchParams({
     q: query || 'newer_than:30d',
@@ -123,6 +291,8 @@ async function gmailSearch(accessToken, query, maxResults) {
 }
 
 export default async function handler(req, res) {
+  setCors(req, res)
+  if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' })
 
   try {
@@ -148,10 +318,14 @@ export default async function handler(req, res) {
 
     const connection = await getConnection(supabase)
     if (action === 'status') {
+      const scopes = connection?.scopes || []
       return json(res, 200, {
         connected: Boolean(connection?.access_token || connection?.refresh_token),
         email: connection?.provider_account_email || '',
-        scopes: connection?.scopes || [],
+        scopes,
+        hasDriveMirrorAccess: scopes.includes('https://www.googleapis.com/auth/drive') ||
+          scopes.includes('https://www.googleapis.com/auth/drive.readonly') ||
+          scopes.includes('https://www.googleapis.com/auth/drive.metadata.readonly'),
       })
     }
 
@@ -189,6 +363,27 @@ export default async function handler(req, res) {
     if (action === 'gmail_search') {
       const messages = await gmailSearch(accessToken, body.query, body.max_results)
       return json(res, 200, { messages })
+    }
+
+    if (action === 'drive_list') {
+      const data = await driveListFolder(accessToken, body.folder_id || ARCHISPACE_DRIVE_ROOT_ID, body.page_token)
+      return json(res, 200, data)
+    }
+
+    if (action === 'drive_search') {
+      const data = await driveSearch(accessToken, body.query, body.page_token)
+      return json(res, 200, data)
+    }
+
+    if (action === 'drive_share') {
+      const permission = await driveShare(accessToken, body.file_id, body.email, body.role)
+      return json(res, 200, { success: true, permission })
+    }
+
+    if (action === 'drive_metadata') {
+      if (!body.file_id) return json(res, 400, { error: 'file_id is required' })
+      const file = await driveGetFile(accessToken, body.file_id)
+      return json(res, 200, { file })
     }
 
     return json(res, 400, { error: 'Unknown action' })

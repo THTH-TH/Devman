@@ -355,6 +355,7 @@ export default function DriveBrowser({ projects, addDocument }) {
   const [selectedFile, setSelectedFile] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [callbackError, setCallbackError] = useState('')
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
 
@@ -415,6 +416,15 @@ export default function DriveBrowser({ projects, addDocument }) {
   }
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const googleError = params.get('google_error')
+    if (googleError) {
+      setCallbackError(decodeURIComponent(googleError.replace(/\+/g, ' ')))
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    if (params.get('google_connected') === 'true') {
+      window.history.replaceState({}, '', window.location.pathname)
+    }
     refreshStatus().then(data => {
       if (data?.connected && data?.hasDriveMirrorAccess) loadFolder({ id: ARCHISPACE_DRIVE_ROOT.id, name: ARCHISPACE_DRIVE_ROOT.name }, [{ id: ARCHISPACE_DRIVE_ROOT.id, name: ARCHISPACE_DRIVE_ROOT.name }])
     })
@@ -452,6 +462,12 @@ export default function DriveBrowser({ projects, addDocument }) {
   return (
     <section className="mb-7">
       <DriveStatus status={status} onConnect={connectGoogle} onRefresh={() => { refreshStatus(); loadFolder() }} />
+
+      {callbackError && (
+        <div className="mb-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Google did not connect: {callbackError}
+        </div>
+      )}
 
       {status.connected && status.hasDriveMirrorAccess && (
         <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_420px] gap-5">

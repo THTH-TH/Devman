@@ -97,6 +97,13 @@ const mapScheduleTask = r => ({
   assignee: r.assignee || '',
   startDate: r.start_date || '',
   endDate: r.end_date || '',
+  actualStart: r.actual_start || '',
+  actualEnd: r.actual_end || '',
+  dependencyId: r.dependency_id || '',
+  lagDays: r.lag_days ?? 0,
+  internalOwner: r.internal_owner || '',
+  isMilestone: r.is_milestone || false,
+  notes: r.notes || '',
   durationDays: r.duration_days ?? null,
   status: r.status || 'not-started',
   progress: r.progress ?? 0,
@@ -104,6 +111,24 @@ const mapScheduleTask = r => ({
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 })
+
+const stripEnhancedScheduleColumns = row => {
+  const {
+    actual_start,
+    actual_end,
+    dependency_id,
+    lag_days,
+    internal_owner,
+    is_milestone,
+    notes,
+    ...legacy
+  } = row
+  return legacy
+}
+
+const missingEnhancedScheduleColumn = error =>
+  error?.code === 'PGRST204' ||
+  /actual_start|actual_end|dependency_id|lag_days|internal_owner|is_milestone|notes/i.test(error?.message || '')
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 const useStore = create((set, get) => ({
@@ -533,6 +558,13 @@ const useStore = create((set, get) => ({
       assignee: data.assignee || '',
       start_date: data.startDate || null,
       end_date: data.endDate || null,
+      actual_start: data.actualStart || null,
+      actual_end: data.actualEnd || null,
+      dependency_id: data.dependencyId || null,
+      lag_days: data.lagDays ?? 0,
+      internal_owner: data.internalOwner || '',
+      is_milestone: data.isMilestone || false,
+      notes: data.notes || '',
       duration_days: data.durationDays ?? null,
       status: data.status || 'not-started',
       progress: data.progress ?? 0,
@@ -544,6 +576,11 @@ const useStore = create((set, get) => ({
     set(s => ({ scheduleTasks: [...s.scheduleTasks, task] }))
     const { error } = await supabase.from('schedule_tasks').insert(row)
     if (error) {
+      if (missingEnhancedScheduleColumn(error)) {
+        const { error: fallbackError } = await supabase.from('schedule_tasks').insert(stripEnhancedScheduleColumns(row))
+        if (!fallbackError) return task
+        console.error('addScheduleTask fallback error:', fallbackError)
+      }
       console.error('addScheduleTask error:', error)
       set(s => ({ scheduleTasks: s.scheduleTasks.filter(t => t.id !== id) }))
     }
@@ -557,13 +594,27 @@ const useStore = create((set, get) => ({
     if (data.assignee !== undefined) updates.assignee = data.assignee
     if (data.startDate !== undefined) updates.start_date = data.startDate || null
     if (data.endDate !== undefined) updates.end_date = data.endDate || null
+    if (data.actualStart !== undefined) updates.actual_start = data.actualStart || null
+    if (data.actualEnd !== undefined) updates.actual_end = data.actualEnd || null
+    if (data.dependencyId !== undefined) updates.dependency_id = data.dependencyId || null
+    if (data.lagDays !== undefined) updates.lag_days = data.lagDays ?? 0
+    if (data.internalOwner !== undefined) updates.internal_owner = data.internalOwner
+    if (data.isMilestone !== undefined) updates.is_milestone = data.isMilestone
+    if (data.notes !== undefined) updates.notes = data.notes
     if (data.durationDays !== undefined) updates.duration_days = data.durationDays ?? null
     if (data.status !== undefined) updates.status = data.status
     if (data.progress !== undefined) updates.progress = data.progress
     if (data.sortOrder !== undefined) updates.sort_order = data.sortOrder
     set(s => ({ scheduleTasks: s.scheduleTasks.map(t => t.id === id ? { ...t, ...data } : t) }))
     const { error } = await supabase.from('schedule_tasks').update(updates).eq('id', id)
-    if (error) console.error('updateScheduleTask error:', error)
+    if (error) {
+      if (missingEnhancedScheduleColumn(error)) {
+        const { error: fallbackError } = await supabase.from('schedule_tasks').update(stripEnhancedScheduleColumns(updates)).eq('id', id)
+        if (!fallbackError) return
+        console.error('updateScheduleTask fallback error:', fallbackError)
+      }
+      console.error('updateScheduleTask error:', error)
+    }
   },
 
   async deleteScheduleTask(id) {

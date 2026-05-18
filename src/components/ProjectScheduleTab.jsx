@@ -1,169 +1,332 @@
-import { useState, useMemo, useRef, useEffect, Fragment } from 'react'
-import { List, BarChart2, Flag, Plus, Trash2, ChevronDown, ChevronRight, Pencil, Check, X } from 'lucide-react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  BarChart2,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Clock3,
+  Diamond,
+  Flag,
+  GripVertical,
+  List,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-react'
 import useStore from '../store/useStore'
 import { STAGE_MAP } from '../data/stages'
 
-// ── Date helpers ───────────────────────────────────────────────────────────────
 const DAY_MS = 86_400_000
+const INPUT_CLS = 'w-full rounded border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-ocean-500 focus:outline-none focus:ring-1 focus:ring-ocean-500'
+const ICON_BTN_CLS = 'inline-flex h-7 w-7 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700'
 
-function sod(d) { const r = new Date(d); r.setHours(0, 0, 0, 0); return r }
-function diffDays(a, b) { return Math.round((sod(b) - sod(a)) / DAY_MS) }
-function addDays(d, n) { return new Date(d.getTime() + n * DAY_MS) }
-function fmtShort(d) { return new Date(d).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) }
-function fmtDisplay(s) { return s ? fmtShort(s) : '—' }
-function fmtInput(d) {
-  if (!d) return ''
-  const dt = new Date(d)
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
-}
-function relativeDays(s) {
-  if (!s) return null
-  const d = diffDays(new Date(), new Date(s))
-  if (d === 0) return 'today'
-  return d > 0 ? `in ${d}d` : `${Math.abs(d)}d ago`
-}
-function calcDuration(start, end) {
-  if (!start || !end) return null
-  const d = diffDays(new Date(start), new Date(end))
-  return d > 0 ? d : null
-}
-function endFromStartDuration(start, days) {
-  if (!start || !days) return ''
-  return fmtInput(addDays(new Date(start), Number(days)))
-}
-
-// ── Status config ──────────────────────────────────────────────────────────────
-const STATUSES = [
-  { value: 'not-started', label: 'Not started', dot: 'bg-gray-300', text: 'text-gray-500' },
-  { value: 'in-progress', label: 'In progress', dot: 'bg-ocean-500', text: 'text-ocean-600' },
-  { value: 'complete',    label: 'Complete',    dot: 'bg-green-500', text: 'text-green-600' },
-  { value: 'on-hold',     label: 'On hold',     dot: 'bg-amber-400', text: 'text-amber-600' },
-  { value: 'blocked',     label: 'Blocked',     dot: 'bg-red-500',   text: 'text-red-600'   },
+const STATUS_OPTIONS = [
+  { value: 'not-started', label: 'Not started', dot: 'bg-gray-300', text: 'text-gray-500', bar: 'bg-gray-300' },
+  { value: 'in-progress', label: 'In progress', dot: 'bg-ocean-500', text: 'text-ocean-700', bar: 'bg-ocean-500' },
+  { value: 'complete', label: 'Complete', dot: 'bg-green-500', text: 'text-green-700', bar: 'bg-green-500' },
+  { value: 'delayed', label: 'Delayed', dot: 'bg-red-500', text: 'text-red-700', bar: 'bg-red-500' },
+  { value: 'blocked', label: 'Blocked', dot: 'bg-red-700', text: 'text-red-800', bar: 'bg-red-700' },
+  { value: 'on-hold', label: 'On hold', dot: 'bg-amber-400', text: 'text-amber-700', bar: 'bg-amber-400' },
 ]
-const STATUS_MAP = Object.fromEntries(STATUSES.map(s => [s.value, s]))
 
-function StatusDot({ status, size = 'w-2 h-2' }) {
-  const s = STATUS_MAP[status] || STATUSES[0]
-  return <span className={`inline-block rounded-full shrink-0 ${size} ${s.dot}`} />
+const STATUS_MAP = Object.fromEntries(STATUS_OPTIONS.map(s => [s.value, s]))
+const EDITABLE_STATUS_OPTIONS = STATUS_OPTIONS.filter(s => s.value !== 'delayed')
+
+function parseDate(value) {
+  if (!value) return null
+  if (value instanceof Date) return sod(value)
+  const parts = String(value).split('-').map(Number)
+  if (parts.length === 3 && parts.every(Boolean)) return new Date(parts[0], parts[1] - 1, parts[2])
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? null : sod(d)
 }
 
-// ── Editable cell ──────────────────────────────────────────────────────────────
-function Cell({ value, onChange, type = 'text', options, placeholder = '', className = '', align = 'left' }) {
-  const [editing, setEditing] = useState(false)
+function sod(date) {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function diffDays(a, b) {
+  const start = parseDate(a)
+  const end = parseDate(b)
+  if (!start || !end) return null
+  return Math.round((end - start) / DAY_MS)
+}
+
+function addDays(value, days) {
+  const d = parseDate(value)
+  if (!d) return null
+  return new Date(d.getTime() + Number(days) * DAY_MS)
+}
+
+function fmtInput(value) {
+  const d = parseDate(value)
+  if (!d) return ''
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function fmtShort(value) {
+  const d = parseDate(value)
+  return d ? d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : '-'
+}
+
+function fmtFull(value) {
+  const d = parseDate(value)
+  return d ? d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'
+}
+
+function calcDuration(start, end) {
+  const days = diffDays(start, end)
+  return days == null || days < 0 ? null : days + 1
+}
+
+function endFromDuration(start, durationDays) {
+  const days = Number(durationDays)
+  if (!start || !days || days < 1) return ''
+  return fmtInput(addDays(start, days - 1))
+}
+
+function relativeDays(value) {
+  const days = diffDays(new Date(), value)
+  if (days == null) return ''
+  if (days === 0) return 'today'
+  return days > 0 ? `in ${days}d` : `${Math.abs(days)}d ago`
+}
+
+function getDisplayStatus(task) {
+  if (task.status === 'complete') return 'complete'
+  if (task.status === 'blocked') return 'blocked'
+  if (task.status === 'on-hold') return 'on-hold'
+  const end = parseDate(task.endDate)
+  if (end && end < sod(new Date())) return 'delayed'
+  if ((task.progress || 0) > 0) return 'in-progress'
+  return task.status || 'not-started'
+}
+
+function progressFor(task) {
+  if (task.status === 'complete') return 100
+  return Math.max(0, Math.min(100, Number(task.progress || 0)))
+}
+
+function StatusDot({ status, className = '' }) {
+  const cfg = STATUS_MAP[status] || STATUS_MAP['not-started']
+  return <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${cfg.dot} ${className}`} />
+}
+
+function StatusLabel({ task }) {
+  const status = getDisplayStatus(task)
+  const cfg = STATUS_MAP[status] || STATUS_MAP['not-started']
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${cfg.text} bg-gray-50`}>
+      <StatusDot status={status} />
+      {cfg.label}
+    </span>
+  )
+}
+
+function BufferedInput({ value, onCommit, type = 'text', placeholder = '', className = '', min, max }) {
   const [draft, setDraft] = useState(value ?? '')
   const inputRef = useRef(null)
 
-  useEffect(() => { if (!editing) setDraft(value ?? '') }, [value, editing])
-  useEffect(() => { if (editing && inputRef.current) inputRef.current.focus() }, [editing])
+  useEffect(() => setDraft(value ?? ''), [value])
 
   const commit = () => {
-    setEditing(false)
-    const v = String(draft).trim()
-    if (v !== String(value ?? '').trim()) onChange(v)
-  }
-
-  const inputCls = 'w-full bg-white border border-ocean-400 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-ocean-500 focus:border-ocean-500'
-
-  if (editing) {
-    if (type === 'select') {
-      return (
-        <select
-          ref={inputRef}
-          autoFocus
-          className={`${inputCls} cursor-pointer`}
-          value={draft}
-          onChange={e => { onChange(e.target.value); setEditing(false) }}
-          onBlur={() => setEditing(false)}
-        >
-          {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      )
-    }
-    return (
-      <input
-        ref={inputRef}
-        type={type}
-        className={inputCls}
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={e => {
-          if (e.key === 'Enter') { e.preventDefault(); commit() }
-          if (e.key === 'Escape') { setEditing(false); setDraft(value ?? '') }
-        }}
-      />
-    )
+    const next = type === 'number' ? draft : String(draft).trim()
+    if (String(next) !== String(value ?? '')) onCommit(next)
   }
 
   return (
-    <div
-      onClick={() => setEditing(true)}
-      className={`cursor-pointer rounded px-1.5 py-0.5 hover:bg-gray-100 text-xs min-h-[22px] ${align === 'right' ? 'text-right' : ''} ${className}`}
-      title="Click to edit"
-    >
-      {value
-        ? <span>{value}</span>
-        : <span className="text-gray-300">{placeholder}</span>
-      }
+    <input
+      ref={inputRef}
+      type={type}
+      min={min}
+      max={max}
+      className={`${INPUT_CLS} ${className}`}
+      placeholder={placeholder}
+      value={draft}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          inputRef.current?.blur()
+        }
+        if (e.key === 'Escape') {
+          setDraft(value ?? '')
+          inputRef.current?.blur()
+        }
+      }}
+    />
+  )
+}
+
+function BufferedTextarea({ value, onCommit, placeholder = '' }) {
+  const [draft, setDraft] = useState(value ?? '')
+  const ref = useRef(null)
+
+  useEffect(() => setDraft(value ?? ''), [value])
+
+  const commit = () => {
+    const next = String(draft).trim()
+    if (next !== String(value ?? '')) onCommit(next)
+  }
+
+  return (
+    <textarea
+      ref={ref}
+      rows={3}
+      className={`${INPUT_CLS} resize-none leading-relaxed`}
+      placeholder={placeholder}
+      value={draft}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') ref.current?.blur()
+        if (e.key === 'Escape') {
+          setDraft(value ?? '')
+          ref.current?.blur()
+        }
+      }}
+    />
+  )
+}
+
+function DateInput({ value, onChange }) {
+  return (
+    <input
+      type="date"
+      className={INPUT_CLS}
+      value={fmtInput(value)}
+      onChange={e => onChange(e.target.value)}
+    />
+  )
+}
+
+function EmptySchedule({ onAddPhase }) {
+  return (
+    <div className="rounded-xl border border-dashed border-gray-200 bg-white px-6 py-14 text-center">
+      <CalendarDays size={28} className="mx-auto mb-3 text-gray-300" />
+      <div className="mb-1 text-sm font-semibold text-gray-700">No programme tasks yet</div>
+      <p className="mx-auto mb-5 max-w-md text-sm text-gray-400">
+        Add phases for consent, procurement, construction, and handover, then build out the dated tasks.
+      </p>
+      <button
+        onClick={onAddPhase}
+        className="inline-flex items-center gap-2 rounded-lg bg-forest-600 px-4 py-2 text-sm font-medium text-white hover:bg-forest-700"
+      >
+        <Plus size={14} />
+        Add first phase
+      </button>
     </div>
   )
 }
 
-// ── New task row ───────────────────────────────────────────────────────────────
-function NewTaskRow({ phase, teamMembers, onSave, onCancel }) {
-  const [name, setName] = useState('')
-  const [assignee, setAssignee] = useState('')
-  const [start, setStart] = useState('')
-  const [end, setEnd] = useState('')
+function NewTaskRow({ phase, allTasks, teamMembers, onSave, onCancel }) {
   const nameRef = useRef(null)
+  const [form, setForm] = useState({
+    name: '',
+    assignee: '',
+    internalOwner: '',
+    startDate: '',
+    endDate: '',
+    durationDays: '',
+    dependencyId: '',
+    lagDays: 0,
+    isMilestone: false,
+    notes: '',
+  })
 
-  useEffect(() => { nameRef.current?.focus() }, [])
+  useEffect(() => nameRef.current?.focus(), [])
 
-  const handleSave = () => {
-    if (!name.trim()) return onCancel()
-    const dur = calcDuration(start, end)
-    onSave({ name: name.trim(), phase, assignee, startDate: start, endDate: end, durationDays: dur })
+  const set = (key, value) => setForm(f => {
+    const next = { ...f, [key]: value }
+    if (key === 'startDate' && next.durationDays) next.endDate = endFromDuration(value, next.durationDays)
+    if (key === 'endDate') next.durationDays = calcDuration(next.startDate, value) ?? ''
+    if (key === 'durationDays' && next.startDate) next.endDate = endFromDuration(next.startDate, value)
+    return next
+  })
+
+  const save = () => {
+    if (!form.name.trim()) {
+      onCancel()
+      return
+    }
+    onSave({
+      ...form,
+      phase,
+      name: form.name.trim(),
+      durationDays: form.durationDays === '' ? calcDuration(form.startDate, form.endDate) : Number(form.durationDays),
+      lagDays: Number(form.lagDays || 0),
+      progress: 0,
+      status: 'not-started',
+    })
   }
 
-  const inputCls = 'w-full bg-white border border-gray-200 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-ocean-500'
-
   return (
-    <tr className="bg-ocean-50/40 border-b border-ocean-100">
-      <td className="px-3 py-2 w-8" />
-      <td className="px-2 py-1.5">
-        <input
-          ref={nameRef}
-          className={inputCls}
-          placeholder="Task name…"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onCancel() }}
-        />
+    <tr className="border-b border-ocean-100 bg-ocean-50/40">
+      <td className="px-3 py-2" />
+      <td className="px-2 py-2">
+        <div className="space-y-2">
+          <input
+            ref={nameRef}
+            className={INPUT_CLS}
+            placeholder="Task name"
+            value={form.name}
+            onChange={e => set('name', e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') save()
+              if (e.key === 'Escape') onCancel()
+            }}
+          />
+          <label className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+            <input
+              type="checkbox"
+              checked={form.isMilestone}
+              onChange={e => set('isMilestone', e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-gray-300 text-ocean-600 focus:ring-ocean-500"
+            />
+            Milestone
+          </label>
+        </div>
       </td>
-      <td className="px-2 py-1.5">
-        <select className={inputCls} value={assignee} onChange={e => setAssignee(e.target.value)}>
-          <option value="">—</option>
-          {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
-        </select>
+      <td className="px-2 py-2">
+        <div className="space-y-2">
+          <select className={INPUT_CLS} value={form.assignee} onChange={e => set('assignee', e.target.value)}>
+            <option value="">Contractor / assignee</option>
+            {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+          </select>
+          <input className={INPUT_CLS} placeholder="Internal owner" value={form.internalOwner} onChange={e => set('internalOwner', e.target.value)} />
+        </div>
       </td>
-      <td className="px-2 py-1.5">
-        <input type="date" className={inputCls} value={start} onChange={e => setStart(e.target.value)} />
+      <td className="px-2 py-2">
+        <div className="grid grid-cols-[1fr_1fr_56px] gap-1.5">
+          <DateInput value={form.startDate} onChange={v => set('startDate', v)} />
+          <DateInput value={form.endDate} onChange={v => set('endDate', v)} />
+          <input className={INPUT_CLS} type="number" min="0" placeholder="Days" value={form.durationDays} onChange={e => set('durationDays', e.target.value)} />
+        </div>
       </td>
-      <td className="px-2 py-1.5">
-        <input type="date" className={inputCls} value={end} onChange={e => setEnd(e.target.value)} />
+      <td className="px-2 py-2">
+        <div className="grid grid-cols-[1fr_52px] gap-1.5">
+          <select className={INPUT_CLS} value={form.dependencyId} onChange={e => set('dependencyId', e.target.value)}>
+            <option value="">No dependency</option>
+            {allTasks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          <input className={INPUT_CLS} type="number" value={form.lagDays} onChange={e => set('lagDays', e.target.value)} title="Lag days" />
+        </div>
       </td>
-      <td className="px-2 py-1.5 text-xs text-gray-400 text-center">
-        {calcDuration(start, end) ?? '—'}
-      </td>
-      <td className="px-2 py-1.5 text-xs text-gray-400 text-center">0%</td>
-      <td className="px-2 py-1.5 text-xs text-gray-400">—</td>
-      <td className="px-2 py-1.5">
+      <td className="px-2 py-2 text-xs text-gray-300">-</td>
+      <td className="px-2 py-2 text-xs text-gray-400">Not started</td>
+      <td className="px-2 py-2">
         <div className="flex items-center gap-1">
-          <button onClick={handleSave} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Save (Enter)">
-            <Check size={13} />
+          <button onClick={save} className="inline-flex h-7 w-7 items-center justify-center rounded text-green-600 hover:bg-green-50" title="Save task">
+            <Check size={14} />
           </button>
-          <button onClick={onCancel} className="p-1 text-gray-400 hover:bg-gray-100 rounded" title="Cancel (Esc)">
-            <X size={13} />
+          <button onClick={onCancel} className={ICON_BTN_CLS} title="Cancel">
+            <X size={14} />
           </button>
         </div>
       </td>
@@ -171,356 +334,486 @@ function NewTaskRow({ phase, teamMembers, onSave, onCancel }) {
   )
 }
 
-// ── Schedule Table (main editing view) ─────────────────────────────────────────
+function PhaseHeader({ phaseName, items, collapsed, onToggle, onRename, onAddTask }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(phaseName)
+  const done = items.filter(t => getDisplayStatus(t) === 'complete').length
+  const delayed = items.filter(t => getDisplayStatus(t) === 'delayed').length
+  const pct = items.length ? Math.round((done / items.length) * 100) : 0
+
+  const commit = () => {
+    setEditing(false)
+    const next = draft.trim()
+    if (next && next !== phaseName) onRename(phaseName, next)
+    else setDraft(phaseName)
+  }
+
+  return (
+    <tr className="border-y border-gray-200 bg-gray-50">
+      <td className="px-3 py-2">
+        <button onClick={() => onToggle(phaseName)} className="text-gray-400 hover:text-gray-600">
+          {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+        </button>
+      </td>
+      <td colSpan={6} className="px-2 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {editing ? (
+            <input
+              autoFocus
+              className="rounded border border-ocean-300 bg-white px-2 py-1 text-xs font-semibold text-gray-800 focus:outline-none focus:ring-1 focus:ring-ocean-500"
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={e => {
+                if (e.key === 'Enter') commit()
+                if (e.key === 'Escape') {
+                  setDraft(phaseName)
+                  setEditing(false)
+                }
+              }}
+            />
+          ) : (
+            <button onClick={() => onToggle(phaseName)} className="text-xs font-bold uppercase tracking-wide text-gray-700">
+              {phaseName}
+            </button>
+          )}
+          <button onClick={() => setEditing(true)} className="text-gray-300 hover:text-gray-500" title="Rename phase">
+            <Pencil size={11} />
+          </button>
+          <span className="text-xs text-gray-400">{items.length} tasks</span>
+          <span className="text-xs text-green-600">{done} done</span>
+          {delayed > 0 && <span className="text-xs font-medium text-red-600">{delayed} delayed</span>}
+          <div className="h-1.5 w-24 overflow-hidden rounded-full bg-gray-200">
+            <div className="h-full rounded-full bg-green-500" style={{ width: `${pct}%` }} />
+          </div>
+          <span className="text-xs text-gray-400">{pct}%</span>
+        </div>
+      </td>
+      <td className="px-2 py-2 text-right">
+        <button
+          onClick={() => onAddTask(phaseName)}
+          className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-gray-500 hover:bg-white hover:text-forest-600"
+        >
+          <Plus size={11} />
+          Add task
+        </button>
+      </td>
+    </tr>
+  )
+}
+
 function ScheduleTable({ project, tasks, milestones }) {
   const { addScheduleTask, updateScheduleTask, deleteScheduleTask, renamePhase, teamMembers, updateMilestone } = useStore()
   const [collapsed, setCollapsed] = useState({})
-  const [addingPhase, setAddingPhase] = useState(null) // phase name where we're adding
-  const [editingPhase, setEditingPhase] = useState(null) // { old, draft }
-  const [confirmDelete, setConfirmDelete] = useState(null)
-  const [newPhaseName, setNewPhaseName] = useState('')
+  const [expandedTask, setExpandedTask] = useState(null)
+  const [addingPhase, setAddingPhase] = useState(null)
   const [addingNewPhase, setAddingNewPhase] = useState(false)
+  const [newPhaseName, setNewPhaseName] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [phaseFilter, setPhaseFilter] = useState('all')
 
-  // Group tasks by phase, ordered by sort_order
-  const phases = useMemo(() => {
-    const phaseMap = new Map()
-    const sorted = [...tasks].sort((a, b) => a.sortOrder - b.sortOrder)
-    sorted.forEach(t => {
-      const p = t.phase || '(No phase)'
-      if (!phaseMap.has(p)) phaseMap.set(p, [])
-      phaseMap.get(p).push(t)
-    })
-    // Milestones also need to show somewhere
-    return Array.from(phaseMap.entries()).map(([name, items]) => ({ name, items }))
+  const phaseOptions = useMemo(() => {
+    return [...new Set(tasks.map(t => t.phase || '(No phase)'))].sort((a, b) => a.localeCompare(b))
   }, [tasks])
 
-  const toggle = p => setCollapsed(c => ({ ...c, [p]: !c[p] }))
+  const filteredTasks = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return tasks.filter(task => {
+      const displayStatus = getDisplayStatus(task)
+      if (phaseFilter !== 'all' && (task.phase || '(No phase)') !== phaseFilter) return false
+      if (statusFilter !== 'all' && displayStatus !== statusFilter) return false
+      if (!q) return true
+      return [
+        task.name,
+        task.phase,
+        task.assignee,
+        task.internalOwner,
+        task.notes,
+      ].some(value => String(value || '').toLowerCase().includes(q))
+    })
+  }, [tasks, search, statusFilter, phaseFilter])
 
-  const handleUpdate = (id, field, value, task) => {
-    const data = { [field]: value }
-    // Smart duration calculation
-    if (field === 'startDate') {
-      if (task.durationDays) data.endDate = endFromStartDuration(value, task.durationDays)
-      else if (task.endDate) data.durationDays = calcDuration(value, task.endDate)
-    } else if (field === 'endDate') {
-      data.durationDays = calcDuration(task.startDate, value)
-    } else if (field === 'durationDays') {
-      const days = parseInt(value) || null
-      data.durationDays = days
-      if (task.startDate && days) data.endDate = endFromStartDuration(task.startDate, days)
-    } else if (field === 'progress') {
-      data.progress = Math.max(0, Math.min(100, parseInt(value) || 0))
-      if (data.progress === 100) data.status = 'complete'
-      else if (data.progress > 0 && task.status === 'not-started') data.status = 'in-progress'
-    }
-    updateScheduleTask(id, data)
+  const phases = useMemo(() => {
+    const map = new Map()
+    filteredTasks
+      .slice()
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name))
+      .forEach(task => {
+        const phase = task.phase || '(No phase)'
+        if (!map.has(phase)) map.set(phase, [])
+        map.get(phase).push(task)
+      })
+    return Array.from(map.entries()).map(([name, items]) => ({ name, items }))
+  }, [filteredTasks])
+
+  const stats = useMemo(() => {
+    const total = tasks.length
+    const complete = tasks.filter(t => getDisplayStatus(t) === 'complete').length
+    const delayed = tasks.filter(t => getDisplayStatus(t) === 'delayed').length
+    const blocked = tasks.filter(t => getDisplayStatus(t) === 'blocked').length
+    const pct = total ? Math.round((complete / total) * 100) : 0
+    return { total, complete, delayed, blocked, pct }
+  }, [tasks])
+
+  const projectMilestones = milestones.filter(m => m.projectId === project.id && m.date)
+
+  const togglePhase = phase => setCollapsed(current => ({ ...current, [phase]: !current[phase] }))
+
+  const handleRenamePhase = async (oldPhase, newPhase) => {
+    await renamePhase(project.id, oldPhase, newPhase)
   }
 
-  const handleAddTask = async (phaseData) => {
-    await addScheduleTask({ ...phaseData, projectId: project.id })
+  const handleAddTask = async data => {
+    await addScheduleTask({ ...data, projectId: project.id })
     setAddingPhase(null)
     setAddingNewPhase(false)
     setNewPhaseName('')
   }
 
-  const handleRenamePhase = async () => {
-    if (!editingPhase || !editingPhase.draft.trim()) { setEditingPhase(null); return }
-    await renamePhase(project.id, editingPhase.old, editingPhase.draft.trim())
-    setEditingPhase(null)
+  const handleUpdate = (task, patch) => {
+    const next = { ...patch }
+    if (patch.startDate !== undefined) {
+      if (task.durationDays) next.endDate = endFromDuration(patch.startDate, task.durationDays)
+      else if (task.endDate) next.durationDays = calcDuration(patch.startDate, task.endDate)
+    }
+    if (patch.endDate !== undefined) next.durationDays = calcDuration(task.startDate, patch.endDate)
+    if (patch.durationDays !== undefined) {
+      const duration = Number(patch.durationDays || 0)
+      next.durationDays = duration || null
+      if (task.startDate && duration) next.endDate = endFromDuration(task.startDate, duration)
+    }
+    if (patch.progress !== undefined) {
+      const progress = Math.max(0, Math.min(100, Number(patch.progress || 0)))
+      next.progress = progress
+      if (progress === 100) next.status = 'complete'
+      if (progress > 0 && task.status === 'not-started') next.status = 'in-progress'
+    }
+    if (patch.status === 'complete') next.progress = 100
+    if (patch.status === 'not-started') next.progress = 0
+    updateScheduleTask(task.id, next)
   }
 
-  const projectMs = milestones.filter(m => m.projectId === project.id && m.date)
+  const createNewPhase = () => {
+    const phase = newPhaseName.trim()
+    if (!phase) return
+    setAddingPhase(phase)
+    setAddingNewPhase(false)
+  }
 
-  if (tasks.length === 0 && !addingNewPhase) {
-    return (
-      <div className="text-center py-16 bg-white rounded-xl border border-gray-100">
-        <div className="text-4xl mb-3">📋</div>
-        <p className="text-sm font-medium text-gray-600 mb-1">No schedule yet</p>
-        <p className="text-xs text-gray-400 mb-5">Build your project programme — add phases and tasks with dates and assignments.</p>
-        <button
-          onClick={() => setAddingNewPhase(true)}
-          className="inline-flex items-center gap-2 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          <Plus size={14} />
-          Add first phase
-        </button>
-      </div>
-    )
+  if (tasks.length === 0 && !addingNewPhase && !addingPhase) {
+    return <EmptySchedule onAddPhase={() => setAddingNewPhase(true)} />
   }
 
   return (
-    <div>
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden mb-4">
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        {[
+          { label: 'Tasks', value: stats.total },
+          { label: 'Complete', value: stats.complete, color: 'text-green-700' },
+          { label: 'Delayed', value: stats.delayed, color: stats.delayed ? 'text-red-700' : 'text-gray-800' },
+          { label: 'Blocked', value: stats.blocked, color: stats.blocked ? 'text-red-800' : 'text-gray-800' },
+          { label: 'Done', value: `${stats.pct}%`, color: 'text-ocean-700' },
+        ].map(item => (
+          <div key={item.label} className="rounded-xl border border-gray-100 bg-white p-3">
+            <div className="text-xs text-gray-400">{item.label}</div>
+            <div className={`mt-1 text-xl font-bold ${item.color || 'text-gray-800'}`}>{item.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative">
+          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" />
+          <input
+            className="w-60 rounded-lg border border-gray-200 bg-white py-2 pl-8 pr-3 text-sm focus:border-ocean-500 focus:outline-none focus:ring-1 focus:ring-ocean-500"
+            placeholder="Search programme"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <select className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 focus:outline-none focus:ring-1 focus:ring-ocean-500" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <option value="all">All statuses</option>
+          {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+        <select className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 focus:outline-none focus:ring-1 focus:ring-ocean-500" value={phaseFilter} onChange={e => setPhaseFilter(e.target.value)}>
+          <option value="all">All phases</option>
+          {phaseOptions.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setCollapsed(Object.fromEntries(phases.map(p => [p.name, true])))}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-500 hover:bg-gray-50"
+          >
+            Collapse all
+          </button>
+          <button
+            onClick={() => setCollapsed({})}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-500 hover:bg-gray-50"
+          >
+            Expand all
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" style={{ minWidth: 700 }}>
+          <table className="w-full text-sm" style={{ minWidth: 1180 }}>
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-100 text-xs text-gray-400 uppercase tracking-wide">
-                <th className="w-8 px-3 py-2.5" />
-                <th className="text-left px-2 py-2.5 font-medium">Task name</th>
-                <th className="text-left px-2 py-2.5 font-medium w-28">Assignee</th>
-                <th className="text-left px-2 py-2.5 font-medium w-24">Start</th>
-                <th className="text-left px-2 py-2.5 font-medium w-24">Finish</th>
-                <th className="text-center px-2 py-2.5 font-medium w-14">Days</th>
-                <th className="text-center px-2 py-2.5 font-medium w-14">%</th>
-                <th className="text-left px-2 py-2.5 font-medium w-28">Status</th>
-                <th className="w-8 px-2 py-2.5" />
+              <tr className="border-b border-gray-100 bg-gray-50 text-left text-xs uppercase text-gray-400">
+                <th className="w-9 px-3 py-2.5 font-medium" />
+                <th className="w-[260px] px-2 py-2.5 font-medium">Task</th>
+                <th className="w-[190px] px-2 py-2.5 font-medium">Responsible</th>
+                <th className="w-[250px] px-2 py-2.5 font-medium">Planned</th>
+                <th className="w-[210px] px-2 py-2.5 font-medium">Dependency</th>
+                <th className="w-[180px] px-2 py-2.5 font-medium">Actual</th>
+                <th className="w-[170px] px-2 py-2.5 font-medium">Status</th>
+                <th className="w-12 px-2 py-2.5 font-medium" />
               </tr>
             </thead>
             <tbody>
               {phases.map(({ name: phaseName, items }) => (
                 <Fragment key={phaseName}>
-                  {/* Phase header */}
-                  <tr className="bg-gray-50 border-t border-b border-gray-200 select-none">
-                    <td className="px-3 py-2 cursor-pointer" onClick={() => toggle(phaseName)}>
-                      {collapsed[phaseName]
-                        ? <ChevronRight size={13} className="text-gray-400" />
-                        : <ChevronDown size={13} className="text-gray-400" />}
-                    </td>
-                    <td colSpan={7} className="px-2 py-1.5">
-                      <div className="flex items-center gap-2">
-                        {editingPhase?.old === phaseName ? (
-                          <div className="flex items-center gap-1">
-                            <input
-                              autoFocus
-                              className="text-xs font-semibold border border-ocean-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ocean-500"
-                              value={editingPhase.draft}
-                              onChange={e => setEditingPhase(ep => ({ ...ep, draft: e.target.value }))}
-                              onKeyDown={e => { if (e.key === 'Enter') handleRenamePhase(); if (e.key === 'Escape') setEditingPhase(null) }}
-                              onBlur={handleRenamePhase}
-                            />
-                          </div>
-                        ) : (
-                          <>
-                            <span
-                              className="text-xs font-semibold text-gray-700 cursor-pointer hover:text-gray-900"
-                              onClick={() => toggle(phaseName)}
-                            >
-                              {phaseName}
-                            </span>
-                            <button
-                              onClick={() => setEditingPhase({ old: phaseName, draft: phaseName })}
-                              className="text-gray-300 hover:text-gray-500 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                              title="Rename phase"
-                            >
-                              <Pencil size={10} />
-                            </button>
-                            <span className="text-xs text-gray-400">
-                              {items.length} task{items.length !== 1 ? 's' : ''}
-                              {items.filter(t => t.status === 'complete').length > 0 && ` · ${items.filter(t => t.status === 'complete').length} done`}
-                            </span>
-                          </>
-                        )}
-                        {/* Quick edit phase button (always visible on hover) */}
-                        {editingPhase?.old !== phaseName && (
-                          <button
-                            onClick={() => setEditingPhase({ old: phaseName, draft: phaseName })}
-                            className="ml-1 text-gray-300 hover:text-gray-500 p-0.5 rounded"
-                            title="Rename phase"
-                          >
-                            <Pencil size={10} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-2 py-1.5 text-right">
-                      <button
-                        onClick={() => setAddingPhase(phaseName)}
-                        className="inline-flex items-center gap-1 text-[10px] text-gray-400 hover:text-forest-600 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
-                      >
-                        <Plus size={10} /> Add task
-                      </button>
-                    </td>
-                  </tr>
+                  <PhaseHeader
+                    phaseName={phaseName}
+                    items={items}
+                    collapsed={collapsed[phaseName]}
+                    onToggle={togglePhase}
+                    onRename={handleRenamePhase}
+                    onAddTask={setAddingPhase}
+                  />
 
-                  {/* Task rows */}
-                  {!collapsed[phaseName] && (
-                    <>
-                      {items.map(task => {
-                        const isOverdue = task.endDate && task.status !== 'complete' && new Date(task.endDate) < new Date()
-                        const st = STATUS_MAP[task.status] || STATUSES[0]
-                        return (
-                          <tr key={task.id} className="border-b border-gray-50 hover:bg-gray-50/60 group">
-                            <td className="px-3 py-1.5 text-gray-300 group-hover:text-gray-400">
-                              <div className="flex items-center justify-center h-full">
-                                <span className="text-xs">⠿</span>
-                              </div>
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <StatusDot status={task.status} />
-                                <Cell
+                  {!collapsed[phaseName] && items.map(task => {
+                    const displayStatus = getDisplayStatus(task)
+                    const dependency = tasks.find(t => t.id === task.dependencyId)
+                    const isExpanded = expandedTask === task.id
+                    const duration = task.durationDays ?? calcDuration(task.startDate, task.endDate)
+                    return (
+                      <Fragment key={task.id}>
+                        <tr className="group border-b border-gray-50 hover:bg-gray-50/70">
+                          <td className="px-3 py-2 align-top">
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => setExpandedTask(isExpanded ? null : task.id)} className="text-gray-300 hover:text-gray-600" title="Task details">
+                                {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                              </button>
+                              <GripVertical size={12} className="text-gray-200" />
+                            </div>
+                          </td>
+                          <td className="px-2 py-2 align-top">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                {task.isMilestone ? <Diamond size={12} className="shrink-0 fill-amber-400 text-amber-500" /> : <StatusDot status={displayStatus} />}
+                                <BufferedInput
                                   value={task.name}
-                                  onChange={v => updateScheduleTask(task.id, { name: v })}
+                                  onCommit={value => updateScheduleTask(task.id, { name: value })}
                                   placeholder="Task name"
-                                  className={`flex-1 font-medium ${task.status === 'complete' ? 'line-through text-gray-400' : 'text-gray-800'}`}
+                                  className={`font-medium ${task.status === 'complete' ? 'text-gray-400 line-through' : 'text-gray-800'}`}
                                 />
                               </div>
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <Cell
-                                value={task.assignee}
-                                onChange={v => updateScheduleTask(task.id, { assignee: v })}
-                                type="select"
-                                options={[{ value: '', label: '— Unassigned' }, ...useStore.getState().teamMembers.map(m => ({ value: m.name, label: m.name }))]}
-                                placeholder="—"
-                                className="text-gray-600"
+                              <div className="flex items-center gap-3 text-xs text-gray-400">
+                                <label className="inline-flex items-center gap-1.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!task.isMilestone}
+                                    onChange={e => updateScheduleTask(task.id, { isMilestone: e.target.checked })}
+                                    className="h-3.5 w-3.5 rounded border-gray-300 text-ocean-600 focus:ring-ocean-500"
+                                  />
+                                  Milestone
+                                </label>
+                                {task.notes && <span>Has notes</span>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-2 py-2 align-top">
+                            <div className="space-y-2">
+                              <select className={INPUT_CLS} value={task.assignee || ''} onChange={e => updateScheduleTask(task.id, { assignee: e.target.value })}>
+                                <option value="">Contractor / assignee</option>
+                                {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                              </select>
+                              <BufferedInput
+                                value={task.internalOwner || ''}
+                                onCommit={value => updateScheduleTask(task.id, { internalOwner: value })}
+                                placeholder="Internal owner"
                               />
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <Cell
-                                value={task.startDate ? fmtDisplay(task.startDate) : ''}
-                                onChange={v => {
-                                  // Convert display back to date if needed — use date input
-                                }}
-                                placeholder="—"
-                              />
-                              {/* Hidden date input trick: overlay a date input */}
-                              <div className="relative -mt-5 h-5 overflow-hidden opacity-0 hover:opacity-100 transition-opacity">
-                                <input
-                                  type="date"
-                                  className="absolute inset-0 w-full cursor-pointer text-xs"
-                                  value={task.startDate ? fmtInput(task.startDate) : ''}
-                                  onChange={e => handleUpdate(task.id, 'startDate', e.target.value, task)}
-                                />
-                              </div>
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <div className="relative">
-                                <div className={`text-xs px-1.5 py-0.5 min-h-[22px] ${isOverdue ? 'text-red-500 font-medium' : 'text-gray-600'}`}>
-                                  {task.endDate ? fmtDisplay(task.endDate) : <span className="text-gray-300">—</span>}
-                                </div>
-                                <input
-                                  type="date"
-                                  className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                                  value={task.endDate ? fmtInput(task.endDate) : ''}
-                                  onChange={e => handleUpdate(task.id, 'endDate', e.target.value, task)}
-                                  title="Click to set finish date"
-                                />
-                              </div>
-                            </td>
-                            <td className="px-2 py-1.5 text-center">
-                              <Cell
-                                value={task.durationDays != null ? String(task.durationDays) : calcDuration(task.startDate, task.endDate) != null ? String(calcDuration(task.startDate, task.endDate)) : ''}
-                                onChange={v => handleUpdate(task.id, 'durationDays', v, task)}
+                            </div>
+                          </td>
+                          <td className="px-2 py-2 align-top">
+                            <div className="grid grid-cols-[1fr_1fr_56px] gap-1.5">
+                              <DateInput value={task.startDate} onChange={value => handleUpdate(task, { startDate: value })} />
+                              <DateInput value={task.endDate} onChange={value => handleUpdate(task, { endDate: value })} />
+                              <BufferedInput
                                 type="number"
-                                placeholder="—"
-                                className="text-center text-gray-600"
-                                align="right"
+                                min="0"
+                                value={duration ?? ''}
+                                onCommit={value => handleUpdate(task, { durationDays: value })}
+                                placeholder="Days"
                               />
-                            </td>
-                            <td className="px-2 py-1.5 text-center">
-                              <Cell
-                                value={task.progress > 0 ? `${task.progress}%` : ''}
-                                onChange={v => handleUpdate(task.id, 'progress', v.replace('%', ''), task)}
+                            </div>
+                            <div className="mt-1 flex items-center gap-2 text-[11px] text-gray-400">
+                              <Clock3 size={11} />
+                              <span>{task.startDate || task.endDate ? `${fmtShort(task.startDate)} to ${fmtShort(task.endDate)}` : 'No planned dates'}</span>
+                            </div>
+                          </td>
+                          <td className="px-2 py-2 align-top">
+                            <div className="grid grid-cols-[1fr_52px] gap-1.5">
+                              <select className={INPUT_CLS} value={task.dependencyId || ''} onChange={e => updateScheduleTask(task.id, { dependencyId: e.target.value })}>
+                                <option value="">No dependency</option>
+                                {tasks.filter(t => t.id !== task.id).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                              </select>
+                              <BufferedInput
                                 type="number"
-                                placeholder="—"
-                                className="text-center text-gray-600"
-                                align="right"
+                                value={task.lagDays ?? 0}
+                                onCommit={value => updateScheduleTask(task.id, { lagDays: Number(value || 0) })}
+                                placeholder="Lag"
                               />
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <Cell
-                                value={st.label}
-                                onChange={v => updateScheduleTask(task.id, { status: v })}
-                                type="select"
-                                options={STATUSES.map(s => ({ value: s.value, label: s.label }))}
-                                className={st.text}
-                              />
-                            </td>
-                            <td className="px-2 py-1.5">
-                              {confirmDelete === task.id ? (
-                                <div className="flex items-center gap-0.5">
-                                  <button onClick={() => { deleteScheduleTask(task.id); setConfirmDelete(null) }} className="text-[10px] text-red-600 px-1 py-0.5 rounded hover:bg-red-50 font-medium">Del</button>
-                                  <button onClick={() => setConfirmDelete(null)} className="text-[10px] text-gray-400 px-1 py-0.5">✕</button>
+                            </div>
+                            <div className="mt-1 truncate text-[11px] text-gray-400" title={dependency?.name || ''}>
+                              {dependency ? `After: ${dependency.name}` : 'Lag in days'}
+                            </div>
+                          </td>
+                          <td className="px-2 py-2 align-top">
+                            <div className="grid grid-cols-2 gap-1.5">
+                              <DateInput value={task.actualStart} onChange={value => updateScheduleTask(task.id, { actualStart: value })} />
+                              <DateInput value={task.actualEnd} onChange={value => updateScheduleTask(task.id, { actualEnd: value })} />
+                            </div>
+                            <div className="mt-1 text-[11px] text-gray-400">
+                              {task.actualEnd ? `Finished ${relativeDays(task.actualEnd)}` : 'Actual dates'}
+                            </div>
+                          </td>
+                          <td className="px-2 py-2 align-top">
+                            <div className="space-y-2">
+                              <select className={INPUT_CLS} value={task.status || 'not-started'} onChange={e => handleUpdate(task, { status: e.target.value })}>
+                                {EDITABLE_STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                              </select>
+                              <div className="grid grid-cols-[1fr_56px] items-center gap-2">
+                                <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                                  <div className={`${(STATUS_MAP[displayStatus] || STATUS_MAP['not-started']).bar} h-full rounded-full`} style={{ width: `${progressFor(task)}%` }} />
                                 </div>
-                              ) : (
-                                <button
-                                  onClick={() => setConfirmDelete(task.id)}
-                                  className="p-1 text-gray-200 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all rounded hover:bg-red-50"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        )
-                      })}
-
-                      {/* Add task inline row */}
-                      {addingPhase === phaseName && (
-                        <NewTaskRow
-                          phase={phaseName}
-                          teamMembers={useStore.getState().teamMembers}
-                          onSave={handleAddTask}
-                          onCancel={() => setAddingPhase(null)}
-                        />
-                      )}
-
-                      {/* Add task link (if not in add mode) */}
-                      {addingPhase !== phaseName && (
-                        <tr className="border-b border-gray-50">
-                          <td colSpan={9} className="px-10 py-1.5">
-                            <button
-                              onClick={() => setAddingPhase(phaseName)}
-                              className="text-xs text-gray-400 hover:text-forest-600 flex items-center gap-1 transition-colors"
-                            >
-                              <Plus size={11} /> Add task
-                            </button>
+                                <BufferedInput
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  value={progressFor(task)}
+                                  onCommit={value => handleUpdate(task, { progress: value })}
+                                  className="text-right"
+                                />
+                              </div>
+                              <StatusLabel task={task} />
+                            </div>
+                          </td>
+                          <td className="px-2 py-2 align-top">
+                            {confirmDelete === task.id ? (
+                              <div className="flex flex-col items-end gap-1">
+                                <button onClick={() => { deleteScheduleTask(task.id); setConfirmDelete(null) }} className="rounded px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">Delete</button>
+                                <button onClick={() => setConfirmDelete(null)} className="rounded px-2 py-1 text-xs text-gray-400 hover:bg-gray-100">Cancel</button>
+                              </div>
+                            ) : (
+                              <button onClick={() => setConfirmDelete(task.id)} className="inline-flex h-7 w-7 items-center justify-center rounded text-gray-300 hover:bg-red-50 hover:text-red-500" title="Delete task">
+                                <Trash2 size={13} />
+                              </button>
+                            )}
                           </td>
                         </tr>
-                      )}
-                    </>
+
+                        {isExpanded && (
+                          <tr className="border-b border-gray-50 bg-gray-50/40">
+                            <td />
+                            <td colSpan={7} className="px-2 py-3">
+                              <div className="grid gap-3 md:grid-cols-[1fr_260px]">
+                                <div>
+                                  <div className="mb-1 text-xs font-medium text-gray-500">Notes</div>
+                                  <BufferedTextarea
+                                    value={task.notes || ''}
+                                    onCommit={value => updateScheduleTask(task.id, { notes: value })}
+                                    placeholder="RFIs, access constraints, procurement notes, inspection comments..."
+                                  />
+                                </div>
+                                <div className="rounded-lg border border-gray-100 bg-white p-3 text-xs text-gray-500">
+                                  <div className="mb-2 font-semibold text-gray-700">Task snapshot</div>
+                                  <div className="space-y-1">
+                                    <div>Phase: <span className="text-gray-800">{task.phase || '-'}</span></div>
+                                    <div>Planned finish: <span className="text-gray-800">{fmtFull(task.endDate)}</span></div>
+                                    <div>Dependency: <span className="text-gray-800">{dependency?.name || '-'}</span></div>
+                                    <div>Status: <span className={(STATUS_MAP[displayStatus] || STATUS_MAP['not-started']).text}>{(STATUS_MAP[displayStatus] || STATUS_MAP['not-started']).label}</span></div>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })}
+
+                  {!collapsed[phaseName] && addingPhase === phaseName && (
+                    <NewTaskRow
+                      phase={phaseName}
+                      allTasks={tasks}
+                      teamMembers={teamMembers}
+                      onSave={handleAddTask}
+                      onCancel={() => setAddingPhase(null)}
+                    />
+                  )}
+
+                  {!collapsed[phaseName] && addingPhase !== phaseName && (
+                    <tr className="border-b border-gray-50">
+                      <td />
+                      <td colSpan={7} className="px-2 py-2">
+                        <button onClick={() => setAddingPhase(phaseName)} className="inline-flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-forest-600">
+                          <Plus size={12} />
+                          Add task
+                        </button>
+                      </td>
+                    </tr>
                   )}
                 </Fragment>
               ))}
 
-              {/* New phase add row */}
               {addingNewPhase && (
-                <tr className="bg-forest-50/40 border-t-2 border-forest-200">
-                  <td className="px-3 py-2 w-8" />
-                  <td colSpan={8} className="px-2 py-2">
-                    <div className="flex items-center gap-2">
+                <tr className="border-t-2 border-forest-200 bg-forest-50/40">
+                  <td />
+                  <td colSpan={7} className="px-2 py-3">
+                    <div className="flex flex-wrap items-center gap-2">
                       <input
                         autoFocus
-                        className="text-xs font-semibold border border-forest-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-forest-600 w-48"
-                        placeholder="Phase name (e.g. Foundations)"
+                        className="w-64 rounded border border-forest-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-forest-600"
+                        placeholder="Phase name"
                         value={newPhaseName}
                         onChange={e => setNewPhaseName(e.target.value)}
                         onKeyDown={e => {
-                          if (e.key === 'Enter' && newPhaseName.trim()) {
-                            setAddingPhase(newPhaseName.trim())
+                          if (e.key === 'Enter') createNewPhase()
+                          if (e.key === 'Escape') {
                             setAddingNewPhase(false)
+                            setNewPhaseName('')
                           }
-                          if (e.key === 'Escape') { setAddingNewPhase(false); setNewPhaseName('') }
                         }}
                       />
-                      <button
-                        disabled={!newPhaseName.trim()}
-                        onClick={() => { setAddingPhase(newPhaseName.trim()); setAddingNewPhase(false) }}
-                        className="text-xs bg-forest-600 text-white px-3 py-1 rounded-lg hover:bg-forest-700 disabled:opacity-40 transition-colors"
-                      >
-                        Create
+                      <button disabled={!newPhaseName.trim()} onClick={createNewPhase} className="rounded-lg bg-forest-600 px-3 py-2 text-sm font-medium text-white hover:bg-forest-700 disabled:opacity-40">
+                        Create phase
                       </button>
-                      <button onClick={() => { setAddingNewPhase(false); setNewPhaseName('') }} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                      <button onClick={() => { setAddingNewPhase(false); setNewPhaseName('') }} className="px-2 py-2 text-sm text-gray-500 hover:text-gray-700">
+                        Cancel
+                      </button>
                     </div>
                   </td>
                 </tr>
               )}
 
-              {/* Handle addingPhase for new phase (not yet in phases list) */}
-              {addingPhase && !phases.find(p => p.name === addingPhase) && (
-                <Fragment key={`new-${addingPhase}`}>
-                  <tr className="bg-gray-50 border-t border-b border-gray-200">
-                    <td className="px-3 py-2 w-8" />
-                    <td colSpan={8} className="px-2 py-1.5">
-                      <span className="text-xs font-semibold text-gray-700">{addingPhase}</span>
-                      <span className="text-xs text-gray-400 ml-2">New phase</span>
-                    </td>
-                  </tr>
+              {addingPhase && !phases.some(p => p.name === addingPhase) && (
+                <Fragment>
+                  <PhaseHeader
+                    phaseName={addingPhase}
+                    items={[]}
+                    collapsed={false}
+                    onToggle={() => {}}
+                    onRename={() => {}}
+                    onAddTask={setAddingPhase}
+                  />
                   <NewTaskRow
                     phase={addingPhase}
-                    teamMembers={useStore.getState().teamMembers}
+                    allTasks={tasks}
+                    teamMembers={teamMembers}
                     onSave={handleAddTask}
                     onCancel={() => { setAddingPhase(null); setNewPhaseName('') }}
                   />
@@ -531,220 +824,228 @@ function ScheduleTable({ project, tasks, milestones }) {
         </div>
       </div>
 
-      {/* Milestones in table */}
-      {projectMs.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden mb-4">
-          <div className="px-4 py-2.5 border-b border-gray-100 bg-amber-50/50">
-            <span className="text-xs font-semibold text-amber-700">◆ Milestones</span>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={() => setAddingNewPhase(true)}
+          className="inline-flex items-center gap-2 rounded-lg border border-dashed border-gray-300 px-4 py-2 text-sm font-medium text-gray-500 hover:border-forest-500 hover:text-forest-600"
+        >
+          <Plus size={14} />
+          Add phase
+        </button>
+        {projectMilestones.length > 0 && (
+          <div className="text-xs text-gray-400">
+            {projectMilestones.length} dated project milestone{projectMilestones.length !== 1 ? 's' : ''} also appear on the Gantt.
           </div>
-          <table className="w-full text-sm">
-            <tbody>
-              {projectMs.map(ms => {
-                const stage = ms.stageId ? STAGE_MAP[ms.stageId] : null
-                const isPast = !ms.complete && new Date(ms.date) < new Date()
-                return (
-                  <tr key={ms.id} className="border-b border-gray-50 hover:bg-amber-50/20">
-                    <td className="px-4 py-2.5 w-8">
-                      <span className={`text-sm ${ms.complete ? 'text-green-500' : isPast ? 'text-red-400' : 'text-amber-500'}`}>◆</span>
-                    </td>
-                    <td className="px-2 py-2.5">
-                      <span className={`text-sm ${ms.complete ? 'line-through text-gray-400' : 'text-gray-800'}`}>{ms.label}</span>
-                      {stage && <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full ${stage.light} ${stage.text}`}>{stage.short}</span>}
-                    </td>
-                    <td className="px-2 py-2.5 text-xs text-gray-400" colSpan={3}>
-                      {fmtDisplay(ms.date)}
-                      {!ms.complete && ms.date && <span className={`ml-2 ${isPast ? 'text-red-500' : 'text-gray-400'}`}>{relativeDays(ms.date)}</span>}
-                    </td>
-                    <td colSpan={3} />
-                    <td className="px-2 py-2.5">
-                      <button
-                        onClick={() => updateMilestone(ms.id, { complete: !ms.complete })}
-                        className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors ${ms.complete ? 'bg-green-100 border-green-200 text-green-700' : 'border-gray-200 text-gray-400 hover:border-green-300 hover:text-green-600'}`}
-                      >
-                        {ms.complete ? '✓ Done' : 'Done?'}
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Add phase button */}
-      <button
-        onClick={() => setAddingNewPhase(true)}
-        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-forest-600 border border-dashed border-gray-300 hover:border-forest-400 px-4 py-2 rounded-lg transition-colors"
-      >
-        <Plus size={14} /> Add phase
-      </button>
+        )}
+      </div>
     </div>
   )
 }
 
-// ── Gantt View ─────────────────────────────────────────────────────────────────
-const GANTT_LEFT = 200
-const ROW_H = 32
+const GANTT_LEFT = 240
+const ROW_H = 34
 
 function GanttView({ project, tasks, milestones }) {
   const [zoom, setZoom] = useState('weeks')
-  const DAY_PX = zoom === 'weeks' ? 22 : 7
+  const dayPx = zoom === 'days' ? 22 : zoom === 'weeks' ? 9 : 4
+  const datedTasks = tasks.filter(t => t.startDate || t.endDate)
+  const milestoneRows = milestones.filter(m => m.date)
   const today = sod(new Date())
 
   const allDates = [
-    project.startDate && sod(new Date(project.startDate)),
-    project.targetCompletion && sod(new Date(project.targetCompletion)),
-    ...tasks.filter(t => t.startDate).map(t => sod(new Date(t.startDate))),
-    ...tasks.filter(t => t.endDate).map(t => sod(new Date(t.endDate))),
-    ...milestones.filter(m => m.date).map(m => sod(new Date(m.date))),
+    project.startDate,
+    project.targetCompletion,
+    ...datedTasks.flatMap(t => [t.startDate, t.endDate]),
+    ...milestoneRows.map(m => m.date),
     today,
-  ].filter(Boolean)
+  ].map(parseDate).filter(Boolean)
 
-  const raw = {
-    min: new Date(Math.min(...allDates.map(d => d.getTime()))),
-    max: new Date(Math.max(...allDates.map(d => d.getTime()))),
-  }
-
-  const spanStart = new Date(raw.min.getFullYear(), raw.min.getMonth(), 1)
-  const spanEnd   = new Date(raw.max.getFullYear(), raw.max.getMonth() + 2, 0)
-  const totalW    = (diffDays(spanStart, spanEnd) + 1) * DAY_PX
-
-  const xFor = d => Math.max(0, diffDays(spanStart, sod(d)) * DAY_PX)
-
-  const monthSegs = useMemo(() => {
-    const segs = []; let cur = new Date(spanStart.getFullYear(), spanStart.getMonth(), 1)
-    while (cur <= spanEnd) {
-      const end = new Date(cur.getFullYear(), cur.getMonth() + 1, 0)
-      segs.push({ key: `${cur.getFullYear()}-${cur.getMonth()}`, label: cur.toLocaleDateString('en-NZ', { month: 'short', year: '2-digit' }), x: xFor(cur), w: (diffDays(cur, end) + 1) * DAY_PX })
-      cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1)
+  const timeline = useMemo(() => {
+    if (allDates.length === 0) {
+      const start = new Date(today.getFullYear(), today.getMonth(), 1)
+      const end = new Date(today.getFullYear(), today.getMonth() + 2, 0)
+      return { start, end }
     }
-    return segs
+    const min = new Date(Math.min(...allDates.map(d => d.getTime())))
+    const max = new Date(Math.max(...allDates.map(d => d.getTime())))
+    return {
+      start: new Date(min.getFullYear(), min.getMonth(), 1),
+      end: new Date(max.getFullYear(), max.getMonth() + 2, 0),
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spanStart.getTime(), spanEnd.getTime(), DAY_PX])
+  }, [tasks, milestones, project.startDate, project.targetCompletion])
 
-  const weekTicks = useMemo(() => {
-    if (zoom !== 'weeks') return []
-    const ticks = []; let d = new Date(spanStart)
-    while (d.getDay() !== 1) d = addDays(d, 1)
-    while (d <= spanEnd) { ticks.push(xFor(d)); d = addDays(d, 7) }
-    return ticks
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spanStart.getTime(), spanEnd.getTime(), zoom, DAY_PX])
-
+  const totalDays = Math.max(1, diffDays(timeline.start, timeline.end) + 1)
+  const totalW = totalDays * dayPx
+  const xFor = value => Math.max(0, (diffDays(timeline.start, value) || 0) * dayPx)
   const todayX = xFor(today)
   const todayInView = todayX >= 0 && todayX <= totalW
 
+  const monthSegments = useMemo(() => {
+    const segments = []
+    let cursor = new Date(timeline.start.getFullYear(), timeline.start.getMonth(), 1)
+    while (cursor <= timeline.end) {
+      const end = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0)
+      segments.push({
+        key: `${cursor.getFullYear()}-${cursor.getMonth()}`,
+        label: cursor.toLocaleDateString('en-NZ', { month: 'short', year: '2-digit' }),
+        x: xFor(cursor),
+        w: (diffDays(cursor, end) + 1) * dayPx,
+      })
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+    }
+    return segments
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeline.start.getTime(), timeline.end.getTime(), dayPx])
+
+  const weekTicks = useMemo(() => {
+    if (zoom === 'months') return []
+    const ticks = []
+    let cursor = new Date(timeline.start)
+    while (cursor.getDay() !== 1) cursor = addDays(cursor, 1)
+    while (cursor <= timeline.end) {
+      ticks.push(xFor(cursor))
+      cursor = addDays(cursor, 7)
+    }
+    return ticks
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeline.start.getTime(), timeline.end.getTime(), zoom, dayPx])
+
   const phases = useMemo(() => {
     const map = new Map()
-    const sorted = [...tasks].sort((a, b) => a.sortOrder - b.sortOrder)
-    sorted.forEach(t => {
-      const p = t.phase || '(No phase)'
-      if (!map.has(p)) map.set(p, [])
-      map.get(p).push(t)
-    })
+    datedTasks
+      .slice()
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name))
+      .forEach(task => {
+        const phase = task.phase || '(No phase)'
+        if (!map.has(phase)) map.set(phase, [])
+        map.get(phase).push(task)
+      })
     return Array.from(map.entries())
-  }, [tasks])
+  }, [datedTasks])
 
-  const msWithDate = milestones.filter(m => m.date)
-
-  if (tasks.length === 0) {
-    return <div className="text-center py-12 text-sm text-gray-400">Add tasks in the Table view to see the Gantt.</div>
+  if (datedTasks.length === 0 && milestoneRows.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-gray-200 bg-white px-6 py-16 text-center text-sm text-gray-400">
+        Add planned dates in the Table view to see the Gantt.
+      </div>
+    )
   }
 
   const GridLines = () => (
     <>
-      {weekTicks.map((x, i) => <div key={i} style={{ position: 'absolute', left: x, top: 0, bottom: 0, width: 1 }} className="bg-gray-100" />)}
-      {monthSegs.map(s => <div key={s.key} style={{ position: 'absolute', left: s.x, top: 0, bottom: 0, width: 1 }} className="bg-gray-200/70" />)}
-      {todayInView && <div style={{ position: 'absolute', left: todayX, top: 0, bottom: 0, width: 2 }} className="bg-ocean-500/30" />}
+      {weekTicks.map((x, i) => <div key={`w-${i}`} className="absolute top-0 h-full border-l border-gray-100" style={{ left: x }} />)}
+      {monthSegments.map(s => <div key={s.key} className="absolute top-0 h-full border-l border-gray-200/80" style={{ left: s.x }} />)}
+      {todayInView && <div className="absolute top-0 z-10 h-full border-l-2 border-ocean-500/50" style={{ left: todayX }} />}
     </>
   )
 
-  const statusBarColor = (status, progress) => {
-    if (status === 'complete') return 'bg-green-400'
-    if (status === 'blocked') return 'bg-red-400'
-    if (status === 'on-hold') return 'bg-amber-300'
-    if (progress > 0) return 'bg-ocean-400'
-    return 'bg-gray-300'
+  const renderTaskBar = task => {
+    const displayStatus = getDisplayStatus(task)
+    const cfg = STATUS_MAP[displayStatus] || STATUS_MAP['not-started']
+    const start = parseDate(task.startDate || task.endDate)
+    const end = parseDate(task.endDate || task.startDate)
+    if (!start || !end) return null
+    const x = xFor(start)
+    const w = Math.max(task.isMilestone ? 0 : dayPx * 2, (diffDays(start, end) + 1) * dayPx)
+
+    if (task.isMilestone) {
+      return (
+        <div
+          className={`${cfg.bar} absolute top-1/2 h-3.5 w-3.5 rounded-sm`}
+          style={{ left: xFor(end), transform: 'translate(-50%, -50%) rotate(45deg)' }}
+          title={`${task.name}: ${fmtFull(end)}`}
+        />
+      )
+    }
+
+    return (
+      <div
+        className={`${cfg.bar} absolute top-1/2 overflow-hidden rounded opacity-85 hover:opacity-100`}
+        style={{ left: x, width: w, height: 16, transform: 'translateY(-50%)' }}
+        title={`${task.name}\n${fmtFull(start)} to ${fmtFull(end)}\n${cfg.label}`}
+      >
+        {progressFor(task) > 0 && progressFor(task) < 100 && (
+          <div className="h-full bg-white/30" style={{ width: `${progressFor(task)}%` }} />
+        )}
+      </div>
+    )
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-4 text-xs text-gray-400 flex-wrap">
-          {[['bg-gray-300','Not started'],['bg-ocean-400','In progress'],['bg-green-400','Complete'],['bg-red-400','Blocked'],].map(([bg, label]) => (
-            <span key={label} className="flex items-center gap-1.5">
-              <span className={`inline-block w-6 h-2 rounded ${bg}`} /> {label}
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+          {[
+            ['bg-gray-300', 'Not started'],
+            ['bg-ocean-500', 'In progress'],
+            ['bg-green-500', 'Complete'],
+            ['bg-red-500', 'Delayed'],
+            ['bg-amber-400', 'On hold'],
+          ].map(([bg, label]) => (
+            <span key={label} className="inline-flex items-center gap-1.5">
+              <span className={`h-2.5 w-5 rounded ${bg}`} />
+              {label}
             </span>
           ))}
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-3 rotate-45 rounded-sm bg-amber-400" />
+            Milestone
+          </span>
         </div>
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-          {[['weeks','Weeks'],['months','Months']].map(([z, l]) => (
-            <button key={z} onClick={() => setZoom(z)} className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${zoom === z ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>{l}</button>
+        <div className="flex items-center gap-1 rounded-lg bg-gray-100 p-1">
+          {[
+            ['days', 'Days'],
+            ['weeks', 'Weeks'],
+            ['months', 'Months'],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setZoom(key)}
+              className={`rounded-md px-3 py-1 text-xs font-medium ${zoom === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              {label}
+            </button>
           ))}
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
         <div className="overflow-x-auto">
           <div style={{ minWidth: GANTT_LEFT + totalW, width: GANTT_LEFT + totalW }}>
-
-            {/* Header */}
-            <div className="flex border-b border-gray-200" style={{ height: 36 }}>
-              <div style={{ width: GANTT_LEFT, minWidth: GANTT_LEFT }} className="shrink-0 border-r border-gray-100 flex items-center px-4 bg-gray-50 sticky left-0 z-20">
-                <span className="text-xs font-medium text-gray-400">Task</span>
+            <div className="flex border-b border-gray-200" style={{ height: 38 }}>
+              <div className="sticky left-0 z-20 flex shrink-0 items-center border-r border-gray-100 bg-gray-50 px-4" style={{ width: GANTT_LEFT }}>
+                <span className="text-xs font-medium text-gray-500">Task</span>
               </div>
-              <div style={{ width: totalW, position: 'relative', flexShrink: 0 }}>
-                {monthSegs.map(s => (
-                  <div key={s.key} style={{ position: 'absolute', left: s.x, width: s.w, top: 0, bottom: 0 }} className="flex items-center border-r border-gray-200 px-2 bg-gray-50">
-                    <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">{s.label}</span>
+              <div className="relative shrink-0 bg-gray-50" style={{ width: totalW }}>
+                {monthSegments.map(segment => (
+                  <div key={segment.key} className="absolute top-0 flex h-full items-center border-r border-gray-200 px-2" style={{ left: segment.x, width: segment.w }}>
+                    <span className="whitespace-nowrap text-xs font-semibold text-gray-500">{segment.label}</span>
                   </div>
                 ))}
-                {todayInView && (
-                  <>
-                    <div style={{ position: 'absolute', left: todayX, top: 0, bottom: 0, width: 2 }} className="bg-ocean-500/60 z-10" />
-                    <div style={{ position: 'absolute', left: todayX + 4, top: 8 }} className="text-[9px] text-ocean-600 font-bold z-10">Today</div>
-                  </>
-                )}
+                {todayInView && <div className="absolute top-2 z-20 text-[10px] font-bold text-ocean-700" style={{ left: todayX + 5 }}>Today</div>}
               </div>
             </div>
 
             {phases.map(([phaseName, phaseTasks]) => (
               <div key={phaseName}>
-                <div className="flex border-b border-gray-100 bg-gray-50" style={{ height: 26 }}>
-                  <div style={{ width: GANTT_LEFT, minWidth: GANTT_LEFT }} className="shrink-0 border-r border-gray-100 flex items-center px-4 sticky left-0 z-10 bg-gray-50">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">{phaseName}</span>
+                <div className="flex border-b border-gray-100 bg-gray-50" style={{ height: 28 }}>
+                  <div className="sticky left-0 z-10 flex shrink-0 items-center border-r border-gray-100 bg-gray-50 px-4" style={{ width: GANTT_LEFT }}>
+                    <span className="truncate text-[11px] font-bold uppercase text-gray-500">{phaseName}</span>
                   </div>
-                  <div style={{ width: totalW, position: 'relative', flexShrink: 0 }}><GridLines /></div>
+                  <div className="relative shrink-0" style={{ width: totalW }}><GridLines /></div>
                 </div>
-
                 {phaseTasks.map(task => {
-                  const isOverdue = task.endDate && task.status !== 'complete' && new Date(task.endDate) < new Date()
-                  const hasBar = task.startDate && task.endDate
-                  const hasDueOnly = !task.startDate && task.endDate
-                  let barX = null, barW = null
-                  if (hasBar) { barX = xFor(new Date(task.startDate)); barW = Math.max(DAY_PX * 1.5, diffDays(new Date(task.startDate), new Date(task.endDate)) * DAY_PX) }
-                  else if (hasDueOnly) { barX = xFor(new Date(task.endDate)) - DAY_PX; barW = DAY_PX * 1.5 }
-
+                  const displayStatus = getDisplayStatus(task)
                   return (
-                    <div key={task.id} className="flex border-b border-gray-50 hover:bg-gray-50/50" style={{ height: ROW_H }}>
-                      <div style={{ width: GANTT_LEFT, minWidth: GANTT_LEFT }} className="shrink-0 border-r border-gray-100 flex items-center px-4 gap-2 bg-white sticky left-0 z-10">
-                        <StatusDot status={task.status} />
-                        <span className={`text-xs truncate ${task.status === 'complete' ? 'line-through text-gray-400' : 'text-gray-700'}`} title={task.name}>{task.name}</span>
+                    <div key={task.id} className="flex border-b border-gray-50 hover:bg-gray-50/60" style={{ height: ROW_H }}>
+                      <div className="sticky left-0 z-10 flex shrink-0 items-center gap-2 border-r border-gray-100 bg-white px-4" style={{ width: GANTT_LEFT }}>
+                        {task.isMilestone ? <Diamond size={11} className="shrink-0 fill-amber-400 text-amber-500" /> : <StatusDot status={displayStatus} />}
+                        <span className={`truncate text-xs ${task.status === 'complete' ? 'text-gray-400 line-through' : 'text-gray-700'}`} title={task.name}>{task.name}</span>
                       </div>
-                      <div style={{ width: totalW, position: 'relative', flexShrink: 0 }}>
+                      <div className="relative shrink-0" style={{ width: totalW }}>
                         <GridLines />
-                        {barX !== null && (
-                          <div style={{ position: 'absolute', left: barX, width: barW, top: '50%', transform: 'translateY(-50%)', height: 18, borderRadius: 4 }}
-                            className={`${isOverdue ? 'bg-red-300' : statusBarColor(task.status, task.progress)} relative overflow-hidden`}
-                            title={`${task.name}${task.assignee ? ' · ' + task.assignee : ''}${task.startDate ? '\nStart: ' + fmtDisplay(task.startDate) : ''}${task.endDate ? '\nFinish: ' + fmtDisplay(task.endDate) : ''}${task.progress ? '\nProgress: ' + task.progress + '%' : ''}`}
-                          >
-                            {/* Progress fill */}
-                            {task.progress > 0 && task.progress < 100 && (
-                              <div style={{ width: `${task.progress}%`, position: 'absolute', left: 0, top: 0, bottom: 0 }} className="bg-ocean-500/60" />
-                            )}
-                          </div>
-                        )}
+                        {renderTaskBar(task)}
                       </div>
                     </div>
                   )
@@ -752,47 +1053,46 @@ function GanttView({ project, tasks, milestones }) {
               </div>
             ))}
 
-            {/* Milestones */}
-            {msWithDate.length > 0 && (
-              <>
-                <div className="flex border-b border-gray-100 bg-amber-50/50" style={{ height: 26 }}>
-                  <div style={{ width: GANTT_LEFT, minWidth: GANTT_LEFT }} className="shrink-0 border-r border-gray-100 flex items-center px-4 sticky left-0 z-10 bg-amber-50/50">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600">Milestones</span>
+            {milestoneRows.length > 0 && (
+              <div>
+                <div className="flex border-b border-gray-100 bg-amber-50" style={{ height: 28 }}>
+                  <div className="sticky left-0 z-10 flex shrink-0 items-center border-r border-amber-100 bg-amber-50 px-4" style={{ width: GANTT_LEFT }}>
+                    <span className="text-[11px] font-bold uppercase text-amber-700">Project milestones</span>
                   </div>
-                  <div style={{ width: totalW, position: 'relative', flexShrink: 0 }}><GridLines /></div>
+                  <div className="relative shrink-0" style={{ width: totalW }}><GridLines /></div>
                 </div>
-                {msWithDate.map(ms => (
+                {milestoneRows.map(ms => (
                   <div key={ms.id} className="flex border-b border-gray-50" style={{ height: ROW_H }}>
-                    <div style={{ width: GANTT_LEFT, minWidth: GANTT_LEFT }} className="shrink-0 border-r border-gray-100 flex items-center px-4 gap-1.5 bg-white sticky left-0 z-10">
-                      <span className={`text-xs ${ms.complete ? 'text-green-500' : 'text-amber-500'}`}>◆</span>
-                      <span className={`text-xs truncate ${ms.complete ? 'line-through text-gray-400' : 'text-gray-700'}`}>{ms.label}</span>
+                    <div className="sticky left-0 z-10 flex shrink-0 items-center gap-2 border-r border-gray-100 bg-white px-4" style={{ width: GANTT_LEFT }}>
+                      <Diamond size={11} className={`shrink-0 ${ms.complete ? 'fill-green-500 text-green-500' : 'fill-amber-500 text-amber-500'}`} />
+                      <span className={`truncate text-xs ${ms.complete ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{ms.label}</span>
                     </div>
-                    <div style={{ width: totalW, position: 'relative', flexShrink: 0 }}>
+                    <div className="relative shrink-0" style={{ width: totalW }}>
                       <GridLines />
-                      <div style={{ position: 'absolute', left: xFor(new Date(ms.date)), top: '50%', transform: 'translate(-50%,-50%) rotate(45deg)', width: 14, height: 14, borderRadius: 2 }}
-                        className={ms.complete ? 'bg-green-400' : 'bg-amber-500'}
-                        title={`${ms.label}: ${fmtDisplay(ms.date)}`}
+                      <div
+                        className={`${ms.complete ? 'bg-green-500' : 'bg-amber-500'} absolute top-1/2 h-3.5 w-3.5 rounded-sm`}
+                        style={{ left: xFor(ms.date), transform: 'translate(-50%, -50%) rotate(45deg)' }}
+                        title={`${ms.label}: ${fmtFull(ms.date)}`}
                       />
-                      <div style={{ position: 'absolute', left: xFor(new Date(ms.date)) + 12, top: '50%', transform: 'translateY(-50%)' }} className="text-[9px] text-amber-600 whitespace-nowrap font-medium">
-                        {fmtDisplay(ms.date)}
-                      </div>
                     </div>
                   </div>
                 ))}
-              </>
+              </div>
             )}
 
-            {/* Project span */}
             {(project.startDate || project.targetCompletion) && (
-              <div className="flex border-t border-gray-100 bg-gray-50" style={{ height: 24 }}>
-                <div style={{ width: GANTT_LEFT, minWidth: GANTT_LEFT }} className="shrink-0 border-r border-gray-100 flex items-center px-4 sticky left-0 z-10 bg-gray-50">
-                  <span className="text-[10px] text-gray-400 font-medium">Project span</span>
+              <div className="flex border-t border-gray-100 bg-gray-50" style={{ height: 28 }}>
+                <div className="sticky left-0 z-10 flex shrink-0 items-center border-r border-gray-100 bg-gray-50 px-4" style={{ width: GANTT_LEFT }}>
+                  <span className="text-[11px] font-medium text-gray-500">Project span</span>
                 </div>
-                <div style={{ width: totalW, position: 'relative', flexShrink: 0 }}>
-                  {project.startDate && <div style={{ position: 'absolute', left: xFor(new Date(project.startDate)), top: 0, bottom: 0, width: 2 }} className="bg-forest-600/40" />}
-                  {project.targetCompletion && <div style={{ position: 'absolute', left: xFor(new Date(project.targetCompletion)), top: 0, bottom: 0, width: 2 }} className="bg-forest-600/40" />}
+                <div className="relative shrink-0" style={{ width: totalW }}>
+                  {project.startDate && <div className="absolute top-0 h-full border-l-2 border-forest-600/50" style={{ left: xFor(project.startDate) }} />}
+                  {project.targetCompletion && <div className="absolute top-0 h-full border-l-2 border-forest-600/50" style={{ left: xFor(project.targetCompletion) }} />}
                   {project.startDate && project.targetCompletion && (
-                    <div style={{ position: 'absolute', left: xFor(new Date(project.startDate)), width: Math.max(0, xFor(new Date(project.targetCompletion)) - xFor(new Date(project.startDate))), top: '50%', transform: 'translateY(-50%)', height: 4 }} className="bg-forest-600/20 rounded" />
+                    <div
+                      className="absolute top-1/2 h-1 -translate-y-1/2 rounded bg-forest-600/20"
+                      style={{ left: xFor(project.startDate), width: Math.max(0, xFor(project.targetCompletion) - xFor(project.startDate)) }}
+                    />
                   )}
                 </div>
               </div>
@@ -804,159 +1104,209 @@ function GanttView({ project, tasks, milestones }) {
   )
 }
 
-// ── Milestones View ────────────────────────────────────────────────────────────
-function MilestonesView({ project, milestones }) {
-  const { updateMilestone, addMilestone, deleteMilestone } = useStore()
+function MilestonesView({ project, tasks, milestones }) {
+  const { updateScheduleTask, updateMilestone, addMilestone, deleteMilestone } = useStore()
   const [showAdd, setShowAdd] = useState(false)
-  const [form, setForm] = useState({ label: '', date: '', stageId: '' })
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const today = new Date()
+  const [form, setForm] = useState({ label: '', date: '', stageId: '' })
 
-  const sorted = useMemo(() => [...milestones].sort((a, b) => {
-    if (!a.date && !b.date) return 0; if (!a.date) return 1; if (!b.date) return -1
-    return new Date(a.date) - new Date(b.date)
+  const programmeMilestones = tasks.filter(t => t.isMilestone)
+  const sortedMilestones = useMemo(() => milestones.slice().sort((a, b) => {
+    if (!a.date && !b.date) return 0
+    if (!a.date) return 1
+    if (!b.date) return -1
+    return parseDate(a.date) - parseDate(b.date)
   }), [milestones])
 
-  const handleAdd = async () => {
+  const addProjectMilestone = async () => {
     if (!form.label.trim()) return
-    await addMilestone({ projectId: project.id, stageId: form.stageId, label: form.label.trim(), date: form.date })
+    await addMilestone({ projectId: project.id, label: form.label.trim(), date: form.date, stageId: form.stageId })
     setForm({ label: '', date: '', stageId: '' })
     setShowAdd(false)
   }
 
-  if (milestones.length === 0 && !showAdd) {
-    return (
-      <div className="text-center py-16">
-        <div className="text-5xl mb-3 text-amber-300">◆</div>
-        <p className="text-sm font-medium text-gray-600 mb-1">No milestones yet</p>
-        <p className="text-xs text-gray-400 mb-5 max-w-xs mx-auto">Key dates — consents, funding, construction start, handover.</p>
-        <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-2 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-          <Plus size={14} /> Add milestone
-        </button>
-      </div>
-    )
-  }
-
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <p className="text-sm text-gray-500">{milestones.filter(m => m.complete).length} / {milestones.length} complete</p>
-          {milestones.filter(m => m.date && !m.complete && new Date(m.date) < today).length > 0 && (
-            <span className="text-xs font-medium text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
-              {milestones.filter(m => m.date && !m.complete && new Date(m.date) < today).length} overdue
-            </span>
-          )}
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm text-gray-500">
+          {programmeMilestones.length} programme milestone{programmeMilestones.length !== 1 ? 's' : ''} and {milestones.length} project milestone{milestones.length !== 1 ? 's' : ''}
         </div>
-        <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-1.5 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors">
-          <Plus size={14} /> Add milestone
+        <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-2 rounded-lg bg-forest-600 px-3 py-2 text-sm font-medium text-white hover:bg-forest-700">
+          <Plus size={14} />
+          Add milestone
         </button>
       </div>
 
       {showAdd && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-4">
-          <h4 className="text-sm font-semibold text-gray-800 mb-3">New milestone</h4>
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Name *</label>
-              <input autoFocus className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500"
-                placeholder="e.g. Resource Consent obtained" value={form.label}
-                onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
-                onKeyDown={e => e.key === 'Enter' && handleAdd()} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Target date</label>
-              <input type="date" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500"
-                value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
-            </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
+          <div className="mb-3 text-sm font-semibold text-gray-800">New project milestone</div>
+          <div className="grid gap-3 md:grid-cols-[1fr_180px_180px]">
+            <input
+              autoFocus
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ocean-500"
+              placeholder="Milestone name"
+              value={form.label}
+              onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && addProjectMilestone()}
+            />
+            <input
+              type="date"
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ocean-500"
+              value={form.date}
+              onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+            />
+            <select
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ocean-500"
+              value={form.stageId}
+              onChange={e => setForm(f => ({ ...f, stageId: e.target.value }))}
+            >
+              <option value="">No stage</option>
+              {Object.entries(STAGE_MAP).map(([id, stage]) => <option key={id} value={id}>{stage.label}</option>)}
+            </select>
           </div>
-          <div className="flex gap-2">
-            <button onClick={handleAdd} disabled={!form.label.trim()} className="px-4 py-2 text-sm font-medium bg-forest-600 text-white rounded-lg hover:bg-forest-700 disabled:opacity-50 transition-colors">Add</button>
-            <button onClick={() => { setShowAdd(false); setForm({ label: '', date: '', stageId: '' }) }} className="px-4 py-2 text-sm text-gray-500">Cancel</button>
+          <div className="mt-4 flex gap-2">
+            <button onClick={addProjectMilestone} disabled={!form.label.trim()} className="rounded-lg bg-forest-600 px-4 py-2 text-sm font-medium text-white hover:bg-forest-700 disabled:opacity-40">
+              Add
+            </button>
+            <button onClick={() => { setShowAdd(false); setForm({ label: '', date: '', stageId: '' }) }} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">
+              Cancel
+            </button>
           </div>
         </div>
       )}
 
-      <div className="space-y-2">
-        {sorted.map(ms => {
-          const stage = ms.stageId ? STAGE_MAP[ms.stageId] : null
-          const isPast = ms.date && !ms.complete && new Date(ms.date) < today
-          const rel = ms.date ? relativeDays(ms.date) : null
-          return (
-            <div key={ms.id} className={`flex items-center gap-4 bg-white rounded-xl border px-5 py-4 group ${ms.complete ? 'border-green-100 bg-green-50/20' : isPast ? 'border-red-100' : 'border-gray-100 hover:border-gray-200'}`}>
-              <div className={`text-xl shrink-0 ${ms.complete ? 'text-green-500' : isPast ? 'text-red-400' : 'text-amber-500'}`}>◆</div>
-              <div className="flex-1 min-w-0">
-                <div className={`text-sm font-medium ${ms.complete ? 'line-through text-gray-400' : 'text-gray-800'}`}>{ms.label}</div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  {stage && <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${stage.light} ${stage.text}`}>{stage.short}</span>}
-                  {rel && !ms.complete && <span className={`text-[10px] font-medium ${isPast ? 'text-red-500' : 'text-gray-400'}`}>{rel}</span>}
-                  {ms.complete && <span className="text-[10px] text-green-600 font-medium">✓ Completed</span>}
+      {programmeMilestones.length > 0 && (
+        <div>
+          <div className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-400">Programme milestones</div>
+          <div className="space-y-2">
+            {programmeMilestones.map(task => {
+              const displayStatus = getDisplayStatus(task)
+              return (
+                <div key={task.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3">
+                  <Diamond size={15} className={`shrink-0 ${(STATUS_MAP[displayStatus] || STATUS_MAP['not-started']).text}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className={`truncate text-sm font-medium ${task.status === 'complete' ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{task.name}</div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                      <span>{task.phase || 'No phase'}</span>
+                      <span>{fmtFull(task.endDate || task.startDate)}</span>
+                      <StatusLabel task={task} />
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => updateScheduleTask(task.id, { status: task.status === 'complete' ? 'not-started' : 'complete', progress: task.status === 'complete' ? 0 : 100 })}
+                    className={`inline-flex h-7 w-7 items-center justify-center rounded-full border-2 ${task.status === 'complete' ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300 text-gray-300 hover:border-green-400 hover:bg-green-50'}`}
+                    title="Toggle complete"
+                  >
+                    {task.status === 'complete' && <Check size={13} />}
+                  </button>
                 </div>
-              </div>
-              <div className="shrink-0 text-right">
-                <div className="relative">
-                  <div className="text-xs text-gray-700 cursor-pointer hover:underline">{ms.date ? fmtDisplay(ms.date) : <span className="text-gray-300">Set date</span>}</div>
-                  <input type="date" className="absolute inset-0 opacity-0 cursor-pointer w-full" value={ms.date ? fmtInput(ms.date) : ''} onChange={e => updateMilestone(ms.id, { date: e.target.value })} />
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-400">Project milestones</div>
+        {sortedMilestones.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-gray-200 bg-white px-5 py-10 text-center text-sm text-gray-400">
+            No project milestones yet.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {sortedMilestones.map(ms => {
+              const stage = ms.stageId ? STAGE_MAP[ms.stageId] : null
+              const overdue = ms.date && !ms.complete && parseDate(ms.date) < sod(new Date())
+              return (
+                <div key={ms.id} className={`flex items-center gap-3 rounded-xl border bg-white px-4 py-3 ${overdue ? 'border-red-100' : 'border-gray-100'}`}>
+                  <Diamond size={15} className={`shrink-0 ${ms.complete ? 'fill-green-500 text-green-500' : overdue ? 'fill-red-500 text-red-500' : 'fill-amber-500 text-amber-500'}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className={`truncate text-sm font-medium ${ms.complete ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{ms.label}</div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                      {stage && <span className={`rounded-full px-2 py-0.5 font-medium ${stage.light} ${stage.text}`}>{stage.short}</span>}
+                      <span className={overdue ? 'font-medium text-red-600' : ''}>{fmtFull(ms.date)}</span>
+                      {ms.date && !ms.complete && <span>{relativeDays(ms.date)}</span>}
+                    </div>
+                  </div>
+                  <input
+                    type="date"
+                    className="w-36 rounded border border-gray-200 px-2 py-1.5 text-xs text-gray-600 focus:outline-none focus:ring-1 focus:ring-ocean-500"
+                    value={fmtInput(ms.date)}
+                    onChange={e => updateMilestone(ms.id, { date: e.target.value })}
+                  />
+                  {confirmDelete === ms.id ? (
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => { deleteMilestone(ms.id); setConfirmDelete(null) }} className="rounded px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">Delete</button>
+                      <button onClick={() => setConfirmDelete(null)} className="rounded px-2 py-1 text-xs text-gray-400 hover:bg-gray-100">Cancel</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setConfirmDelete(ms.id)} className="inline-flex h-7 w-7 items-center justify-center rounded text-gray-300 hover:bg-red-50 hover:text-red-500" title="Delete milestone">
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => updateMilestone(ms.id, { complete: !ms.complete })}
+                    className={`inline-flex h-7 w-7 items-center justify-center rounded-full border-2 ${ms.complete ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300 text-gray-300 hover:border-green-400 hover:bg-green-50'}`}
+                    title="Toggle complete"
+                  >
+                    {ms.complete && <Check size={13} />}
+                  </button>
                 </div>
-              </div>
-              {confirmDelete === ms.id ? (
-                <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => { deleteMilestone(ms.id); setConfirmDelete(null) }} className="text-xs text-red-600 font-medium px-2 py-1 rounded hover:bg-red-50">Delete</button>
-                  <button onClick={() => setConfirmDelete(null)} className="text-xs text-gray-400 px-1">Cancel</button>
-                </div>
-              ) : (
-                <button onClick={() => setConfirmDelete(ms.id)} className="shrink-0 text-gray-200 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all p-1 text-xs">×</button>
-              )}
-              <button onClick={() => updateMilestone(ms.id, { complete: !ms.complete })}
-                className={`shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all ${ms.complete ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-green-400 hover:bg-green-50'}`}>
-                {ms.complete && <span className="text-xs font-bold leading-none">✓</span>}
-              </button>
-            </div>
-          )
-        })}
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-// ── Main export ────────────────────────────────────────────────────────────────
 export default function ScheduleTab({ project }) {
   const { scheduleTasks, milestones } = useStore()
   const [view, setView] = useState('table')
 
   const tasks = useMemo(() => scheduleTasks.filter(t => t.projectId === project.id), [scheduleTasks, project.id])
-  const ms    = useMemo(() => milestones.filter(m => m.projectId === project.id), [milestones, project.id])
+  const projectMilestones = useMemo(() => milestones.filter(m => m.projectId === project.id), [milestones, project.id])
 
-  const msWithDate = ms.filter(m => m.date)
-  const overdueMs = msWithDate.filter(m => !m.complete && new Date(m.date) < new Date()).length
-  const doneMs = ms.filter(m => m.complete).length
+  const stats = useMemo(() => {
+    const total = tasks.length
+    const complete = tasks.filter(t => getDisplayStatus(t) === 'complete').length
+    const delayed = tasks.filter(t => getDisplayStatus(t) === 'delayed').length
+    const milestonesCount = projectMilestones.length + tasks.filter(t => t.isMilestone).length
+    return { total, complete, delayed, milestonesCount }
+  }, [tasks, projectMilestones])
+
+  const tabs = [
+    { id: 'table', icon: List, label: 'Table' },
+    { id: 'gantt', icon: BarChart2, label: 'Gantt' },
+    { id: 'milestones', icon: Flag, label: `Milestones${stats.milestonesCount ? ` (${stats.milestonesCount})` : ''}` },
+  ]
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-          {[
-            { id: 'table',      icon: List,     label: 'Table' },
-            { id: 'gantt',      icon: BarChart2, label: 'Gantt' },
-            { id: 'milestones', icon: Flag,      label: `Milestones${ms.length > 0 ? ` (${ms.length})` : ''}` },
-          ].map(({ id, icon: Icon, label }) => (
-            <button key={id} onClick={() => setView(id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${view === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-              <Icon size={13} />{label}
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-1 rounded-lg bg-gray-100 p-1">
+          {tabs.map(({ id, icon: Icon, label }) => (
+            <button
+              key={id}
+              onClick={() => setView(id)}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${view === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <Icon size={13} />
+              {label}
             </button>
           ))}
         </div>
-        {ms.length > 0 && (
-          <div className="flex items-center gap-3 text-xs text-gray-400">
-            {doneMs > 0 && <span className="text-green-600 font-medium">{doneMs} done</span>}
-            {overdueMs > 0 && <span className="text-red-500 font-medium">{overdueMs} overdue</span>}
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400">
+          <span>{stats.total} programme tasks</span>
+          {stats.complete > 0 && <span className="font-medium text-green-700">{stats.complete} complete</span>}
+          {stats.delayed > 0 && <span className="font-medium text-red-700">{stats.delayed} delayed</span>}
+        </div>
       </div>
 
-      {view === 'table'      && <ScheduleTable project={project} tasks={tasks} milestones={ms} />}
-      {view === 'gantt'      && <GanttView     project={project} tasks={tasks} milestones={ms} />}
-      {view === 'milestones' && <MilestonesView project={project} milestones={ms} />}
+      {view === 'table' && <ScheduleTable project={project} tasks={tasks} milestones={projectMilestones} />}
+      {view === 'gantt' && <GanttView project={project} tasks={tasks} milestones={projectMilestones} />}
+      {view === 'milestones' && <MilestonesView project={project} tasks={tasks} milestones={projectMilestones} />}
     </div>
   )
 }

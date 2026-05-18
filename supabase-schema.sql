@@ -103,6 +103,13 @@ create table if not exists schedule_tasks (
   assignee text default '',
   start_date text default '',
   end_date text default '',
+  actual_start text default '',
+  actual_end text default '',
+  dependency_id text references schedule_tasks(id) on delete set null,
+  lag_days integer default 0,
+  internal_owner text default '',
+  is_milestone boolean default false,
+  notes text default '',
   duration_days integer,
   status text default 'not-started',
   progress integer default 0,
@@ -119,6 +126,15 @@ create policy "allow_all" on documents for all using (true) with check (true);
 create policy "allow_all" on team_members for all using (true) with check (true);
 create policy "allow_all" on tasks for all using (true) with check (true);
 create policy "allow_all" on schedule_tasks for all using (true) with check (true);
+
+alter table schedule_tasks
+  add column if not exists actual_start text default '',
+  add column if not exists actual_end text default '',
+  add column if not exists dependency_id text references schedule_tasks(id) on delete set null,
+  add column if not exists lag_days integer default 0,
+  add column if not exists internal_owner text default '',
+  add column if not exists is_milestone boolean default false,
+  add column if not exists notes text default '';
 
 -- Enable real-time sync
 alter publication supabase_realtime add table projects;

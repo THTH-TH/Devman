@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Plus, ExternalLink, Trash2, Pencil, X, Search, FolderOpen } from 'lucide-react'
 import useStore from '../store/useStore'
-import GoogleWorkspacePanel from '../components/GoogleWorkspacePanel'
 import DriveBrowser from '../components/DriveBrowser'
 
 const CATEGORIES = ['contract', 'consent', 'drawing', 'report', 'invoice', 'photo', 'email', 'other']
@@ -92,7 +91,7 @@ function DocModal({ doc, projects, onClose, onSave }) {
 }
 
 export default function Documents() {
-  const { projects, documents, addDocument, updateDocument, deleteDocument, updateProject } = useStore()
+  const { projects, documents, addDocument, updateDocument, deleteDocument } = useStore()
   const [search, setSearch] = useState('')
   const [filterProject, setFilterProject] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
@@ -160,8 +159,6 @@ export default function Documents() {
           <button onClick={() => { setSearch(''); setFilterProject(''); setFilterCategory('') }} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Clear</button>
         )}
       </div>
-
-      <GoogleWorkspacePanel projects={projects} addDocument={addDocument} updateProject={updateProject} />
 
       {/* Table */}
       {filtered.length === 0 ? (

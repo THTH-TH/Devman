@@ -57,3 +57,26 @@ export function buildScheduleTasks(projectId, startDate) {
     }
   })
 }
+
+export function buildScheduleTasksFromTemplateItems(projectId, startDate, items = []) {
+  const source = items.length ? items : SCHEDULE_TEMPLATE
+  const base = parseDate(startDate)
+  return source.map((item, index) => {
+    const start = addDays(base, Number(item.offsetDays ?? item.offset_days ?? 0))
+    const duration = Math.max(1, Number(item.durationDays ?? item.duration_days ?? 1))
+    const end = addDays(start, duration - 1)
+    return {
+      projectId,
+      name: item.name,
+      phase: item.phase,
+      startDate: formatDate(start),
+      endDate: formatDate(end),
+      durationDays: duration,
+      status: 'not-started',
+      progress: 0,
+      isMilestone: Boolean(item.isMilestone ?? item.is_milestone),
+      notes: item.notes || '',
+      sortOrder: item.sortOrder ?? item.sort_order ?? index,
+    }
+  })
+}

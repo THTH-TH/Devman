@@ -42,6 +42,7 @@ const mapProject = r => ({
   startDate: r.start_date || '',
   targetCompletion: r.target_completion || '',
   currentStage: r.current_stage || 'feasibility',
+  activeStageIds: Array.isArray(r.active_stage_ids) ? r.active_stage_ids : [r.current_stage || 'feasibility'],
   status: r.status || 'Active',
   description: r.description || '',
   createdAt: r.created_at,
@@ -150,6 +151,95 @@ const mapScheduleTask = r => ({
   updatedAt: r.updated_at,
 })
 
+const mapCalendarEvent = r => ({
+  id: r.id,
+  projectId: r.project_id || '',
+  stageId: r.stage_id || '',
+  title: r.title || '',
+  eventDate: r.event_date || '',
+  eventType: r.event_type || 'event',
+  notes: r.notes || '',
+  createdBy: r.created_by || '',
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+})
+
+const mapCompany = r => ({
+  id: r.id,
+  name: r.name || '',
+  type: r.type || '',
+  phone: r.phone || '',
+  email: r.email || '',
+  website: r.website || '',
+  address: r.address || '',
+  notes: r.notes || '',
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+})
+
+const mapContact = r => ({
+  id: r.id,
+  companyId: r.company_id || '',
+  name: r.name || '',
+  title: r.title || '',
+  email: r.email || '',
+  phone: r.phone || '',
+  notes: r.notes || '',
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+})
+
+const mapProjectContact = r => ({
+  id: r.id,
+  projectId: r.project_id || '',
+  companyId: r.company_id || '',
+  contactId: r.contact_id || '',
+  projectRole: r.project_role || '',
+  discipline: r.discipline || '',
+  stageIds: Array.isArray(r.stage_ids) ? r.stage_ids : [],
+  status: r.status || 'active',
+  isPrimary: Boolean(r.is_primary),
+  notes: r.notes || '',
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+})
+
+const mapDailyLog = r => ({
+  id: r.id,
+  projectId: r.project_id || '',
+  logDate: r.log_date || '',
+  summary: r.summary || '',
+  workCompleted: r.work_completed || '',
+  blockers: r.blockers || '',
+  nextSteps: r.next_steps || '',
+  weather: r.weather || '',
+  createdBy: r.created_by || '',
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+})
+
+const mapScheduleTemplate = r => ({
+  id: r.id,
+  name: r.name || '',
+  description: r.description || '',
+  isDefault: Boolean(r.is_default),
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+})
+
+const mapScheduleTemplateItem = r => ({
+  id: r.id,
+  templateId: r.template_id,
+  phase: r.phase || '',
+  name: r.name || '',
+  offsetDays: r.offset_days ?? 0,
+  durationDays: r.duration_days ?? 1,
+  isMilestone: Boolean(r.is_milestone),
+  dependencyKey: r.dependency_key || '',
+  notes: r.notes || '',
+  sortOrder: r.sort_order ?? 0,
+})
+
 const stripEnhancedScheduleColumns = row => {
   const {
     actual_start,
@@ -188,6 +278,7 @@ const stripEnhancedProjectColumns = row => {
     property_snapshot,
     drive_folder_url,
     drive_root_folder_id,
+    active_stage_ids,
     ...legacy
   } = row
   return legacy
@@ -195,7 +286,7 @@ const stripEnhancedProjectColumns = row => {
 
 const missingEnhancedProjectColumn = error =>
   error?.code === 'PGRST204' ||
-  /bc_number|legal_description|owner_contact_person|owner_mailing_address|owner_phone|owner_email|building_work_description|place_id|latitude|longitude|suburb|city|region|postal_code|country|property_snapshot|drive_folder_url|drive_root_folder_id/i.test(error?.message || '')
+  /bc_number|legal_description|owner_contact_person|owner_mailing_address|owner_phone|owner_email|building_work_description|place_id|latitude|longitude|suburb|city|region|postal_code|country|property_snapshot|drive_folder_url|drive_root_folder_id|active_stage_ids/i.test(error?.message || '')
 
 const stripEnhancedDocumentColumns = row => {
   const {
@@ -229,6 +320,13 @@ const useStore = create((set, get) => ({
   teamMembers: [],
   tasks: [],
   scheduleTasks: [],
+  calendarEvents: [],
+  companies: [],
+  contacts: [],
+  projectContacts: [],
+  dailyLogs: [],
+  scheduleTemplates: [],
+  scheduleTemplateItems: [],
   sessionUser: null,
   profile: null,
   currentUser: localStorage.getItem('devman_current_user') || '',
@@ -245,6 +343,13 @@ const useStore = create((set, get) => ({
       teamMembers: [],
       tasks: [],
       scheduleTasks: [],
+      calendarEvents: [],
+      companies: [],
+      contacts: [],
+      projectContacts: [],
+      dailyLogs: [],
+      scheduleTemplates: [],
+      scheduleTemplateItems: [],
       sessionUser: null,
       profile: null,
       currentUser: '',
@@ -332,12 +437,26 @@ const useStore = create((set, get) => ({
 
       // New tables — load gracefully (tables may not exist yet)
       try {
-        const [tr, sr] = await Promise.all([
+        const [tr, sr, ev, co, ct, pc, dl, st, sti] = await Promise.all([
           supabase.from('tasks').select('*').order('created_at', { ascending: false }),
           supabase.from('schedule_tasks').select('*').order('sort_order'),
+          supabase.from('calendar_events').select('*').order('event_date'),
+          supabase.from('companies').select('*').order('name'),
+          supabase.from('contacts').select('*').order('name'),
+          supabase.from('project_contacts').select('*').order('created_at', { ascending: false }),
+          supabase.from('daily_logs').select('*').order('log_date', { ascending: false }),
+          supabase.from('schedule_templates').select('*').order('name'),
+          supabase.from('schedule_template_items').select('*').order('sort_order'),
         ])
         if (!tr.error) set({ tasks: tr.data.map(mapTask) })
         if (!sr.error) set({ scheduleTasks: sr.data.map(mapScheduleTask) })
+        if (!ev.error) set({ calendarEvents: ev.data.map(mapCalendarEvent) })
+        if (!co.error) set({ companies: co.data.map(mapCompany) })
+        if (!ct.error) set({ contacts: ct.data.map(mapContact) })
+        if (!pc.error) set({ projectContacts: pc.data.map(mapProjectContact) })
+        if (!dl.error) set({ dailyLogs: dl.data.map(mapDailyLog) })
+        if (!st.error) set({ scheduleTemplates: st.data.map(mapScheduleTemplate) })
+        if (!sti.error) set({ scheduleTemplateItems: sti.data.map(mapScheduleTemplateItem) })
       } catch {
         console.warn('tasks / schedule_tasks tables not yet created — run SQL in Supabase')
       }
@@ -422,6 +541,51 @@ const useStore = create((set, get) => ({
           return s
         })
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events' }, payload => {
+        const { eventType, new: row, old } = payload
+        set(s => {
+          if (eventType === 'INSERT') return { calendarEvents: [...s.calendarEvents, mapCalendarEvent(row)] }
+          if (eventType === 'UPDATE') return { calendarEvents: s.calendarEvents.map(item => item.id === row.id ? mapCalendarEvent(row) : item) }
+          if (eventType === 'DELETE') return { calendarEvents: s.calendarEvents.filter(item => item.id !== old.id) }
+          return s
+        })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'companies' }, payload => {
+        const { eventType, new: row, old } = payload
+        set(s => {
+          if (eventType === 'INSERT') return { companies: [...s.companies, mapCompany(row)].sort((a, b) => a.name.localeCompare(b.name)) }
+          if (eventType === 'UPDATE') return { companies: s.companies.map(item => item.id === row.id ? mapCompany(row) : item).sort((a, b) => a.name.localeCompare(b.name)) }
+          if (eventType === 'DELETE') return { companies: s.companies.filter(item => item.id !== old.id) }
+          return s
+        })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contacts' }, payload => {
+        const { eventType, new: row, old } = payload
+        set(s => {
+          if (eventType === 'INSERT') return { contacts: [...s.contacts, mapContact(row)].sort((a, b) => a.name.localeCompare(b.name)) }
+          if (eventType === 'UPDATE') return { contacts: s.contacts.map(item => item.id === row.id ? mapContact(row) : item).sort((a, b) => a.name.localeCompare(b.name)) }
+          if (eventType === 'DELETE') return { contacts: s.contacts.filter(item => item.id !== old.id) }
+          return s
+        })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_contacts' }, payload => {
+        const { eventType, new: row, old } = payload
+        set(s => {
+          if (eventType === 'INSERT') return { projectContacts: [mapProjectContact(row), ...s.projectContacts] }
+          if (eventType === 'UPDATE') return { projectContacts: s.projectContacts.map(item => item.id === row.id ? mapProjectContact(row) : item) }
+          if (eventType === 'DELETE') return { projectContacts: s.projectContacts.filter(item => item.id !== old.id) }
+          return s
+        })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_logs' }, payload => {
+        const { eventType, new: row, old } = payload
+        set(s => {
+          if (eventType === 'INSERT') return { dailyLogs: [mapDailyLog(row), ...s.dailyLogs] }
+          if (eventType === 'UPDATE') return { dailyLogs: s.dailyLogs.map(item => item.id === row.id ? mapDailyLog(row) : item) }
+          if (eventType === 'DELETE') return { dailyLogs: s.dailyLogs.filter(item => item.id !== old.id) }
+          return s
+        })
+      })
       .subscribe()
   },
 
@@ -463,6 +627,7 @@ const useStore = create((set, get) => ({
       start_date: data.startDate || '',
       target_completion: data.targetCompletion || '',
       current_stage: data.currentStage || 'feasibility',
+      active_stage_ids: data.activeStageIds || [data.currentStage || 'feasibility'],
       status: data.status || 'Active',
       description: data.description || '',
       created_at: now,
@@ -512,6 +677,7 @@ const useStore = create((set, get) => ({
     if (data.startDate !== undefined) updates.start_date = data.startDate
     if (data.targetCompletion !== undefined) updates.target_completion = data.targetCompletion
     if (data.currentStage !== undefined) updates.current_stage = data.currentStage
+    if (data.activeStageIds !== undefined) updates.active_stage_ids = data.activeStageIds
     if (data.status !== undefined) updates.status = data.status
     if (data.description !== undefined) updates.description = data.description
 
@@ -536,6 +702,9 @@ const useStore = create((set, get) => ({
       documents: s.documents.filter(d => d.projectId !== id),
       tasks: s.tasks.filter(t => t.projectId !== id),
       scheduleTasks: s.scheduleTasks.filter(t => t.projectId !== id),
+      calendarEvents: s.calendarEvents.filter(t => t.projectId !== id),
+      projectContacts: s.projectContacts.filter(t => t.projectId !== id),
+      dailyLogs: s.dailyLogs.filter(t => t.projectId !== id),
     }))
     const { error } = await supabase.from('projects').delete().eq('id', id)
     if (error) console.error('deleteProject error:', error)
@@ -749,6 +918,25 @@ const useStore = create((set, get) => ({
     if (error) console.error('deleteTask error:', error)
   },
 
+  async updateBatchTasks(ids, data) {
+    if (!ids.length) return
+    const updates = { updated_at: new Date().toISOString() }
+    if (data.assignee !== undefined) updates.assignee = data.assignee
+    if (data.status !== undefined) updates.status = data.status
+    if (data.priority !== undefined) updates.priority = data.priority
+    if (data.dueDate !== undefined) updates.due_date = data.dueDate || null
+    set(s => ({ tasks: s.tasks.map(t => ids.includes(t.id) ? { ...t, ...data, updatedAt: updates.updated_at } : t) }))
+    const { error } = await supabase.from('tasks').update(updates).in('id', ids)
+    if (error) console.error('updateBatchTasks error:', error)
+  },
+
+  async deleteBatchTasks(ids) {
+    if (!ids.length) return
+    set(s => ({ tasks: s.tasks.filter(t => !ids.includes(t.id)) }))
+    const { error } = await supabase.from('tasks').delete().in('id', ids)
+    if (error) console.error('deleteBatchTasks error:', error)
+  },
+
   // ── Schedule Tasks ─────────────────────────────────────────────────────────
   async addScheduleTask(data) {
     const id = genId()
@@ -867,6 +1055,42 @@ const useStore = create((set, get) => ({
     if (error) console.error('deleteScheduleTask error:', error)
   },
 
+  async updateBatchScheduleTasks(ids, data) {
+    if (!ids.length) return
+    const updates = { updated_at: new Date().toISOString() }
+    if (data.name !== undefined) updates.name = data.name
+    if (data.phase !== undefined) updates.phase = data.phase
+    if (data.assignee !== undefined) updates.assignee = data.assignee
+    if (data.internalOwner !== undefined) updates.internal_owner = data.internalOwner
+    if (data.status !== undefined) updates.status = data.status
+    if (data.progress !== undefined) updates.progress = data.progress
+    if (data.isMilestone !== undefined) updates.is_milestone = data.isMilestone
+    if (data.notes !== undefined) updates.notes = data.notes
+    if (data.shiftDays) {
+      const shiftDate = value => {
+        if (!value) return value
+        const date = new Date(value)
+        if (Number.isNaN(date.getTime())) return value
+        date.setDate(date.getDate() + Number(data.shiftDays))
+        return date.toISOString().slice(0, 10)
+      }
+      const affected = get().scheduleTasks.filter(t => ids.includes(t.id))
+      set(s => ({ scheduleTasks: s.scheduleTasks.map(t => ids.includes(t.id) ? { ...t, startDate: shiftDate(t.startDate), endDate: shiftDate(t.endDate), updatedAt: updates.updated_at } : t) }))
+      await Promise.all(affected.map(t => supabase.from('schedule_tasks').update({ start_date: shiftDate(t.startDate), end_date: shiftDate(t.endDate), updated_at: updates.updated_at }).eq('id', t.id)))
+      return
+    }
+    set(s => ({ scheduleTasks: s.scheduleTasks.map(t => ids.includes(t.id) ? { ...t, ...data, updatedAt: updates.updated_at } : t) }))
+    const { error } = await supabase.from('schedule_tasks').update(updates).in('id', ids)
+    if (error) console.error('updateBatchScheduleTasks error:', error)
+  },
+
+  async deleteBatchScheduleTasks(ids) {
+    if (!ids.length) return
+    set(s => ({ scheduleTasks: s.scheduleTasks.filter(t => !ids.includes(t.id)) }))
+    const { error } = await supabase.from('schedule_tasks').delete().in('id', ids)
+    if (error) console.error('deleteBatchScheduleTasks error:', error)
+  },
+
   async renamePhase(projectId, oldPhase, newPhase) {
     // Rename all tasks in a phase
     const affected = get().scheduleTasks.filter(t => t.projectId === projectId && t.phase === oldPhase)
@@ -959,6 +1183,33 @@ const useStore = create((set, get) => ({
     }
   },
 
+  async updateBatchDocuments(ids, data) {
+    if (!ids.length) return
+    const updates = {}
+    if (data.projectId !== undefined) updates.project_id = data.projectId || null
+    if (data.stageId !== undefined) updates.stage_id = data.stageId || ''
+    if (data.category !== undefined) updates.category = data.category
+    set(s => ({ documents: s.documents.map(d => ids.includes(d.id) ? { ...d, ...data } : d) }))
+    const { error } = await supabase.from('documents').update(updates).in('id', ids)
+    if (error) console.error('updateBatchDocuments error:', error)
+  },
+
+  async deleteBatchDocuments(ids) {
+    if (!ids.length) return
+    const existing = get().documents.filter(d => ids.includes(d.id))
+    set(s => ({ documents: s.documents.filter(d => !ids.includes(d.id)) }))
+    const { error } = await supabase.from('documents').delete().in('id', ids)
+    if (error) {
+      console.error('deleteBatchDocuments error:', error)
+      return
+    }
+    const paths = existing.map(d => d.storagePath).filter(Boolean)
+    if (paths.length) {
+      const { error: storageError } = await supabase.storage.from('documents').remove(paths)
+      if (storageError) console.error('deleteBatchDocuments storage error:', storageError)
+    }
+  },
+
   // ── Team Members ──────────────────────────────────────────────────────────
   async addTeamMember(data) {
     const id = genId()
@@ -988,6 +1239,184 @@ const useStore = create((set, get) => ({
     set(s => ({ teamMembers: s.teamMembers.filter(m => m.id !== id) }))
     const { error } = await supabase.from('team_members').delete().eq('id', id)
     if (error) console.error('deleteTeamMember error:', error)
+  },
+
+  async addCalendarEvent(data) {
+    const id = genId()
+    const now = new Date().toISOString()
+    const row = {
+      id,
+      project_id: data.projectId || null,
+      stage_id: data.stageId || '',
+      title: data.title || '',
+      event_date: data.eventDate || '',
+      event_type: data.eventType || 'event',
+      notes: data.notes || '',
+      created_by: data.createdBy || get().currentUser || '',
+      created_at: now,
+      updated_at: now,
+    }
+    const item = mapCalendarEvent(row)
+    set(s => ({ calendarEvents: [...s.calendarEvents, item] }))
+    const { error } = await supabase.from('calendar_events').insert(row)
+    if (error) console.error('addCalendarEvent error:', error)
+    return item
+  },
+
+  async updateCalendarEvent(id, data) {
+    const updates = { updated_at: new Date().toISOString() }
+    if (data.projectId !== undefined) updates.project_id = data.projectId || null
+    if (data.stageId !== undefined) updates.stage_id = data.stageId || ''
+    if (data.title !== undefined) updates.title = data.title
+    if (data.eventDate !== undefined) updates.event_date = data.eventDate
+    if (data.eventType !== undefined) updates.event_type = data.eventType
+    if (data.notes !== undefined) updates.notes = data.notes
+    set(s => ({ calendarEvents: s.calendarEvents.map(item => item.id === id ? { ...item, ...data, updatedAt: updates.updated_at } : item) }))
+    const { error } = await supabase.from('calendar_events').update(updates).eq('id', id)
+    if (error) console.error('updateCalendarEvent error:', error)
+  },
+
+  async deleteCalendarEvent(id) {
+    set(s => ({ calendarEvents: s.calendarEvents.filter(item => item.id !== id) }))
+    const { error } = await supabase.from('calendar_events').delete().eq('id', id)
+    if (error) console.error('deleteCalendarEvent error:', error)
+  },
+
+  async addCompany(data) {
+    const id = data.id || genId()
+    const now = new Date().toISOString()
+    const row = { id, name: data.name || '', type: data.type || '', phone: data.phone || '', email: data.email || '', website: data.website || '', address: data.address || '', notes: data.notes || '', created_at: now, updated_at: now }
+    const company = mapCompany(row)
+    set(s => ({ companies: [...s.companies, company].sort((a, b) => a.name.localeCompare(b.name)) }))
+    const { error } = await supabase.from('companies').insert(row)
+    if (error) console.error('addCompany error:', error)
+    return company
+  },
+
+  async updateCompany(id, data) {
+    const updates = { updated_at: new Date().toISOString() }
+    ;['name', 'type', 'phone', 'email', 'website', 'address', 'notes'].forEach(key => {
+      if (data[key] !== undefined) updates[key] = data[key]
+    })
+    set(s => ({ companies: s.companies.map(item => item.id === id ? { ...item, ...data, updatedAt: updates.updated_at } : item) }))
+    const { error } = await supabase.from('companies').update(updates).eq('id', id)
+    if (error) console.error('updateCompany error:', error)
+  },
+
+  async deleteCompany(id) {
+    set(s => ({ companies: s.companies.filter(item => item.id !== id), projectContacts: s.projectContacts.filter(item => item.companyId !== id) }))
+    const { error } = await supabase.from('companies').delete().eq('id', id)
+    if (error) console.error('deleteCompany error:', error)
+  },
+
+  async addContact(data) {
+    const id = data.id || genId()
+    const now = new Date().toISOString()
+    const row = { id, company_id: data.companyId || null, name: data.name || '', title: data.title || '', email: data.email || '', phone: data.phone || '', notes: data.notes || '', created_at: now, updated_at: now }
+    const contact = mapContact(row)
+    set(s => ({ contacts: [...s.contacts, contact].sort((a, b) => a.name.localeCompare(b.name)) }))
+    const { error } = await supabase.from('contacts').insert(row)
+    if (error) console.error('addContact error:', error)
+    return contact
+  },
+
+  async updateContact(id, data) {
+    const updates = { updated_at: new Date().toISOString() }
+    if (data.companyId !== undefined) updates.company_id = data.companyId || null
+    ;['name', 'title', 'email', 'phone', 'notes'].forEach(key => {
+      if (data[key] !== undefined) updates[key] = data[key]
+    })
+    set(s => ({ contacts: s.contacts.map(item => item.id === id ? { ...item, ...data, updatedAt: updates.updated_at } : item) }))
+    const { error } = await supabase.from('contacts').update(updates).eq('id', id)
+    if (error) console.error('updateContact error:', error)
+  },
+
+  async deleteContact(id) {
+    set(s => ({ contacts: s.contacts.filter(item => item.id !== id), projectContacts: s.projectContacts.filter(item => item.contactId !== id) }))
+    const { error } = await supabase.from('contacts').delete().eq('id', id)
+    if (error) console.error('deleteContact error:', error)
+  },
+
+  async addProjectContact(data) {
+    const id = data.id || genId()
+    const now = new Date().toISOString()
+    const row = { id, project_id: data.projectId, company_id: data.companyId || null, contact_id: data.contactId || null, project_role: data.projectRole || '', discipline: data.discipline || '', stage_ids: data.stageIds || [], status: data.status || 'active', is_primary: Boolean(data.isPrimary), notes: data.notes || '', created_at: now, updated_at: now }
+    const item = mapProjectContact(row)
+    set(s => ({ projectContacts: [item, ...s.projectContacts] }))
+    const { error } = await supabase.from('project_contacts').insert(row)
+    if (error) console.error('addProjectContact error:', error)
+    return item
+  },
+
+  async updateProjectContact(id, data) {
+    const updates = { updated_at: new Date().toISOString() }
+    if (data.projectId !== undefined) updates.project_id = data.projectId
+    if (data.companyId !== undefined) updates.company_id = data.companyId || null
+    if (data.contactId !== undefined) updates.contact_id = data.contactId || null
+    if (data.projectRole !== undefined) updates.project_role = data.projectRole
+    if (data.discipline !== undefined) updates.discipline = data.discipline
+    if (data.stageIds !== undefined) updates.stage_ids = data.stageIds
+    if (data.status !== undefined) updates.status = data.status
+    if (data.isPrimary !== undefined) updates.is_primary = Boolean(data.isPrimary)
+    if (data.notes !== undefined) updates.notes = data.notes
+    set(s => ({ projectContacts: s.projectContacts.map(item => item.id === id ? { ...item, ...data, updatedAt: updates.updated_at } : item) }))
+    const { error } = await supabase.from('project_contacts').update(updates).eq('id', id)
+    if (error) console.error('updateProjectContact error:', error)
+  },
+
+  async updateBatchProjectContacts(ids, data) {
+    if (!ids.length) return
+    const updates = { updated_at: new Date().toISOString() }
+    if (data.projectRole !== undefined) updates.project_role = data.projectRole
+    if (data.discipline !== undefined) updates.discipline = data.discipline
+    if (data.stageIds !== undefined) updates.stage_ids = data.stageIds
+    if (data.status !== undefined) updates.status = data.status
+    set(s => ({ projectContacts: s.projectContacts.map(item => ids.includes(item.id) ? { ...item, ...data, updatedAt: updates.updated_at } : item) }))
+    const { error } = await supabase.from('project_contacts').update(updates).in('id', ids)
+    if (error) console.error('updateBatchProjectContacts error:', error)
+  },
+
+  async deleteProjectContact(id) {
+    set(s => ({ projectContacts: s.projectContacts.filter(item => item.id !== id) }))
+    const { error } = await supabase.from('project_contacts').delete().eq('id', id)
+    if (error) console.error('deleteProjectContact error:', error)
+  },
+
+  async deleteBatchProjectContacts(ids) {
+    if (!ids.length) return
+    set(s => ({ projectContacts: s.projectContacts.filter(item => !ids.includes(item.id)) }))
+    const { error } = await supabase.from('project_contacts').delete().in('id', ids)
+    if (error) console.error('deleteBatchProjectContacts error:', error)
+  },
+
+  async addDailyLog(data) {
+    const id = genId()
+    const now = new Date().toISOString()
+    const row = { id, project_id: data.projectId, log_date: data.logDate || new Date().toISOString().slice(0, 10), summary: data.summary || '', work_completed: data.workCompleted || '', blockers: data.blockers || '', next_steps: data.nextSteps || '', weather: data.weather || '', created_by: data.createdBy || get().currentUser || '', created_at: now, updated_at: now }
+    const item = mapDailyLog(row)
+    set(s => ({ dailyLogs: [item, ...s.dailyLogs] }))
+    const { error } = await supabase.from('daily_logs').insert(row)
+    if (error) console.error('addDailyLog error:', error)
+    return item
+  },
+
+  async updateDailyLog(id, data) {
+    const updates = { updated_at: new Date().toISOString() }
+    if (data.logDate !== undefined) updates.log_date = data.logDate
+    if (data.summary !== undefined) updates.summary = data.summary
+    if (data.workCompleted !== undefined) updates.work_completed = data.workCompleted
+    if (data.blockers !== undefined) updates.blockers = data.blockers
+    if (data.nextSteps !== undefined) updates.next_steps = data.nextSteps
+    if (data.weather !== undefined) updates.weather = data.weather
+    set(s => ({ dailyLogs: s.dailyLogs.map(item => item.id === id ? { ...item, ...data, updatedAt: updates.updated_at } : item) }))
+    const { error } = await supabase.from('daily_logs').update(updates).eq('id', id)
+    if (error) console.error('updateDailyLog error:', error)
+  },
+
+  async deleteDailyLog(id) {
+    set(s => ({ dailyLogs: s.dailyLogs.filter(item => item.id !== id) }))
+    const { error } = await supabase.from('daily_logs').delete().eq('id', id)
+    if (error) console.error('deleteDailyLog error:', error)
   },
 
   // ── Activity Log ───────────────────────────────────────────────────────────

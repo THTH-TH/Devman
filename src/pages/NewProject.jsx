@@ -19,7 +19,7 @@ import useStore from '../store/useStore'
 import { STAGES } from '../data/stages'
 import { CHECKLIST_TEMPLATE } from '../data/checklistTemplate'
 import { MILESTONE_TEMPLATE } from '../data/milestones'
-import { buildScheduleTasks } from '../data/scheduleTemplate'
+import { buildScheduleTasksFromTemplateItems } from '../data/scheduleTemplate'
 import AddressAutocomplete, { buildGoogleMapsUrl } from '../components/AddressAutocomplete'
 
 const STATUS_OPTIONS = ['Active', 'On Hold', 'Blocked', 'Complete']
@@ -209,7 +209,7 @@ function PropertySnapshot({ place, form }) {
 
 export default function NewProject() {
   const navigate = useNavigate()
-  const { projects, addProject, addBatchChecklistItems, addBatchMilestones, addBatchScheduleTasks, logActivity } = useStore()
+  const { projects, addProject, addBatchChecklistItems, addBatchMilestones, addBatchScheduleTasks, logActivity, scheduleTemplates, scheduleTemplateItems } = useStore()
   const [step, setStep] = useState('find')
   const [placeDetails, setPlaceDetails] = useState(null)
   const [teamInput, setTeamInput] = useState('')
@@ -240,6 +240,7 @@ export default function NewProject() {
     startDate: '',
     targetCompletion: '',
     currentStage: 'feasibility',
+    scheduleTemplateId: 'archispace-standard-development-programme',
     status: 'Active',
     description: '',
   })
@@ -317,6 +318,8 @@ export default function NewProject() {
       return
     }
 
+    const selectedTemplateItems = scheduleTemplateItems.filter(item => item.templateId === form.scheduleTemplateId)
+
     await Promise.all([
       addBatchChecklistItems(
         CHECKLIST_TEMPLATE.map(item => ({
@@ -331,7 +334,7 @@ export default function NewProject() {
           projectId: project.id,
         }))
       ),
-      addBatchScheduleTasks(buildScheduleTasks(project.id, project.startDate || new Date())),
+      addBatchScheduleTasks(buildScheduleTasksFromTemplateItems(project.id, project.startDate || new Date(), selectedTemplateItems)),
     ])
 
     logActivity(project.id, 'Project created', project.name)
@@ -551,6 +554,16 @@ export default function NewProject() {
                       {STATUS_OPTIONS.map(status => <option key={status} value={status}>{status}</option>)}
                     </select>
                   </Field>
+
+                  <div className="sm:col-span-2">
+                    <Field label="Schedule template" hint="Seeds the project programme. Existing templates can be imported later from the Schedule tab.">
+                      <select className={inputCls} value={form.scheduleTemplateId} onChange={e => set('scheduleTemplateId', e.target.value)}>
+                        {(scheduleTemplates.length ? scheduleTemplates : [{ id: 'archispace-standard-development-programme', name: 'Archispace Standard Development Programme' }]).map(template => (
+                          <option key={template.id} value={template.id}>{template.name}</option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
                 </div>
 
                 <Field label="Google Drive project folder">

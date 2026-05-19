@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
 import AuthGate from './components/AuthGate'
 import Dashboard from './pages/Dashboard'
@@ -9,7 +9,7 @@ import ProjectWorkspace from './pages/ProjectWorkspace'
 import Workflow from './pages/Workflow'
 import ChecklistPage from './pages/ChecklistPage'
 import Tasks from './pages/Tasks'
-import Schedule from './pages/Schedule'
+import Calendar from './pages/Calendar'
 import Documents from './pages/Documents'
 import Team from './pages/Team'
 import Settings from './pages/Settings'
@@ -99,7 +99,8 @@ export default function App() {
           <Route path="workflow" element={<Workflow />} />
           <Route path="checklist/:projectId" element={<ChecklistPage />} />
           <Route path="tasks" element={<Tasks />} />
-          <Route path="schedule" element={<Schedule />} />
+          <Route path="calendar" element={<Calendar />} />
+          <Route path="schedule" element={<Navigate to="/calendar" replace />} />
           <Route path="documents" element={<Documents />} />
           <Route path="team" element={<Team />} />
           <Route path="settings" element={<Settings />} />

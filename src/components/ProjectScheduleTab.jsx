@@ -3,16 +3,25 @@ import {
   BarChart2,
   Calendar,
   CalendarDays,
+  CheckSquare,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Diamond,
+  Download,
+  Edit3,
+  FileSpreadsheet,
   List,
   Minus,
   Plus,
   Search,
+  Trash2,
+  Upload,
+  X,
 } from 'lucide-react'
+import Papa from 'papaparse'
 import useStore from '../store/useStore'
+import { buildScheduleTasksFromTemplateItems } from '../data/scheduleTemplate'
 
 const DAY_MS = 86_400_000
 
@@ -109,6 +118,69 @@ function groupTasks(tasks) {
       map.get(phase).push(task)
     })
   return Array.from(map.entries()).map(([phase, items]) => ({ phase, items }))
+}
+
+function parseBool(value) {
+  return ['true', 'yes', 'y', '1', 'milestone'].includes(String(value || '').trim().toLowerCase())
+}
+
+function normaliseDate(value) {
+  if (!value) return ''
+  const text = String(value).trim()
+  const nz = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (nz) return formatInput(new Date(Number(nz[3]), Number(nz[2]) - 1, Number(nz[1])))
+  return formatInput(text)
+}
+
+function csvRowsToScheduleTasks(projectId, rows, existingCount = 0) {
+  return rows
+    .map((row, index) => {
+      const lower = Object.fromEntries(Object.entries(row || {}).map(([key, value]) => [String(key).trim().toLowerCase(), value]))
+      const name = lower.task || lower.name || lower['task name'] || lower.title || ''
+      if (!String(name).trim()) return null
+      const phase = lower.phase || lower.stage || lower.folder || 'Uncategorised'
+      const startDate = normaliseDate(lower.start || lower['start date'] || lower.start_date)
+      const endDate = normaliseDate(lower.finish || lower.end || lower['end date'] || lower.finish_date)
+      const duration = Number(lower.duration || lower.days || lower['duration days'] || lower.duration_days || 1)
+      return {
+        projectId,
+        name: String(name).trim(),
+        phase: String(phase || 'Uncategorised').trim(),
+        startDate,
+        endDate,
+        durationDays: duration > 0 ? duration : durationDays({ startDate, endDate }),
+        status: lower.status || 'not-started',
+        progress: Number(lower.progress || 0),
+        isMilestone: parseBool(lower.milestone || lower.is_milestone || lower['is milestone']),
+        assignee: lower.assignee || '',
+        internalOwner: lower.owner || lower['internal owner'] || '',
+        notes: lower.notes || '',
+        sortOrder: existingCount + index,
+      }
+    })
+    .filter(Boolean)
+}
+
+function exportScheduleCsv(tasks, fileName = 'schedule.csv') {
+  const csv = Papa.unparse(tasks.map(task => ({
+    phase: task.phase,
+    task_name: task.name,
+    start_date: task.startDate,
+    end_date: task.endDate,
+    duration_days: durationDays(task),
+    status: smartStatus(task),
+    assignee: task.assignee || '',
+    internal_owner: task.internalOwner || '',
+    milestone: task.isMilestone ? 'yes' : '',
+    notes: task.notes || '',
+  })))
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 function StatusSelect({ task, onChange }) {
@@ -240,14 +312,148 @@ function TaskForm({ projectId, phaseOptions, onClose }) {
   )
 }
 
-function TaskListView({ projectId, tasks, showProject = false }) {
+function TaskEditDrawer({ task, phaseOptions, onClose }) {
   const { updateScheduleTask, deleteScheduleTask } = useStore()
+  const [form, setForm] = useState({
+    name: task.name || '',
+    phase: task.phase || '',
+    assignee: task.assignee || '',
+    internalOwner: task.internalOwner || '',
+    startDate: formatInput(task.startDate),
+    endDate: formatInput(task.endDate),
+    status: task.status || 'not-started',
+    progress: task.progress ?? 0,
+    isMilestone: Boolean(task.isMilestone),
+    notes: task.notes || '',
+  })
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const set = (key, value) => setForm(current => ({ ...current, [key]: value }))
+
+  const save = async () => {
+    if (!form.name.trim()) return
+    await updateScheduleTask(task.id, {
+      ...form,
+      name: form.name.trim(),
+      phase: form.phase.trim() || 'Uncategorised',
+      durationDays: durationDays(form),
+      progress: Number(form.progress || 0),
+    })
+    onClose()
+  }
+
+  const remove = async () => {
+    await deleteScheduleTask(task.id)
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="h-full w-full max-w-md overflow-y-auto bg-white shadow-2xl">
+        <div className="sticky top-0 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">Edit schedule task</h3>
+            <p className="text-xs text-gray-400">Dates, owner, milestone and programme notes.</p>
+          </div>
+          <button onClick={onClose} className="rounded-md p-1 text-gray-400 hover:bg-gray-50 hover:text-gray-700"><X size={16} /></button>
+        </div>
+        <div className="space-y-4 px-5 py-5">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Task name</label>
+            <input className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-ocean-400" value={form.name} onChange={e => set('name', e.target.value)} />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Stage / phase</label>
+            <input className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-ocean-400" list="drawer-schedule-phases" value={form.phase} onChange={e => set('phase', e.target.value)} />
+            <datalist id="drawer-schedule-phases">
+              {phaseOptions.map(phase => <option key={phase} value={phase} />)}
+            </datalist>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">Start</label>
+              <input type="date" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-ocean-400" value={form.startDate} onChange={e => set('startDate', e.target.value)} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">Finish</label>
+              <input type="date" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-ocean-400" value={form.endDate} onChange={e => set('endDate', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">Status</label>
+              <select className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-ocean-400" value={form.status} onChange={e => set('status', e.target.value)}>
+                {SELECTABLE_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">Progress %</label>
+              <input type="number" min="0" max="100" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-ocean-400" value={form.progress} onChange={e => set('progress', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">Assignee</label>
+              <input className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-ocean-400" value={form.assignee} onChange={e => set('assignee', e.target.value)} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">Internal owner</label>
+              <input className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-ocean-400" value={form.internalOwner} onChange={e => set('internalOwner', e.target.value)} />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={form.isMilestone} onChange={e => set('isMilestone', e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-forest-600 focus:ring-forest-500" />
+            Show on global milestone calendar
+          </label>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Notes</label>
+            <textarea className="min-h-[100px] w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-ocean-400" value={form.notes} onChange={e => set('notes', e.target.value)} />
+          </div>
+        </div>
+        <div className="sticky bottom-0 flex items-center justify-between border-t border-gray-100 bg-white px-5 py-4">
+          {confirmDelete ? (
+            <div className="flex items-center gap-2">
+              <button onClick={remove} className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700">Delete</button>
+              <button onClick={() => setConfirmDelete(false)} className="rounded-lg px-3 py-2 text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmDelete(true)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50">
+              <Trash2 size={14} /> Delete
+            </button>
+          )}
+          <div className="flex gap-2">
+            <button onClick={onClose} className="rounded-lg px-3 py-2 text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+            <button onClick={save} disabled={!form.name.trim()} className="rounded-lg bg-forest-600 px-4 py-2 text-sm font-semibold text-white hover:bg-forest-700 disabled:opacity-50">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TaskListView({ projectId, projectStartDate, tasks, showProject = false }) {
+  const {
+    updateScheduleTask,
+    deleteScheduleTask,
+    updateBatchScheduleTasks,
+    deleteBatchScheduleTasks,
+    addBatchScheduleTasks,
+    scheduleTemplates,
+    scheduleTemplateItems,
+  } = useStore()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [stageFilter, setStageFilter] = useState('all')
   const [collapsed, setCollapsed] = useState(new Set())
   const [showNewTask, setShowNewTask] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [selected, setSelected] = useState(new Set())
+  const [bulk, setBulk] = useState({ status: '', phase: '', assignee: '', internalOwner: '', shiftDays: '', milestone: '' })
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [editTask, setEditTask] = useState(null)
+  const [csvImport, setCsvImport] = useState(null)
+  const [templateOpen, setTemplateOpen] = useState(false)
+  const [templateMode, setTemplateMode] = useState('missing')
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
 
   const phases = useMemo(() => [...new Set(tasks.map(t => t.phase).filter(Boolean))], [tasks])
 
@@ -262,6 +468,13 @@ function TaskListView({ projectId, tasks, showProject = false }) {
   }, [tasks, search, statusFilter, stageFilter])
 
   const grouped = useMemo(() => groupTasks(filtered), [filtered])
+  const selectedIds = [...selected].filter(id => tasks.some(task => task.id === id))
+  const visibleIds = filtered.map(task => task.id)
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selected.has(id))
+  const availableTemplates = scheduleTemplates.length
+    ? scheduleTemplates
+    : [{ id: 'archispace-standard-development-programme', name: 'Archispace Standard Development Programme', isDefault: true }]
+  const activeTemplateId = selectedTemplateId || availableTemplates.find(t => t.isDefault)?.id || availableTemplates[0]?.id || ''
 
   const toggleGroup = phase => {
     setCollapsed(current => {
@@ -287,11 +500,86 @@ function TaskListView({ projectId, tasks, showProject = false }) {
     await updateScheduleTask(task.id, next)
   }
 
-  const tableCols = showProject
-    ? 'grid-cols-[minmax(320px,1fr)_150px_132px_132px_80px_150px_48px]'
-    : 'grid-cols-[minmax(320px,1fr)_132px_132px_80px_150px_48px]'
+  const toggleSelected = taskId => {
+    setSelected(current => {
+      const next = new Set(current)
+      if (next.has(taskId)) next.delete(taskId)
+      else next.add(taskId)
+      return next
+    })
+  }
 
-  if (!tasks.length && !showNewTask) return <EmptySchedule onAddTask={() => projectId && setShowNewTask(true)} />
+  const toggleAllVisible = () => {
+    setSelected(current => {
+      const next = new Set(current)
+      if (allVisibleSelected) visibleIds.forEach(id => next.delete(id))
+      else visibleIds.forEach(id => next.add(id))
+      return next
+    })
+  }
+
+  const applyBulk = async () => {
+    const payload = {}
+    if (bulk.status) {
+      payload.status = bulk.status
+      if (bulk.status === 'complete') payload.progress = 100
+      if (bulk.status === 'not-started') payload.progress = 0
+    }
+    if (bulk.phase.trim()) payload.phase = bulk.phase.trim()
+    if (bulk.assignee.trim()) payload.assignee = bulk.assignee.trim()
+    if (bulk.internalOwner.trim()) payload.internalOwner = bulk.internalOwner.trim()
+    if (bulk.milestone) payload.isMilestone = bulk.milestone === 'yes'
+    if (bulk.shiftDays) payload.shiftDays = Number(bulk.shiftDays)
+    if (!Object.keys(payload).length) return
+    await updateBatchScheduleTasks(selectedIds, payload)
+    setBulk({ status: '', phase: '', assignee: '', internalOwner: '', shiftDays: '', milestone: '' })
+    setSelected(new Set())
+  }
+
+  const removeSelected = async () => {
+    await deleteBatchScheduleTasks(selectedIds)
+    setSelected(new Set())
+    setConfirmBulkDelete(false)
+  }
+
+  const handleCsvFile = file => {
+    if (!file || !projectId) return
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: result => {
+        const rows = result.data || []
+        setCsvImport({ rows, tasks: csvRowsToScheduleTasks(projectId, rows, tasks.length) })
+      },
+    })
+  }
+
+  const applyCsvImport = async () => {
+    if (!csvImport?.tasks?.length) return
+    await addBatchScheduleTasks(csvImport.tasks)
+    setCsvImport(null)
+  }
+
+  const applyTemplate = async () => {
+    if (!projectId) return
+    const selectedTemplateItems = scheduleTemplateItems.filter(item => item.templateId === activeTemplateId)
+    const generated = buildScheduleTasksFromTemplateItems(projectId, projectStartDate || tasks[0]?.startDate || new Date(), selectedTemplateItems)
+    const existingKeys = new Set(tasks.map(task => `${String(task.phase || '').toLowerCase()}::${String(task.name || '').toLowerCase()}`))
+    const toAdd = templateMode === 'replace'
+      ? generated
+      : generated.filter(task => !existingKeys.has(`${String(task.phase || '').toLowerCase()}::${String(task.name || '').toLowerCase()}`))
+    if (templateMode === 'replace') {
+      const ok = window.confirm('Replace the current project schedule with this template? This deletes existing schedule rows for this project.')
+      if (!ok) return
+      await deleteBatchScheduleTasks(tasks.map(task => task.id))
+    }
+    if (toAdd.length) await addBatchScheduleTasks(toAdd)
+    setTemplateOpen(false)
+  }
+
+  const tableCols = showProject
+    ? 'grid-cols-[42px_minmax(320px,1fr)_150px_132px_132px_80px_150px_48px]'
+    : 'grid-cols-[42px_minmax(320px,1fr)_132px_132px_80px_150px_48px]'
 
   return (
     <div className="space-y-3">
@@ -317,18 +605,114 @@ function TaskListView({ projectId, tasks, showProject = false }) {
         </select>
         <div className="flex-1" />
         {projectId && (
-          <button onClick={() => setShowNewTask(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-forest-600 px-3 text-sm font-medium text-white hover:bg-forest-700">
-            <Plus size={14} /> Add Task
-          </button>
+          <>
+            <button onClick={() => setTemplateOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              <FileSpreadsheet size={14} /> Template
+            </button>
+            <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              <Upload size={14} /> Import CSV
+              <input type="file" accept=".csv,text/csv" className="hidden" onChange={e => handleCsvFile(e.target.files?.[0])} />
+            </label>
+            <button onClick={() => exportScheduleCsv(tasks, 'devman-schedule.csv')} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              <Download size={14} /> Export
+            </button>
+            <button onClick={() => setShowNewTask(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-forest-600 px-3 text-sm font-medium text-white hover:bg-forest-700">
+              <Plus size={14} /> Add Task
+            </button>
+          </>
         )}
         <button onClick={() => setCollapsed(new Set())} className="h-8 rounded-md px-2 text-xs text-gray-600 hover:bg-gray-50">Expand All</button>
         <button onClick={() => setCollapsed(new Set(grouped.map(g => g.phase)))} className="h-8 rounded-md px-2 text-xs text-gray-600 hover:bg-gray-50">Collapse All</button>
       </div>
 
+      {selectedIds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-forest-100 bg-forest-50/60 p-3">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-forest-800"><CheckSquare size={14} /> {selectedIds.length} selected</span>
+          <select className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" value={bulk.status} onChange={e => setBulk(current => ({ ...current, status: e.target.value }))}>
+            <option value="">Status</option>
+            {SELECTABLE_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          <input className="h-8 w-36 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" placeholder="Stage / phase" list="bulk-schedule-phases" value={bulk.phase} onChange={e => setBulk(current => ({ ...current, phase: e.target.value }))} />
+          <datalist id="bulk-schedule-phases">{phases.map(phase => <option key={phase} value={phase} />)}</datalist>
+          <input className="h-8 w-32 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" placeholder="Assignee" value={bulk.assignee} onChange={e => setBulk(current => ({ ...current, assignee: e.target.value }))} />
+          <input className="h-8 w-32 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" placeholder="Owner" value={bulk.internalOwner} onChange={e => setBulk(current => ({ ...current, internalOwner: e.target.value }))} />
+          <input type="number" className="h-8 w-24 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" placeholder="Shift days" value={bulk.shiftDays} onChange={e => setBulk(current => ({ ...current, shiftDays: e.target.value }))} />
+          <select className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" value={bulk.milestone} onChange={e => setBulk(current => ({ ...current, milestone: e.target.value }))}>
+            <option value="">Milestone</option>
+            <option value="yes">Mark milestone</option>
+            <option value="no">Unmark milestone</option>
+          </select>
+          <button onClick={applyBulk} className="h-8 rounded-md bg-forest-600 px-3 text-xs font-semibold text-white hover:bg-forest-700">Apply</button>
+          {confirmBulkDelete ? (
+            <div className="flex items-center gap-1">
+              <button onClick={removeSelected} className="h-8 rounded-md bg-red-600 px-3 text-xs font-semibold text-white hover:bg-red-700">Delete</button>
+              <button onClick={() => setConfirmBulkDelete(false)} className="h-8 rounded-md px-2 text-xs text-gray-500 hover:bg-white">Cancel</button>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmBulkDelete(true)} className="h-8 rounded-md px-3 text-xs font-semibold text-red-600 hover:bg-red-50">Delete selected</button>
+          )}
+        </div>
+      )}
+
+      {templateOpen && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-gray-800">Apply schedule template</div>
+              <div className="text-xs text-gray-400">Default is add missing tasks only using stage plus task name.</div>
+            </div>
+            <button onClick={() => setTemplateOpen(false)} className="rounded-md p-1 text-gray-400 hover:bg-gray-50"><X size={15} /></button>
+          </div>
+          <div className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
+            <select className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-ocean-400" value={activeTemplateId} onChange={e => setSelectedTemplateId(e.target.value)}>
+              {availableTemplates.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}
+            </select>
+            <select className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-ocean-400" value={templateMode} onChange={e => setTemplateMode(e.target.value)}>
+              <option value="missing">Add missing tasks only</option>
+              <option value="replace">Replace current schedule</option>
+            </select>
+            <button onClick={applyTemplate} className="h-9 rounded-lg bg-forest-600 px-4 text-sm font-semibold text-white hover:bg-forest-700">Apply</button>
+          </div>
+        </div>
+      )}
+
+      {csvImport && (
+        <div className="rounded-xl border border-ocean-100 bg-ocean-50/40 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-gray-800">CSV import preview</div>
+              <div className="text-xs text-gray-500">{csvImport.tasks.length} usable task rows found. Headers can be phase/stage, task/name, start, finish, duration, milestone, owner, notes.</div>
+            </div>
+            <button onClick={() => setCsvImport(null)} className="rounded-md p-1 text-gray-400 hover:bg-white"><X size={15} /></button>
+          </div>
+          <div className="mb-3 max-h-48 overflow-auto rounded-lg border border-ocean-100 bg-white">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500">
+                <tr><th className="px-3 py-2 text-left">Phase</th><th className="px-3 py-2 text-left">Task</th><th className="px-3 py-2 text-left">Start</th><th className="px-3 py-2 text-left">Finish</th></tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {csvImport.tasks.slice(0, 8).map((task, index) => (
+                  <tr key={`${task.name}-${index}`}>
+                    <td className="px-3 py-2">{task.phase}</td>
+                    <td className="px-3 py-2">{task.name}</td>
+                    <td className="px-3 py-2">{task.startDate || '-'}</td>
+                    <td className="px-3 py-2">{task.endDate || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button onClick={applyCsvImport} disabled={!csvImport.tasks.length} className="rounded-lg bg-forest-600 px-4 py-2 text-sm font-semibold text-white hover:bg-forest-700 disabled:opacity-50">Import schedule rows</button>
+        </div>
+      )}
+
       {showNewTask && projectId && <TaskForm projectId={projectId} phaseOptions={phases} onClose={() => setShowNewTask(false)} />}
 
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
         <div className={`grid ${tableCols} border-b border-gray-200 bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500`}>
+          <div className="px-3 py-3">
+            <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} className="h-4 w-4 rounded border-gray-300 text-forest-600 focus:ring-forest-500" />
+          </div>
           <div className="px-5 py-3">Task</div>
           {showProject && <div className="px-3 py-3">Project</div>}
           <div className="px-3 py-3">Start</div>
@@ -372,11 +756,14 @@ function TaskListView({ projectId, tasks, showProject = false }) {
                     key={task.id}
                     className={`group grid ${tableCols} items-center border-b border-gray-200 last:border-b-0 ${cfg.row} hover:bg-gray-50`}
                   >
+                    <div className="px-3" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selected.has(task.id)} onChange={() => toggleSelected(task.id)} className="h-4 w-4 rounded border-gray-300 text-forest-600 focus:ring-forest-500" />
+                    </div>
                     <div className="min-w-0 px-5 py-2.5">
                       <div className="flex min-w-0 items-center gap-2">
                         {task.isMilestone && <Diamond size={12} className="shrink-0 fill-forest-600 text-forest-600" />}
                         <button
-                          onClick={() => setShowNewTask(false)}
+                          onClick={() => setEditTask(task)}
                           className={`truncate text-left text-sm ${status === 'complete' ? 'text-gray-500 line-through' : 'text-gray-800'}`}
                           title={task.name}
                         >
@@ -396,7 +783,10 @@ function TaskListView({ projectId, tasks, showProject = false }) {
                           <button onClick={() => setConfirmDelete(null)} className="rounded px-1.5 py-1 text-xs text-gray-400 hover:bg-gray-50">No</button>
                         </div>
                       ) : (
-                        <button onClick={() => setConfirmDelete(task.id)} className="rounded px-2 py-1 text-xs text-gray-300 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100">Del</button>
+                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100">
+                          <button onClick={() => setEditTask(task)} className="rounded px-1.5 py-1 text-gray-400 hover:bg-gray-50 hover:text-gray-700"><Edit3 size={13} /></button>
+                          <button onClick={() => setConfirmDelete(task.id)} className="rounded px-1.5 py-1 text-gray-300 hover:bg-red-50 hover:text-red-600"><Trash2 size={13} /></button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -406,6 +796,7 @@ function TaskListView({ projectId, tasks, showProject = false }) {
           )
         })}
       </div>
+      {editTask && <TaskEditDrawer task={editTask} phaseOptions={phases} onClose={() => setEditTask(null)} />}
     </div>
   )
 }
@@ -659,7 +1050,7 @@ export default function ScheduleTab({ project }) {
         ))}
       </div>
 
-      {view === 'list' && <TaskListView projectId={project.id} tasks={tasks} />}
+      {view === 'list' && <TaskListView projectId={project.id} projectStartDate={project.startDate} tasks={tasks} />}
       {view === 'gantt' && <GanttView tasks={tasks} />}
       {view === 'calendar' && <CalendarView tasks={tasks} />}
     </div>

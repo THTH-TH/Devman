@@ -314,7 +314,7 @@ function DocumentVault({ projects, profile, currentUser, addDocument, onAddLink 
 }
 
 export default function Documents() {
-  const { projects, documents, profile, currentUser, addDocument, updateDocument, deleteDocument } = useStore()
+  const { projects, documents, profile, currentUser, addDocument, updateDocument, deleteDocument, updateBatchDocuments, deleteBatchDocuments } = useStore()
   const [search, setSearch] = useState('')
   const [filterProject, setFilterProject] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
@@ -322,6 +322,9 @@ export default function Documents() {
   const [modal, setModal] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [openError, setOpenError] = useState('')
+  const [selected, setSelected] = useState(new Set())
+  const [bulk, setBulk] = useState({ projectId: '', stageId: '', category: '' })
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
 
   const stageCounts = useMemo(() => {
     const counts = Object.fromEntries(STAGES.map(stage => [stage.id, 0]))
@@ -341,6 +344,45 @@ export default function Documents() {
       return true
     })
   }, [documents, filterProject, filterCategory, filterStage, search])
+
+  const selectedIds = [...selected].filter(id => documents.some(doc => doc.id === id))
+  const visibleIds = filtered.map(doc => doc.id)
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selected.has(id))
+
+  const toggleSelected = id => {
+    setSelected(current => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAllVisible = () => {
+    setSelected(current => {
+      const next = new Set(current)
+      if (allVisibleSelected) visibleIds.forEach(id => next.delete(id))
+      else visibleIds.forEach(id => next.add(id))
+      return next
+    })
+  }
+
+  const applyBulk = async () => {
+    const payload = {}
+    if (bulk.projectId) payload.projectId = bulk.projectId
+    if (bulk.stageId) payload.stageId = bulk.stageId
+    if (bulk.category) payload.category = bulk.category
+    if (!Object.keys(payload).length) return
+    await updateBatchDocuments(selectedIds, payload)
+    setBulk({ projectId: '', stageId: '', category: '' })
+    setSelected(new Set())
+  }
+
+  const removeSelected = async () => {
+    await deleteBatchDocuments(selectedIds)
+    setSelected(new Set())
+    setConfirmBulkDelete(false)
+  }
 
   const fmtDate = d => new Date(d).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
 
@@ -429,6 +471,33 @@ export default function Documents() {
             )}
           </div>
 
+          {selectedIds.length > 0 && (
+            <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-forest-100 bg-forest-50/60 p-3">
+              <span className="text-xs font-semibold text-forest-800">{selectedIds.length} selected</span>
+              <select className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" value={bulk.projectId} onChange={e => setBulk(current => ({ ...current, projectId: e.target.value }))}>
+                <option value="">Project</option>
+                {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
+              </select>
+              <select className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" value={bulk.stageId} onChange={e => setBulk(current => ({ ...current, stageId: e.target.value }))}>
+                <option value="">Stage folder</option>
+                {STAGES.map(stage => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
+              </select>
+              <select className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" value={bulk.category} onChange={e => setBulk(current => ({ ...current, category: e.target.value }))}>
+                <option value="">Category</option>
+                {CATEGORIES.map(c => <option key={c} value={c}>{CAT_LABELS[c]}</option>)}
+              </select>
+              <button onClick={applyBulk} className="h-8 rounded-md bg-forest-600 px-3 text-xs font-semibold text-white hover:bg-forest-700">Apply</button>
+              {confirmBulkDelete ? (
+                <div className="flex items-center gap-1">
+                  <button onClick={removeSelected} className="h-8 rounded-md bg-red-600 px-3 text-xs font-semibold text-white hover:bg-red-700">Delete</button>
+                  <button onClick={() => setConfirmBulkDelete(false)} className="h-8 rounded-md px-2 text-xs text-gray-500 hover:bg-white">Cancel</button>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmBulkDelete(true)} className="h-8 rounded-md px-3 text-xs font-semibold text-red-600 hover:bg-red-50">Delete selected</button>
+              )}
+            </div>
+          )}
+
           {openError && (
             <div className="mb-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{openError}</div>
           )}
@@ -442,6 +511,9 @@ export default function Documents() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100">
+                    <th className="w-8 px-4 py-3">
+                      <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} className="h-4 w-4 rounded border-gray-300 text-forest-600 focus:ring-forest-500" />
+                    </th>
                     <th className="text-left px-5 py-3 font-medium">Name</th>
                     <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Stage</th>
                     <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Category</th>
@@ -456,6 +528,9 @@ export default function Documents() {
                     const project = projects.find(p => p.id === doc.projectId)
                     return (
                       <tr key={doc.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3">
+                          <input type="checkbox" checked={selected.has(doc.id)} onChange={() => toggleSelected(doc.id)} className="h-4 w-4 rounded border-gray-300 text-forest-600 focus:ring-forest-500" />
+                        </td>
                         <td className="px-5 py-3">
                           <button
                             type="button"

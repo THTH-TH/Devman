@@ -24,8 +24,10 @@ import ChecklistItemModal from '../modals/ChecklistItemModal'
 import { STAGE_MAP, STAGES } from '../data/stages'
 import ChecklistView from './ChecklistView'
 import ScheduleTab from '../components/ProjectScheduleTab'
+import ProjectDirectoryTab from '../components/ProjectDirectoryTab'
+import ProjectDailyLogTab from '../components/ProjectDailyLogTab'
 
-const TABS = ['Overview', 'Checklist', 'Tasks', 'Schedule', 'Documents']
+const TABS = ['Overview', 'Schedule', 'Checklist', 'Tasks', 'Documents', 'Directory', 'Daily Log']
 
 const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-transparent'
 
@@ -434,10 +436,13 @@ function AssignedTaskForm({ project, task, onClose }) {
 }
 
 function AssignedTasksTab({ project }) {
-  const { tasks, updateTask } = useStore()
+  const { tasks, updateTask, updateBatchTasks, deleteBatchTasks } = useStore()
   const [filterStatus, setFilterStatus] = useState('active')
   const [showNew, setShowNew] = useState(false)
   const [editTask, setEditTask] = useState(null)
+  const [selected, setSelected] = useState(new Set())
+  const [bulk, setBulk] = useState({ assignee: '', status: '', priority: '', dueDate: '' })
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
 
   const projectTasks = useMemo(() => tasks.filter(t => t.projectId === project.id), [tasks, project.id])
   const counts = useMemo(() => {
@@ -464,6 +469,45 @@ function AssignedTasksTab({ project }) {
 
   const toggleDone = task => updateTask(task.id, { status: task.status === 'done' ? 'open' : 'done' })
   const priorityColor = p => ({ critical: 'text-red-600', high: 'text-orange-500', medium: 'text-gray-400', low: 'text-gray-300' }[p] || 'text-gray-400')
+  const selectedIds = [...selected].filter(id => projectTasks.some(task => task.id === id))
+  const visibleIds = items.map(task => task.id)
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selected.has(id))
+
+  const toggleSelected = taskId => {
+    setSelected(current => {
+      const next = new Set(current)
+      if (next.has(taskId)) next.delete(taskId)
+      else next.add(taskId)
+      return next
+    })
+  }
+
+  const toggleAllVisible = () => {
+    setSelected(current => {
+      const next = new Set(current)
+      if (allVisibleSelected) visibleIds.forEach(id => next.delete(id))
+      else visibleIds.forEach(id => next.add(id))
+      return next
+    })
+  }
+
+  const applyBulk = async () => {
+    const payload = {}
+    if (bulk.assignee.trim()) payload.assignee = bulk.assignee.trim()
+    if (bulk.status) payload.status = bulk.status
+    if (bulk.priority) payload.priority = bulk.priority
+    if (bulk.dueDate) payload.dueDate = bulk.dueDate
+    if (!Object.keys(payload).length) return
+    await updateBatchTasks(selectedIds, payload)
+    setBulk({ assignee: '', status: '', priority: '', dueDate: '' })
+    setSelected(new Set())
+  }
+
+  const removeSelected = async () => {
+    await deleteBatchTasks(selectedIds)
+    setSelected(new Set())
+    setConfirmBulkDelete(false)
+  }
 
   return (
     <div>
@@ -480,6 +524,36 @@ function AssignedTasksTab({ project }) {
         </button>
       </div>
 
+      {selectedIds.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-forest-100 bg-forest-50/50 p-3">
+          <span className="text-xs font-semibold text-forest-800">{selectedIds.length} selected</span>
+          <input
+            className="h-8 w-40 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400"
+            placeholder="Assignee"
+            value={bulk.assignee}
+            onChange={e => setBulk(current => ({ ...current, assignee: e.target.value }))}
+          />
+          <select className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" value={bulk.status} onChange={e => setBulk(current => ({ ...current, status: e.target.value }))}>
+            <option value="">Status</option>
+            {Object.entries(ASSIGNED_TASK_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+          <select className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" value={bulk.priority} onChange={e => setBulk(current => ({ ...current, priority: e.target.value }))}>
+            <option value="">Priority</option>
+            {['critical', 'high', 'medium', 'low'].map(value => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <input type="date" className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" value={bulk.dueDate} onChange={e => setBulk(current => ({ ...current, dueDate: e.target.value }))} />
+          <button onClick={applyBulk} className="h-8 rounded-md bg-forest-600 px-3 text-xs font-semibold text-white hover:bg-forest-700">Apply</button>
+          {confirmBulkDelete ? (
+            <div className="flex items-center gap-1">
+              <button onClick={removeSelected} className="h-8 rounded-md bg-red-600 px-3 text-xs font-semibold text-white hover:bg-red-700">Delete</button>
+              <button onClick={() => setConfirmBulkDelete(false)} className="h-8 rounded-md px-2 text-xs text-gray-500 hover:bg-white">Cancel</button>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmBulkDelete(true)} className="h-8 rounded-md px-3 text-xs font-semibold text-red-600 hover:bg-red-50">Delete selected</button>
+          )}
+        </div>
+      )}
+
       {items.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-gray-100">
           <p className="text-sm font-medium text-gray-600 mb-1">No assigned tasks in this view</p>
@@ -490,7 +564,10 @@ function AssignedTasksTab({ project }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100">
-                <th className="w-8 px-4 py-2.5" />
+                <th className="w-8 px-4 py-2.5">
+                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} className="w-4 h-4 rounded border-gray-300 text-ocean-600 focus:ring-ocean-500" />
+                </th>
+                <th className="w-8 px-2 py-2.5" />
                 <th className="text-left px-4 py-2.5 font-medium">Task</th>
                 <th className="text-left px-4 py-2.5 font-medium hidden md:table-cell">Assignee</th>
                 <th className="text-left px-4 py-2.5 font-medium hidden md:table-cell">Due</th>
@@ -505,6 +582,9 @@ function AssignedTasksTab({ project }) {
                 return (
                   <tr key={task.id} className={`hover:bg-gray-50 cursor-pointer ${isOverdue ? 'bg-red-50/50' : ''}`} onClick={() => setEditTask(task)}>
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selected.has(task.id)} onChange={() => toggleSelected(task.id)} className="w-4 h-4 rounded border-gray-300 text-ocean-600 focus:ring-ocean-500" />
+                    </td>
+                    <td className="px-2 py-3" onClick={e => e.stopPropagation()}>
                       <input type="checkbox" checked={isDone} onChange={() => toggleDone(task)} className="w-4 h-4 rounded border-gray-300 text-ocean-600 focus:ring-ocean-500" />
                     </td>
                     <td className="px-4 py-3">
@@ -755,8 +835,17 @@ function DocumentsTab({ project }) {
 // ── Overview Tab ──────────────────────────────────────────────────────────────
 
 function OverviewTab({ project }) {
-  const { checklistItems, activityLog } = useStore()
+  const { checklistItems, activityLog, documents, projectContacts, companies, contacts, dailyLogs, milestones, scheduleTasks } = useStore()
   const items = checklistItems.filter(i => i.projectId === project.id)
+  const activeStageIds = project.activeStageIds?.length ? project.activeStageIds : [project.currentStage]
+  const activeStages = STAGES.filter(stage => activeStageIds.includes(stage.id))
+  const projectDocs = documents.filter(doc => doc.projectId === project.id).slice(0, 5)
+  const projectDirectory = projectContacts.filter(item => item.projectId === project.id)
+  const recentLogs = dailyLogs
+    .filter(log => log.projectId === project.id)
+    .slice()
+    .sort((a, b) => String(b.logDate || b.createdAt || '').localeCompare(String(a.logDate || a.createdAt || '')))
+    .slice(0, 3)
 
   const stageStats = useMemo(() => {
     return STAGES.map(stage => {
@@ -773,8 +862,29 @@ function OverviewTab({ project }) {
   const total = items.length
   const done = items.filter(i => i.done).length
   const overdue = items.filter(i => i.dueDate && !i.done && new Date(i.dueDate) < new Date())
+  const delayedSchedule = scheduleTasks.filter(t => t.projectId === project.id && t.status === 'delayed')
+  const upcomingMilestones = [
+    ...milestones
+      .filter(m => m.projectId === project.id && m.date)
+      .map(m => ({ id: `milestone-${m.id}`, label: m.label, date: m.date, stageId: m.stageId, type: 'Milestone' })),
+    ...scheduleTasks
+      .filter(t => t.projectId === project.id && t.isMilestone && (t.endDate || t.startDate))
+      .map(t => ({ id: `schedule-${t.id}`, label: t.name, date: t.endDate || t.startDate, stageId: STAGES.find(s => s.label === t.phase || s.short === t.phase)?.id, type: 'Schedule' })),
+  ]
+    .filter(item => new Date(item.date) >= new Date(new Date().toDateString()))
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .slice(0, 5)
+  const attentionItems = [
+    ...blockers.map(item => ({ id: `blocker-${item.id}`, tone: 'red', label: item.label, meta: 'Checklist blocker' })),
+    ...overdue.map(item => ({ id: `overdue-${item.id}`, tone: 'red', label: item.label, meta: 'Overdue checklist item' })),
+    ...delayedSchedule.map(item => ({ id: `schedule-${item.id}`, tone: 'red', label: item.name, meta: 'Delayed schedule item' })),
+    ...requiredIncomplete.map(item => ({ id: `required-${item.id}`, tone: 'amber', label: item.label, meta: 'Required stage gate' })),
+    ...recentLogs.filter(log => log.blockers).map(log => ({ id: `log-${log.id}`, tone: 'amber', label: log.blockers, meta: `Daily log ${log.logDate}` })),
+  ].slice(0, 8)
 
   const recent = activityLog.filter(a => a.projectId === project.id).slice(0, 8)
+  const companyName = companyId => companies.find(company => company.id === companyId)?.name || ''
+  const contactName = contactId => contacts.find(contact => contact.id === contactId)?.name || ''
 
   const fmtTime = ts => {
     const d = new Date(ts)
@@ -817,6 +927,40 @@ function OverviewTab({ project }) {
           {project.description && (
             <p className="text-sm text-gray-600 mt-3 pt-3 border-t border-gray-50">{project.description}</p>
           )}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-4">
+          <div className="bg-white rounded-xl border border-gray-100 p-5">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Active stages</h3>
+            <div className="flex flex-wrap gap-2">
+              {activeStages.map(activeStage => (
+                <span
+                  key={activeStage.id}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${activeStage.id === project.currentStage ? `${activeStage.bg} text-white` : `${activeStage.light} ${activeStage.text}`}`}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  {activeStage.label}
+                  {activeStage.id === project.currentStage && <span className="text-[10px] opacity-80">Primary</span>}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-100 p-5">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Attention</h3>
+            {attentionItems.length === 0 ? (
+              <div className="text-xs text-gray-400">No blockers, overdue items or delayed schedule tasks.</div>
+            ) : (
+              <div className="space-y-2">
+                {attentionItems.slice(0, 4).map(item => (
+                  <div key={item.id} className={`rounded-lg border px-3 py-2 ${item.tone === 'red' ? 'border-red-100 bg-red-50 text-red-700' : 'border-amber-100 bg-amber-50 text-amber-700'}`}>
+                    <div className="text-xs font-semibold line-clamp-1">{item.label}</div>
+                    <div className="text-[10px] opacity-70">{item.meta}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {(project.legalDescription || project.bcNumber || project.driveFolderUrl || project.latitude || project.buildingWorkDescription) && (
@@ -944,24 +1088,100 @@ function OverviewTab({ project }) {
         )}
       </div>
 
-      {/* Right column — activity */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-50">
-          <h3 className="text-sm font-semibold text-gray-700">Activity</h3>
-        </div>
-        {recent.length === 0 ? (
-          <div className="px-5 py-8 text-center text-sm text-gray-400">No activity yet.</div>
-        ) : (
-          <div className="divide-y divide-gray-50 overflow-y-auto max-h-96">
-            {recent.map(entry => (
-              <div key={entry.id} className="px-5 py-3">
-                <div className="text-xs font-medium text-gray-700">{entry.action}</div>
-                <div className="text-xs text-gray-400 mt-0.5 line-clamp-2">{entry.detail}</div>
-                <div className="text-[10px] text-gray-300 mt-1">{fmtTime(entry.timestamp)}</div>
-              </div>
-            ))}
+      <div className="space-y-4">
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50">
+            <h3 className="text-sm font-semibold text-gray-700">Upcoming milestones</h3>
           </div>
-        )}
+          {upcomingMilestones.length === 0 ? (
+            <div className="px-5 py-8 text-center text-sm text-gray-400">No upcoming milestones.</div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {upcomingMilestones.map(item => (
+                <div key={item.id} className="px-5 py-3">
+                  <div className="text-xs font-semibold text-gray-800 line-clamp-1">{item.label}</div>
+                  <div className="mt-1 flex items-center justify-between text-[10px] text-gray-400">
+                    <span>{item.type}</span>
+                    <span>{new Date(item.date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50">
+            <h3 className="text-sm font-semibold text-gray-700">Project contacts</h3>
+          </div>
+          {projectDirectory.length === 0 ? (
+            <div className="px-5 py-8 text-center text-sm text-gray-400">No project contacts yet.</div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {projectDirectory.slice(0, 5).map(item => (
+                <div key={item.id} className="px-5 py-3">
+                  <div className="text-xs font-semibold text-gray-800">{contactName(item.contactId) || companyName(item.companyId) || 'Unnamed contact'}</div>
+                  <div className="text-[10px] text-gray-400">{[item.projectRole, item.discipline, companyName(item.companyId)].filter(Boolean).join(' / ') || 'No role set'}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50">
+            <h3 className="text-sm font-semibold text-gray-700">Recent documents</h3>
+          </div>
+          {projectDocs.length === 0 ? (
+            <div className="px-5 py-8 text-center text-sm text-gray-400">No documents yet.</div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {projectDocs.map(doc => (
+                <div key={doc.id} className="px-5 py-3">
+                  <div className="text-xs font-semibold text-gray-800 line-clamp-1">{doc.name}</div>
+                  <div className="text-[10px] text-gray-400">{STAGE_MAP[doc.stageId]?.label || 'General'} / {CAT_LABELS[doc.category] || doc.category}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50">
+            <h3 className="text-sm font-semibold text-gray-700">Recent daily logs</h3>
+          </div>
+          {recentLogs.length === 0 ? (
+            <div className="px-5 py-8 text-center text-sm text-gray-400">No daily logs yet.</div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {recentLogs.map(log => (
+                <div key={log.id} className="px-5 py-3">
+                  <div className="text-xs font-semibold text-gray-800">{log.logDate || 'No date'}</div>
+                  <div className="text-xs text-gray-400 mt-0.5 line-clamp-2">{log.summary || log.workCompleted || log.blockers}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50">
+            <h3 className="text-sm font-semibold text-gray-700">Activity</h3>
+          </div>
+          {recent.length === 0 ? (
+            <div className="px-5 py-8 text-center text-sm text-gray-400">No activity yet.</div>
+          ) : (
+            <div className="divide-y divide-gray-50 overflow-y-auto max-h-96">
+              {recent.map(entry => (
+                <div key={entry.id} className="px-5 py-3">
+                  <div className="text-xs font-medium text-gray-700">{entry.action}</div>
+                  <div className="text-xs text-gray-400 mt-0.5 line-clamp-2">{entry.detail}</div>
+                  <div className="text-[10px] text-gray-300 mt-1">{fmtTime(entry.timestamp)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -983,6 +1203,13 @@ export default function ProjectWorkspace() {
   const done = projectItems.filter(i => i.done).length
   const pct = projectItems.length ? Math.round((done / projectItems.length) * 100) : 0
   const stage = project ? STAGE_MAP[project.currentStage] : null
+  const activeStageIds = project ? (project.activeStageIds?.length ? project.activeStageIds : [project.currentStage]) : []
+  const completedStageIds = project ? STAGES
+    .filter(s => {
+      const stageItems = projectItems.filter(item => item.stageId === s.id)
+      return stageItems.length > 0 && stageItems.every(item => item.done)
+    })
+    .map(s => s.id) : []
 
   if (!project) {
     return (
@@ -991,6 +1218,19 @@ export default function ProjectWorkspace() {
         <Link to="/projects" className="text-ocean-600 text-sm hover:underline">Back to projects</Link>
       </div>
     )
+  }
+
+  const setPrimaryStage = stageId => {
+    const nextActive = activeStageIds.includes(stageId) ? activeStageIds : [...activeStageIds, stageId]
+    updateProject(project.id, { currentStage: stageId, activeStageIds: nextActive })
+  }
+
+  const toggleActiveStage = stageId => {
+    const next = activeStageIds.includes(stageId)
+      ? activeStageIds.filter(id => id !== stageId)
+      : [...activeStageIds, stageId]
+    if (!next.includes(project.currentStage)) next.unshift(project.currentStage)
+    updateProject(project.id, { activeStageIds: [...new Set(next)] })
   }
 
   return (
@@ -1058,32 +1298,77 @@ export default function ProjectWorkspace() {
 
         {/* Stage tracker */}
         <div className="mt-4 max-w-7xl mx-auto">
-          <StageTracker currentStage={project.currentStage} />
+          <StageTracker currentStage={project.currentStage} activeStageIds={activeStageIds} completedStageIds={completedStageIds} />
         </div>
 
         {/* Stage edit */}
-        <div className="mt-3 max-w-7xl mx-auto flex items-center gap-2">
-          <span className="text-xs text-gray-400">Stage:</span>
+        <div className="mt-3 max-w-7xl mx-auto">
           {editingStage ? (
-            <select
-              className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ocean-500"
-              value={project.currentStage}
-              autoFocus
-              onChange={e => {
-                updateProject(project.id, { currentStage: e.target.value })
-                setEditingStage(false)
-              }}
-              onBlur={() => setEditingStage(false)}
-            >
-              {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
+            <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <div className="mb-3 grid gap-3 md:grid-cols-[220px_1fr_auto] md:items-end">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-500">Primary reporting stage</label>
+                  <select
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-ocean-400"
+                    value={project.currentStage}
+                    onChange={e => setPrimaryStage(e.target.value)}
+                  >
+                    {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div className="mb-1 text-xs font-medium text-gray-500">Active stages</div>
+                  <div className="flex flex-wrap gap-2">
+                    {STAGES.map(s => {
+                      const active = activeStageIds.includes(s.id)
+                      const primary = s.id === project.currentStage
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => toggleActiveStage(s.id)}
+                          className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                            primary
+                              ? `${s.bg} border-transparent text-white`
+                              : active
+                                ? `${s.light} ${s.text} border-transparent`
+                                : 'border-gray-200 bg-white text-gray-400 hover:text-gray-700'
+                          }`}
+                        >
+                          {s.short}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                <button onClick={() => setEditingStage(false)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">
+                  Done
+                </button>
+              </div>
+              <p className="text-xs text-gray-400">Use the primary stage for reporting, and light up every stage that is active in real work.</p>
+            </div>
           ) : (
-            <button
-              onClick={() => setEditingStage(true)}
-              className={`text-xs font-medium px-2 py-0.5 rounded-full ${stage?.light || 'bg-gray-100'} ${stage?.text || 'text-gray-600'} hover:opacity-80 transition-opacity`}
-            >
-              {stage?.label || project.currentStage}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-gray-400">Primary stage:</span>
+              <button
+                onClick={() => setEditingStage(true)}
+                className={`text-xs font-medium px-2 py-0.5 rounded-full ${stage?.light || 'bg-gray-100'} ${stage?.text || 'text-gray-600'} hover:opacity-80 transition-opacity`}
+              >
+                {stage?.label || project.currentStage}
+              </button>
+              <span className="text-xs text-gray-400">Active:</span>
+              {activeStageIds.map(id => {
+                const activeStage = STAGE_MAP[id]
+                return (
+                  <span key={id} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${activeStage?.light || 'bg-gray-100'} ${activeStage?.text || 'text-gray-500'}`}>
+                    {activeStage?.short || id}
+                  </span>
+                )
+              })}
+              <button onClick={() => setEditingStage(true)} className="text-xs font-medium text-ocean-600 hover:underline">
+                Edit stages
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -1115,6 +1400,8 @@ export default function ProjectWorkspace() {
           {activeTab === 'Tasks' && <AssignedTasksTab project={project} />}
           {activeTab === 'Schedule' && <ScheduleTab project={project} />}
           {activeTab === 'Documents' && <DocumentsTab project={project} />}
+          {activeTab === 'Directory' && <ProjectDirectoryTab project={project} />}
+          {activeTab === 'Daily Log' && <ProjectDailyLogTab project={project} />}
         </div>
       </div>
 

@@ -1,8 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Lock, Mail, User, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 const inputCls = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-ocean-400 focus:ring-2 focus:ring-ocean-100'
+
+const getAuthRedirectUrl = () => {
+  const configuredUrl = import.meta.env.VITE_APP_URL
+  if (configuredUrl) return configuredUrl.replace(/\/$/, '')
+  if (typeof window !== 'undefined') return window.location.origin
+  return 'https://devman-liart.vercel.app'
+}
 
 export default function AuthGate() {
   const [mode, setMode] = useState('signin')
@@ -12,6 +19,20 @@ export default function AuthGate() {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!window.location.hash.includes('error=')) return
+
+    const params = new URLSearchParams(window.location.hash.slice(1))
+    const description = params.get('error_description')
+    const code = params.get('error_code')
+    setError(
+      code === 'otp_expired'
+        ? 'That confirmation link has expired. Enter your email below and resend the confirmation email.'
+        : description?.replace(/\+/g, ' ') || 'The sign-in link could not be used.'
+    )
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
+  }, [])
 
   const submit = async event => {
     event.preventDefault()
@@ -24,10 +45,13 @@ export default function AuthGate() {
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
-          options: { data: { name: name.trim() || email.trim().split('@')[0] } },
+          options: {
+            emailRedirectTo: getAuthRedirectUrl(),
+            data: { name: name.trim() || email.trim().split('@')[0] },
+          },
         })
         if (signUpError) throw signUpError
-        if (!data.session) setMessage('Account created. Check your email if Supabase asks for confirmation, then sign in.')
+        if (!data.session) setMessage('Account created. Check your email to confirm it, then sign in.')
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email: email.trim(),
@@ -37,6 +61,31 @@ export default function AuthGate() {
       }
     } catch (err) {
       setError(err.message || 'Could not sign in.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const resendConfirmation = async () => {
+    if (!email.trim()) {
+      setError('Enter your email first, then resend the confirmation link.')
+      return
+    }
+
+    setBusy(true)
+    setError('')
+    setMessage('')
+
+    try {
+      const { error: resendError } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.trim(),
+        options: { emailRedirectTo: getAuthRedirectUrl() },
+      })
+      if (resendError) throw resendError
+      setMessage('Confirmation email sent. Use the newest email link, not the old one.')
+    } catch (err) {
+      setError(err.message || 'Could not resend the confirmation email.')
     } finally {
       setBusy(false)
     }
@@ -97,6 +146,10 @@ export default function AuthGate() {
 
           <button type="button" onClick={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setError(''); setMessage('') }} className="w-full text-center text-sm text-ocean-600 hover:underline">
             {mode === 'signup' ? 'Already have an account? Sign in' : 'Need access? Create a team account'}
+          </button>
+
+          <button type="button" onClick={resendConfirmation} disabled={busy} className="w-full text-center text-sm text-gray-500 hover:text-ocean-600 disabled:opacity-50">
+            Resend confirmation email
           </button>
         </form>
       </div>

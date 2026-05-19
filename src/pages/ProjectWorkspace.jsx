@@ -16,6 +16,7 @@ import {
   MapPin,
 } from 'lucide-react'
 import useStore from '../store/useStore'
+import { supabase } from '../lib/supabase'
 import StatusPill from '../components/StatusPill'
 import ProgressBar from '../components/ProgressBar'
 import StageTracker from '../components/StageTracker'
@@ -534,6 +535,7 @@ function DocForm({ doc, projectId, onClose, onSave }) {
   const [form, setForm] = useState({
     name: doc?.name || '',
     url: doc?.url || '',
+    stageId: doc?.stageId || 'feasibility',
     category: doc?.category || 'other',
     notes: doc?.notes || '',
   })
@@ -547,6 +549,7 @@ function DocForm({ doc, projectId, onClose, onSave }) {
       name: form.name.trim(),
       url,
       notes: form.notes.trim(),
+      stageId: form.stageId,
       source: url.includes('drive.google.com') ? 'google_drive' : 'manual_link',
       driveUrl: url.includes('drive.google.com') ? url : '',
     })
@@ -575,6 +578,12 @@ function DocForm({ doc, projectId, onClose, onSave }) {
             </select>
           </div>
           <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Stage folder</label>
+            <select className={inputCls} value={form.stageId} onChange={e => set('stageId', e.target.value)}>
+              {STAGES.map(stage => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
+            </select>
+          </div>
+          <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">Notes</label>
             <input className={inputCls} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Optional notes…" />
           </div>
@@ -597,6 +606,7 @@ function DocumentsTab({ project }) {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [editingDriveFolder, setEditingDriveFolder] = useState(false)
   const [driveFolderUrl, setDriveFolderUrl] = useState(project.driveFolderUrl || '')
+  const [openError, setOpenError] = useState('')
 
   const projectDocs = documents.filter(d => d.projectId === project.id)
 
@@ -613,6 +623,20 @@ function DocumentsTab({ project }) {
   const saveDriveFolder = async () => {
     await updateProject(project.id, { driveFolderUrl: driveFolderUrl.trim() })
     setEditingDriveFolder(false)
+  }
+
+  const openDocument = async doc => {
+    setOpenError('')
+    if (doc.storagePath) {
+      const { data, error } = await supabase.storage.from('documents').createSignedUrl(doc.storagePath, 60 * 10)
+      if (error || !data?.signedUrl) {
+        setOpenError(error?.message || 'Could not open this uploaded file.')
+        return
+      }
+      window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+      return
+    }
+    if (doc.url) window.open(doc.url, '_blank', 'noopener,noreferrer')
   }
 
   return (
@@ -674,23 +698,24 @@ function DocumentsTab({ project }) {
         <div className="text-center py-12 text-sm text-gray-400">No documents yet. Add links to consents, contracts, drawings and more.</div>
       ) : (
         <div className="space-y-2">
+          {openError && <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">{openError}</div>}
           {projectDocs.map(doc => (
             <div key={doc.id} className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-center gap-3 group hover:border-gray-200 transition-colors">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  {doc.url ? (
-                    <a href={doc.url} target="_blank" rel="noopener noreferrer"
-                      className="font-medium text-gray-800 hover:text-ocean-600 flex items-center gap-1.5 text-sm transition-colors"
-                      onClick={e => e.stopPropagation()}
-                    >
-                      {doc.name}
-                      <LinkIcon size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </a>
-                  ) : (
-                    <span className="font-medium text-gray-800 text-sm">{doc.name}</span>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => openDocument(doc)}
+                    className="font-medium text-gray-800 hover:text-ocean-600 flex items-center gap-1.5 text-sm transition-colors"
+                  >
+                    {doc.name}
+                    <LinkIcon size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </button>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CAT_COLORS[doc.category] || CAT_COLORS.other}`}>
                     {CAT_LABELS[doc.category] || doc.category}
+                  </span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                    {STAGE_MAP[doc.stageId]?.short || 'General'}
                   </span>
                   {doc.source === 'google_drive' && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-forest-50 text-forest-700 px-2 py-0.5 rounded-full">

@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
+import AuthGate from './components/AuthGate'
 import Dashboard from './pages/Dashboard'
 import AllProjects from './pages/AllProjects'
 import NewProject from './pages/NewProject'
@@ -13,6 +14,7 @@ import Documents from './pages/Documents'
 import Team from './pages/Team'
 import Settings from './pages/Settings'
 import useStore from './store/useStore'
+import { supabase } from './lib/supabase'
 
 function LoadingScreen() {
   return (
@@ -53,12 +55,36 @@ function ErrorScreen({ message }) {
 }
 
 export default function App() {
-  const { loading, error, initialize } = useStore()
+  const { loading, error, initialize, reset } = useStore()
+  const [session, setSession] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
 
   useEffect(() => {
-    initialize()
-  }, [])
+    let mounted = true
 
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return
+      setSession(data.session)
+      setAuthLoading(false)
+    })
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession)
+      if (!nextSession) reset()
+    })
+
+    return () => {
+      mounted = false
+      authListener.subscription.unsubscribe()
+    }
+  }, [reset])
+
+  useEffect(() => {
+    if (session?.user) initialize(session.user)
+  }, [session?.user?.id])
+
+  if (authLoading) return <LoadingScreen />
+  if (!session) return <AuthGate />
   if (loading) return <LoadingScreen />
   if (error) return <ErrorScreen message={error} />
 

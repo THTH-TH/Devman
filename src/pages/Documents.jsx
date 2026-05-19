@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import { supabase } from '../lib/supabase'
+import { STAGES, STAGE_MAP } from '../data/stages'
 
 const DOCUMENT_BUCKET = 'documents'
 const CATEGORIES = ['contract', 'consent', 'drawing', 'report', 'invoice', 'photo', 'email', 'other']
@@ -54,25 +55,41 @@ const cleanFileName = name =>
     .replace(/\s+/g, ' ')
     .trim() || 'document'
 
+const cleanFolder = value => cleanFileName(value || 'general').replace(/\s+/g, '-').toLowerCase()
+
 const getUploadErrorMessage = error => {
   const message = error?.message || String(error || 'Unknown error')
   if (/bucket|storage|row-level security|policy/i.test(message)) {
-    return 'Document storage is not set up in Supabase yet. Run the documents storage SQL, then upload again.'
+    return 'Document storage is not set up for private uploads yet. Run the V1 Supabase migration, then upload again.'
   }
   return `Upload failed: ${message}`
+}
+
+function SourceBadge({ source }) {
+  if (!source) return null
+  const label = SOURCE_LABELS[source] || source
+  const Icon = source === 'upload' ? FileText : Link2
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-forest-50 text-forest-700 px-1.5 py-0.5 rounded mt-1">
+      <Icon size={10} />
+      {label}
+    </span>
+  )
 }
 
 function DocModal({ doc, projects, onClose, onSave }) {
   const [form, setForm] = useState({
     name: doc?.name || '',
-    url: doc?.url || '',
+    url: doc?.url || doc?.driveUrl || '',
     projectId: doc?.projectId || '',
+    stageId: doc?.stageId || 'feasibility',
     category: doc?.category || 'other',
     notes: doc?.notes || '',
   })
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
-  const valid = form.name.trim() && form.url.trim()
+  const requiresUrl = !doc || doc.source !== 'upload'
+  const valid = form.name.trim() && (!requiresUrl || form.url.trim())
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -90,16 +107,10 @@ function DocModal({ doc, projects, onClose, onSave }) {
             <input className={inputCls} placeholder="e.g. Beachwaters Resource Consent" value={form.name} onChange={e => set('name', e.target.value)} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Link *</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">{requiresUrl ? 'Link *' : 'External link'}</label>
             <input className={inputCls} placeholder="https://drive.google.com/..." value={form.url} onChange={e => set('url', e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Category</label>
-              <select className={inputCls} value={form.category} onChange={e => set('category', e.target.value)}>
-                {CATEGORIES.map(c => <option key={c} value={c}>{CAT_LABELS[c]}</option>)}
-              </select>
-            </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Project</label>
               <select className={inputCls} value={form.projectId} onChange={e => set('projectId', e.target.value)}>
@@ -107,6 +118,18 @@ function DocModal({ doc, projects, onClose, onSave }) {
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Stage folder</label>
+              <select className={inputCls} value={form.stageId} onChange={e => set('stageId', e.target.value)}>
+                {STAGES.map(stage => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Category</label>
+            <select className={inputCls} value={form.category} onChange={e => set('category', e.target.value)}>
+              {CATEGORIES.map(c => <option key={c} value={c}>{CAT_LABELS[c]}</option>)}
+            </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5">Notes</label>
@@ -118,10 +141,14 @@ function DocModal({ doc, projects, onClose, onSave }) {
           <button
             disabled={!valid}
             onClick={() => {
+              const url = form.url.trim()
               onSave({
                 ...form,
-                source: form.url.includes('drive.google.com') ? 'google_drive' : 'manual_link',
-                driveUrl: form.url.includes('drive.google.com') ? form.url : '',
+                name: form.name.trim(),
+                url,
+                notes: form.notes.trim(),
+                source: url ? (url.includes('drive.google.com') ? 'google_drive' : 'manual_link') : doc?.source || 'manual_link',
+                driveUrl: url.includes('drive.google.com') ? url : '',
               })
               onClose()
             }}
@@ -135,9 +162,10 @@ function DocModal({ doc, projects, onClose, onSave }) {
   )
 }
 
-function DocumentVault({ projects, addDocument, onAddLink }) {
+function DocumentVault({ projects, profile, currentUser, addDocument, onAddLink }) {
   const fileInputRef = useRef(null)
   const [projectId, setProjectId] = useState('')
+  const [stageId, setStageId] = useState('feasibility')
   const [category, setCategory] = useState('other')
   const [notes, setNotes] = useState('')
   const [dragActive, setDragActive] = useState(false)
@@ -157,8 +185,7 @@ function DocumentVault({ projects, addDocument, onAddLink }) {
       let uploaded = 0
       for (const file of files) {
         const safeName = cleanFileName(file.name)
-        const folder = projectId || 'general'
-        const path = `${folder}/${Date.now()}-${crypto.randomUUID()}-${safeName}`
+        const path = `${cleanFolder(projectId)}/${cleanFolder(stageId)}/${crypto.randomUUID()}-${safeName}`
         const { error } = await supabase.storage.from(DOCUMENT_BUCKET).upload(path, file, {
           cacheControl: '3600',
           contentType: file.type || 'application/octet-stream',
@@ -166,18 +193,22 @@ function DocumentVault({ projects, addDocument, onAddLink }) {
         })
         if (error) throw error
 
-        const { data } = supabase.storage.from(DOCUMENT_BUCKET).getPublicUrl(path)
-        if (!data?.publicUrl) throw new Error('No public file URL was returned.')
-
-        await addDocument({
+        const saved = await addDocument({
           projectId,
+          stageId,
           name: file.name,
-          url: data.publicUrl,
+          url: '',
           category,
           notes,
           source: 'upload',
-          addedBy: 'Tim',
+          storagePath: path,
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          fileSize: file.size,
+          uploadedBy: profile?.id || '',
+          addedBy: currentUser || profile?.name || '',
         })
+        if (!saved) throw new Error('Document record could not be saved. Run the V1 Supabase migration, then upload again.')
         uploaded += 1
       }
       setUploadSummary(`${uploaded} file${uploaded !== 1 ? 's' : ''} uploaded`)
@@ -205,7 +236,7 @@ function DocumentVault({ projects, addDocument, onAddLink }) {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-gray-900">Document vault</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Files and links stored against DevMan projects</p>
+            <p className="text-xs text-gray-500 mt-0.5">Private uploads and project links organised by stage</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -221,7 +252,7 @@ function DocumentVault({ projects, addDocument, onAddLink }) {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-[1fr_320px]">
+      <div className="grid lg:grid-cols-[1fr_360px]">
         <button
           type="button"
           onDragEnter={event => { event.preventDefault(); setDragActive(true) }}
@@ -237,7 +268,7 @@ function DocumentVault({ projects, addDocument, onAddLink }) {
           <div className="h-full border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center text-center px-4 py-8">
             {uploading ? <Loader2 size={28} className="text-forest-700 animate-spin" /> : <UploadCloud size={30} className="text-forest-700" />}
             <p className="text-sm font-semibold text-gray-900 mt-3">{uploading ? 'Uploading files' : 'Drop files here'}</p>
-            <p className="text-xs text-gray-500 mt-1">PDFs, drawings, photos, contracts, emails and reports</p>
+            <p className="text-xs text-gray-500 mt-1">Saved privately into the selected project and stage folder</p>
           </div>
         </button>
 
@@ -247,6 +278,12 @@ function DocumentVault({ projects, addDocument, onAddLink }) {
             <select className={inputCls} value={projectId} onChange={event => setProjectId(event.target.value)}>
               <option value="">General</option>
               {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Stage folder</label>
+            <select className={inputCls} value={stageId} onChange={event => setStageId(event.target.value)}>
+              {STAGES.map(stage => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
             </select>
           </div>
           <div>
@@ -276,37 +313,54 @@ function DocumentVault({ projects, addDocument, onAddLink }) {
   )
 }
 
-function SourceBadge({ source }) {
-  if (!source) return null
-  const label = SOURCE_LABELS[source] || source
-  const Icon = source === 'upload' ? FileText : Link2
-  return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-forest-50 text-forest-700 px-1.5 py-0.5 rounded mt-1">
-      <Icon size={10} />
-      {label}
-    </span>
-  )
-}
-
 export default function Documents() {
-  const { projects, documents, addDocument, updateDocument, deleteDocument } = useStore()
+  const { projects, documents, profile, currentUser, addDocument, updateDocument, deleteDocument } = useStore()
   const [search, setSearch] = useState('')
   const [filterProject, setFilterProject] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
+  const [filterStage, setFilterStage] = useState('')
   const [modal, setModal] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [openError, setOpenError] = useState('')
+
+  const stageCounts = useMemo(() => {
+    const counts = Object.fromEntries(STAGES.map(stage => [stage.id, 0]))
+    documents.forEach(doc => {
+      if (doc.stageId && counts[doc.stageId] !== undefined) counts[doc.stageId] += 1
+    })
+    return counts
+  }, [documents])
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
     return documents.filter(d => {
       if (filterProject && d.projectId !== filterProject) return false
       if (filterCategory && d.category !== filterCategory) return false
+      if (filterStage && d.stageId !== filterStage) return false
       if (term && !d.name.toLowerCase().includes(term) && !d.notes.toLowerCase().includes(term)) return false
       return true
     })
-  }, [documents, filterProject, filterCategory, search])
+  }, [documents, filterProject, filterCategory, filterStage, search])
 
   const fmtDate = d => new Date(d).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
+
+  const openDocument = async doc => {
+    setOpenError('')
+    if (doc.storagePath) {
+      const { data, error } = await supabase.storage.from(DOCUMENT_BUCKET).createSignedUrl(doc.storagePath, 60 * 10)
+      if (error || !data?.signedUrl) {
+        setOpenError(error?.message || 'Could not open this uploaded file.')
+        return
+      }
+      window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+      return
+    }
+    if (doc.url) {
+      window.open(doc.url, '_blank', 'noopener,noreferrer')
+      return
+    }
+    setOpenError('This document has no file or link attached.')
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -328,7 +382,25 @@ export default function Documents() {
 
       <div className="flex-1 overflow-auto">
         <div className="p-6 max-w-7xl mx-auto">
-          <DocumentVault projects={projects} addDocument={addDocument} onAddLink={() => setModal('add')} />
+          <DocumentVault projects={projects} profile={profile} currentUser={currentUser} addDocument={addDocument} onAddLink={() => setModal('add')} />
+
+          <div className="mb-5 flex flex-wrap gap-2">
+            <button
+              onClick={() => setFilterStage('')}
+              className={`rounded-lg border px-3 py-2 text-xs font-medium ${!filterStage ? 'border-forest-600 bg-forest-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              All folders ({documents.length})
+            </button>
+            {STAGES.map(stage => (
+              <button
+                key={stage.id}
+                onClick={() => setFilterStage(stage.id)}
+                className={`rounded-lg border px-3 py-2 text-xs font-medium ${filterStage === stage.id ? 'border-forest-600 bg-forest-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}
+              >
+                {stage.short} ({stageCounts[stage.id] || 0})
+              </button>
+            ))}
+          </div>
 
           <div className="mb-3">
             <h2 className="text-sm font-semibold text-gray-900">Document register</h2>
@@ -352,10 +424,14 @@ export default function Documents() {
               <option value="">All categories</option>
               {CATEGORIES.map(c => <option key={c} value={c}>{CAT_LABELS[c]}</option>)}
             </select>
-            {(search || filterProject || filterCategory) && (
-              <button onClick={() => { setSearch(''); setFilterProject(''); setFilterCategory('') }} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Clear</button>
+            {(search || filterProject || filterCategory || filterStage) && (
+              <button onClick={() => { setSearch(''); setFilterProject(''); setFilterCategory(''); setFilterStage('') }} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Clear</button>
             )}
           </div>
+
+          {openError && (
+            <div className="mb-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{openError}</div>
+          )}
 
           {filtered.length === 0 ? (
             <div className="text-center py-20 text-gray-400 text-sm">
@@ -367,6 +443,7 @@ export default function Documents() {
                 <thead>
                   <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100">
                     <th className="text-left px-5 py-3 font-medium">Name</th>
+                    <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Stage</th>
                     <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Category</th>
                     <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Project</th>
                     <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">Notes</th>
@@ -380,18 +457,17 @@ export default function Documents() {
                     return (
                       <tr key={doc.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-5 py-3">
-                          <a
-                            href={doc.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-medium text-gray-800 hover:text-ocean-600 flex items-center gap-1.5 group"
-                            onClick={e => e.stopPropagation()}
+                          <button
+                            type="button"
+                            onClick={() => openDocument(doc)}
+                            className="font-medium text-gray-800 hover:text-ocean-600 flex items-center gap-1.5 group text-left"
                           >
                             {doc.name}
                             <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 transition-opacity text-ocean-400" />
-                          </a>
+                          </button>
                           <SourceBadge source={doc.source} />
                         </td>
+                        <td className="px-4 py-3 hidden sm:table-cell text-xs text-gray-500">{STAGE_MAP[doc.stageId]?.label || 'General'}</td>
                         <td className="px-4 py-3 hidden sm:table-cell">
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CAT_COLORS[doc.category] || CAT_COLORS.other}`}>
                             {CAT_LABELS[doc.category] || doc.category}
@@ -402,10 +478,7 @@ export default function Documents() {
                         <td className="px-4 py-3 text-xs text-gray-400 hidden lg:table-cell">{doc.createdAt ? fmtDate(doc.createdAt) : 'Not saved'}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1 justify-end">
-                            <button
-                              onClick={() => setModal(doc)}
-                              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-                            >
+                            <button onClick={() => setModal(doc)} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors">
                               <Pencil size={13} />
                             </button>
                             {deleteConfirm === doc.id ? (
@@ -414,10 +487,7 @@ export default function Documents() {
                                 <button onClick={() => setDeleteConfirm(null)} className="text-xs text-gray-400 hover:text-gray-600 px-1">Cancel</button>
                               </div>
                             ) : (
-                              <button
-                                onClick={() => setDeleteConfirm(doc.id)}
-                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
-                              >
+                              <button onClick={() => setDeleteConfirm(doc.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors">
                                 <Trash2 size={13} />
                               </button>
                             )}

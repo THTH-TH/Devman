@@ -1,11 +1,12 @@
 import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, AlertTriangle, Calendar, TrendingUp } from 'lucide-react'
+import { Plus, AlertTriangle, Calendar, TrendingUp, ArrowRight } from 'lucide-react'
 import useStore from '../store/useStore'
 import EmptyState from '../components/EmptyState'
 import StatusPill from '../components/StatusPill'
 import ProgressBar from '../components/ProgressBar'
 import { STAGE_MAP, STAGES } from '../data/stages'
+import { buildAttentionItems } from '../lib/attention'
 
 function StatCard({ label, value, color = 'text-gray-800', accent = 'bg-gray-200' }) {
   return (
@@ -20,7 +21,7 @@ function StatCard({ label, value, color = 'text-gray-800', accent = 'bg-gray-200
 }
 
 export default function Dashboard() {
-  const { projects, checklistItems, milestones, activityLog, tasks, currentUser } = useStore()
+  const { projects, checklistItems, milestones, activityLog, tasks, scheduleTasks, currentUser } = useStore()
   const navigate = useNavigate()
 
   const stats = useMemo(() => {
@@ -73,6 +74,7 @@ export default function Dashboard() {
   }, [projects])
 
   const recentActivity = activityLog.slice(0, 10)
+  const attentionItems = useMemo(() => buildAttentionItems({ projects, checklistItems, milestones, tasks, scheduleTasks }), [projects, checklistItems, milestones, tasks, scheduleTasks])
 
   const fmtTime = ts => {
     const d = new Date(ts)
@@ -125,6 +127,36 @@ export default function Dashboard() {
               color={stats.blockerItems ? 'text-red-600' : 'text-gray-800'}
               accent={stats.blockerItems ? 'bg-orange-400' : 'bg-gray-200'}
             />
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold text-gray-800 text-sm">Needs attention</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Blockers, stage gates, overdue tasks and delayed programme items.</p>
+              </div>
+              <Link to="/tasks?status=overdue" className="text-xs text-ocean-600 hover:underline">Open tasks</Link>
+            </div>
+            {attentionItems.length === 0 ? (
+              <div className="px-5 py-8 text-sm text-gray-400">Nothing urgent showing. Keep the programme and checklist dates current.</div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {attentionItems.slice(0, 8).map(item => (
+                  <Link key={item.id} to={item.href} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50">
+                    <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${item.severity === 'critical' ? 'bg-red-500' : item.severity === 'warning' ? 'bg-amber-400' : 'bg-ocean-400'}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{item.type}</span>
+                        <span className="text-[10px] text-gray-300">{item.projectName}</span>
+                      </div>
+                      <div className="text-sm font-medium text-gray-800 truncate">{item.title}</div>
+                      <div className="text-xs text-gray-400 truncate">{item.detail}</div>
+                    </div>
+                    <ArrowRight size={14} className="text-gray-300" />
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

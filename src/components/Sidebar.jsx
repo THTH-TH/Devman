@@ -8,7 +8,10 @@ import {
   ListTodo,
   Users,
   Settings,
+  LogOut,
 } from 'lucide-react'
+import useStore from '../store/useStore'
+import { supabase } from '../lib/supabase'
 
 const mainNav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -44,6 +47,14 @@ function NavItem({ to, label, icon: Icon, end }) {
 }
 
 export default function Sidebar() {
+  const { profile, currentUser } = useStore()
+  const initials = (profile?.name || currentUser || 'A')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase())
+    .join('') || 'A'
+
   return (
     <aside className="flex flex-col w-56 shrink-0 h-full bg-forest-600">
       {/* Logo */}
@@ -78,12 +89,15 @@ export default function Sidebar() {
       <div className="px-4 py-4 border-t border-white/10">
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center shrink-0">
-            <span className="text-white text-[10px] font-bold">TH</span>
+            <span className="text-white text-[10px] font-bold">{initials}</span>
           </div>
-          <div>
-            <div className="text-white/80 text-xs font-medium leading-none">Tim Haldezos</div>
-            <div className="text-white/40 text-[10px] mt-1 leading-none">Director</div>
+          <div className="min-w-0 flex-1">
+            <div className="text-white/80 text-xs font-medium leading-none truncate">{profile?.name || currentUser || 'Archispace'}</div>
+            <div className="text-white/40 text-[10px] mt-1 leading-none truncate">{profile?.email || profile?.role || 'Team'}</div>
           </div>
+          <button onClick={() => supabase.auth.signOut()} className="rounded-md p-1.5 text-white/35 hover:bg-white/10 hover:text-white" title="Sign out">
+            <LogOut size={13} />
+          </button>
         </div>
       </div>
     </aside>

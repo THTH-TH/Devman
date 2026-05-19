@@ -5,6 +5,15 @@ import { supabase } from '../lib/supabase'
 const genId = () => crypto.randomUUID()
 
 // ── Row mappers (snake_case DB → camelCase app) ───────────────────────────────
+const mapProfile = r => ({
+  id: r.id,
+  email: r.email || '',
+  name: r.name || r.email || 'Team member',
+  role: r.role || 'member',
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+})
+
 const mapProject = r => ({
   id: r.id,
   name: r.name,
@@ -78,12 +87,18 @@ const mapActivity = r => ({
 const mapDocument = r => ({
   id: r.id,
   projectId: r.project_id || '',
+  stageId: r.stage_id || '',
   name: r.name || r.title || r.filename || '',
   url: r.url || r.drive_url || r.file_url || '',
   category: r.category || 'other',
   notes: r.notes || '',
   addedBy: r.added_by || '',
   source: r.source || (r.drive_file_id || r.drive_url ? 'google_drive' : 'manual_link'),
+  storagePath: r.storage_path || '',
+  fileName: r.file_name || '',
+  mimeType: r.mime_type || '',
+  fileSize: r.file_size ?? null,
+  uploadedBy: r.uploaded_by || '',
   driveFileId: r.drive_file_id || '',
   driveUrl: r.drive_url || '',
   gmailMessageId: r.gmail_message_id || '',
@@ -183,13 +198,26 @@ const missingEnhancedProjectColumn = error =>
   /bc_number|legal_description|owner_contact_person|owner_mailing_address|owner_phone|owner_email|building_work_description|place_id|latitude|longitude|suburb|city|region|postal_code|country|property_snapshot|drive_folder_url|drive_root_folder_id/i.test(error?.message || '')
 
 const stripEnhancedDocumentColumns = row => {
-  const { drive_file_id, drive_url, source, gmail_message_id, gmail_thread_id, ...legacy } = row
+  const {
+    drive_file_id,
+    drive_url,
+    source,
+    gmail_message_id,
+    gmail_thread_id,
+    stage_id,
+    storage_path,
+    file_name,
+    mime_type,
+    file_size,
+    uploaded_by,
+    ...legacy
+  } = row
   return legacy
 }
 
 const missingEnhancedDocumentColumn = error =>
   error?.code === 'PGRST204' ||
-  /drive_file_id|drive_url|source|gmail_message_id|gmail_thread_id/i.test(error?.message || '')
+  /drive_file_id|drive_url|source|gmail_message_id|gmail_thread_id|stage_id|storage_path|file_name|mime_type|file_size|uploaded_by/i.test(error?.message || '')
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 const useStore = create((set, get) => ({
@@ -201,14 +229,81 @@ const useStore = create((set, get) => ({
   teamMembers: [],
   tasks: [],
   scheduleTasks: [],
+  sessionUser: null,
+  profile: null,
   currentUser: localStorage.getItem('devman_current_user') || '',
   loading: true,
   error: null,
 
-  // ── Boot: fetch all data + subscribe to real-time ──────────────────────────
-  async initialize() {
-    set({ loading: true, error: null })
+  reset() {
+    set({
+      projects: [],
+      checklistItems: [],
+      milestones: [],
+      activityLog: [],
+      documents: [],
+      teamMembers: [],
+      tasks: [],
+      scheduleTasks: [],
+      sessionUser: null,
+      profile: null,
+      currentUser: '',
+      loading: false,
+      error: null,
+    })
+  },
+
+  async ensureProfile(user) {
+    if (!user) return null
+    const fallback = {
+      id: user.id,
+      email: user.email || '',
+      name: user.user_metadata?.name || user.email?.split('@')[0] || 'Team member',
+      role: 'member',
+    }
+
     try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (error) throw error
+      if (data) {
+        const profile = mapProfile(data)
+        set({ profile, currentUser: profile.name || profile.email })
+        return profile
+      }
+
+      const row = {
+        id: user.id,
+        email: fallback.email,
+        name: fallback.name,
+        role: 'member',
+      }
+      const { data: inserted, error: insertError } = await supabase
+        .from('profiles')
+        .upsert(row)
+        .select()
+        .single()
+      if (insertError) throw insertError
+      const profile = mapProfile(inserted)
+      set({ profile, currentUser: profile.name || profile.email })
+      return profile
+    } catch (error) {
+      console.warn('profiles table not ready; using auth user fallback', error)
+      set({ profile: fallback, currentUser: fallback.name || fallback.email })
+      return fallback
+    }
+  },
+
+  // ── Boot: fetch all data + subscribe to real-time ──────────────────────────
+  async initialize(user) {
+    set({ loading: true, error: null, sessionUser: user || null })
+    try {
+      if (user) await get().ensureProfile(user)
+
       const [p, c, m, a, d, t] = await Promise.all([
         supabase.from('projects').select('*').order('created_at', { ascending: false }),
         supabase.from('checklist_items').select('*'),
@@ -696,6 +791,46 @@ const useStore = create((set, get) => ({
     return task
   },
 
+  async addBatchScheduleTasks(tasks) {
+    const now = new Date().toISOString()
+    const rows = tasks.map((task, index) => ({
+      id: genId(),
+      project_id: task.projectId,
+      name: task.name || '',
+      phase: task.phase || '',
+      assignee: task.assignee || '',
+      start_date: task.startDate || null,
+      end_date: task.endDate || null,
+      actual_start: task.actualStart || null,
+      actual_end: task.actualEnd || null,
+      dependency_id: task.dependencyId || null,
+      lag_days: task.lagDays ?? 0,
+      internal_owner: task.internalOwner || '',
+      is_milestone: task.isMilestone || false,
+      notes: task.notes || '',
+      duration_days: task.durationDays ?? null,
+      status: task.status || 'not-started',
+      progress: task.progress ?? 0,
+      sort_order: task.sortOrder ?? index,
+      created_at: now,
+      updated_at: now,
+    }))
+    if (!rows.length) return []
+    const mapped = rows.map(mapScheduleTask)
+    set(s => ({ scheduleTasks: [...s.scheduleTasks, ...mapped] }))
+    const { error } = await supabase.from('schedule_tasks').insert(rows)
+    if (error) {
+      if (missingEnhancedScheduleColumn(error)) {
+        const { error: fallbackError } = await supabase.from('schedule_tasks').insert(rows.map(stripEnhancedScheduleColumns))
+        if (!fallbackError) return mapped
+        console.error('addBatchScheduleTasks fallback error:', fallbackError)
+      }
+      console.error('addBatchScheduleTasks error:', error)
+      set(s => ({ scheduleTasks: s.scheduleTasks.filter(t => !mapped.some(item => item.id === t.id)) }))
+    }
+    return mapped
+  },
+
   async updateScheduleTask(id, data) {
     const updates = { updated_at: new Date().toISOString() }
     if (data.name !== undefined) updates.name = data.name
@@ -745,12 +880,18 @@ const useStore = create((set, get) => ({
     const row = {
       id,
       project_id: data.projectId || null,
+      stage_id: data.stageId || '',
       name: data.name,
       url: data.url || '',
       category: data.category || 'other',
       notes: data.notes || '',
-      added_by: data.addedBy || '',
+      added_by: data.addedBy || get().currentUser || '',
       source: data.source || (data.url?.includes('drive.google.com') ? 'google_drive' : 'manual_link'),
+      storage_path: data.storagePath || '',
+      file_name: data.fileName || '',
+      mime_type: data.mimeType || '',
+      file_size: data.fileSize ?? null,
+      uploaded_by: data.uploadedBy || get().profile?.id || '',
       drive_url: data.driveUrl || (data.url?.includes('drive.google.com') ? data.url : ''),
       drive_file_id: data.driveFileId || '',
       gmail_message_id: data.gmailMessageId || '',
@@ -760,6 +901,12 @@ const useStore = create((set, get) => ({
     set(s => ({ documents: [doc, ...s.documents] }))
     const { error } = await supabase.from('documents').insert(row)
     if (error) {
+      if (data.storagePath) {
+        await supabase.storage.from('documents').remove([data.storagePath])
+        console.error('addDocument error:', error)
+        set(s => ({ documents: s.documents.filter(d => d.id !== id) }))
+        return null
+      }
       if (missingEnhancedDocumentColumn(error)) {
         const { error: fallbackError } = await supabase.from('documents').insert(stripEnhancedDocumentColumns(row))
         if (!fallbackError) return doc
@@ -776,9 +923,15 @@ const useStore = create((set, get) => ({
     if (data.name !== undefined) updates.name = data.name
     if (data.url !== undefined) updates.url = data.url
     if (data.projectId !== undefined) updates.project_id = data.projectId || null
+    if (data.stageId !== undefined) updates.stage_id = data.stageId || ''
     if (data.category !== undefined) updates.category = data.category
     if (data.notes !== undefined) updates.notes = data.notes
     if (data.source !== undefined) updates.source = data.source
+    if (data.storagePath !== undefined) updates.storage_path = data.storagePath
+    if (data.fileName !== undefined) updates.file_name = data.fileName
+    if (data.mimeType !== undefined) updates.mime_type = data.mimeType
+    if (data.fileSize !== undefined) updates.file_size = data.fileSize
+    if (data.uploadedBy !== undefined) updates.uploaded_by = data.uploadedBy
     if (data.driveUrl !== undefined) updates.drive_url = data.driveUrl
     if (data.driveFileId !== undefined) updates.drive_file_id = data.driveFileId
     if (data.gmailMessageId !== undefined) updates.gmail_message_id = data.gmailMessageId
@@ -796,9 +949,14 @@ const useStore = create((set, get) => ({
   },
 
   async deleteDocument(id) {
+    const existing = get().documents.find(d => d.id === id)
     set(s => ({ documents: s.documents.filter(d => d.id !== id) }))
     const { error } = await supabase.from('documents').delete().eq('id', id)
     if (error) console.error('deleteDocument error:', error)
+    if (!error && existing?.storagePath) {
+      const { error: storageError } = await supabase.storage.from('documents').remove([existing.storagePath])
+      if (storageError) console.error('deleteDocument storage error:', storageError)
+    }
   },
 
   // ── Team Members ──────────────────────────────────────────────────────────
@@ -835,14 +993,15 @@ const useStore = create((set, get) => ({
   // ── Activity Log ───────────────────────────────────────────────────────────
   async logActivity(projectId, action, detail, user = '') {
     const id = genId()
-    const entry = { id, projectId, action, detail, user, timestamp: new Date().toISOString() }
+    const actor = user || get().currentUser || ''
+    const entry = { id, projectId, action, detail, user: actor, timestamp: new Date().toISOString() }
     set(s => ({ activityLog: [entry, ...s.activityLog].slice(0, 500) }))
     const { error } = await supabase.from('activity_log').insert({
       id,
       project_id: projectId,
       action,
       detail,
-      actor: user,
+      actor,
     })
     if (error) console.error('logActivity error:', error)
   },

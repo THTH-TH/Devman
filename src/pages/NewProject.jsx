@@ -19,6 +19,7 @@ import useStore from '../store/useStore'
 import { STAGES } from '../data/stages'
 import { CHECKLIST_TEMPLATE } from '../data/checklistTemplate'
 import { MILESTONE_TEMPLATE } from '../data/milestones'
+import { buildScheduleTasks } from '../data/scheduleTemplate'
 import AddressAutocomplete, { buildGoogleMapsUrl } from '../components/AddressAutocomplete'
 
 const STATUS_OPTIONS = ['Active', 'On Hold', 'Blocked', 'Complete']
@@ -208,7 +209,7 @@ function PropertySnapshot({ place, form }) {
 
 export default function NewProject() {
   const navigate = useNavigate()
-  const { projects, addProject, addBatchChecklistItems, addBatchMilestones, logActivity } = useStore()
+  const { projects, addProject, addBatchChecklistItems, addBatchMilestones, addBatchScheduleTasks, logActivity } = useStore()
   const [step, setStep] = useState('find')
   const [placeDetails, setPlaceDetails] = useState(null)
   const [teamInput, setTeamInput] = useState('')
@@ -330,6 +331,7 @@ export default function NewProject() {
           projectId: project.id,
         }))
       ),
+      addBatchScheduleTasks(buildScheduleTasks(project.id, project.startDate || new Date())),
     ])
 
     logActivity(project.id, 'Project created', project.name)

@@ -891,7 +891,7 @@ const useStore = create((set, get) => ({
       file_name: data.fileName || '',
       mime_type: data.mimeType || '',
       file_size: data.fileSize ?? null,
-      uploaded_by: data.uploadedBy || get().profile?.id || '',
+      uploaded_by: data.uploadedBy || get().profile?.id || null,
       drive_url: data.driveUrl || (data.url?.includes('drive.google.com') ? data.url : ''),
       drive_file_id: data.driveFileId || '',
       gmail_message_id: data.gmailMessageId || '',
@@ -905,7 +905,7 @@ const useStore = create((set, get) => ({
         await supabase.storage.from('documents').remove([data.storagePath])
         console.error('addDocument error:', error)
         set(s => ({ documents: s.documents.filter(d => d.id !== id) }))
-        return null
+        throw error
       }
       if (missingEnhancedDocumentColumn(error)) {
         const { error: fallbackError } = await supabase.from('documents').insert(stripEnhancedDocumentColumns(row))
@@ -931,7 +931,7 @@ const useStore = create((set, get) => ({
     if (data.fileName !== undefined) updates.file_name = data.fileName
     if (data.mimeType !== undefined) updates.mime_type = data.mimeType
     if (data.fileSize !== undefined) updates.file_size = data.fileSize
-    if (data.uploadedBy !== undefined) updates.uploaded_by = data.uploadedBy
+    if (data.uploadedBy !== undefined) updates.uploaded_by = data.uploadedBy || null
     if (data.driveUrl !== undefined) updates.drive_url = data.driveUrl
     if (data.driveFileId !== undefined) updates.drive_file_id = data.driveFileId
     if (data.gmailMessageId !== undefined) updates.gmail_message_id = data.gmailMessageId

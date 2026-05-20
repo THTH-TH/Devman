@@ -209,7 +209,7 @@ function PropertySnapshot({ place, form }) {
 
 export default function NewProject() {
   const navigate = useNavigate()
-  const { projects, addProject, addBatchChecklistItems, addBatchMilestones, addBatchScheduleTasks, logActivity, scheduleTemplates, scheduleTemplateItems } = useStore()
+  const { projects, addProject, updateProject, addBatchChecklistItems, addBatchMilestones, addBatchScheduleTasks, logActivity, scheduleTemplates, scheduleTemplateItems, upsertPropertyProfile, addPropertySourceRun } = useStore()
   const [step, setStep] = useState('find')
   const [placeDetails, setPlaceDetails] = useState(null)
   const [teamInput, setTeamInput] = useState('')
@@ -316,6 +316,28 @@ export default function NewProject() {
     if (!project) {
       setSubmitting(false)
       return
+    }
+
+    try {
+      const place = placeDetails || makeManualPlace(form.address)
+      const response = await fetch('/api/property/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: project.id,
+          address: project.address,
+          project,
+          placeDetails: place,
+        }),
+      })
+      const data = await response.json()
+      if (response.ok && data.profile) {
+        const profile = await upsertPropertyProfile(data.profile)
+        await updateProject(project.id, { propertyProfileId: profile.id })
+        await Promise.all((data.sourceRuns || []).map(run => addPropertySourceRun({ ...run, projectId: project.id, profileId: profile.id })))
+      }
+    } catch (error) {
+      console.warn('Property intelligence setup skipped:', error)
     }
 
     const selectedTemplateItems = scheduleTemplateItems.filter(item => item.templateId === form.scheduleTemplateId)

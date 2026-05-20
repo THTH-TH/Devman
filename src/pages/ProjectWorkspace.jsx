@@ -26,8 +26,11 @@ import ChecklistView from './ChecklistView'
 import ScheduleTab from '../components/ProjectScheduleTab'
 import ProjectDirectoryTab from '../components/ProjectDirectoryTab'
 import ProjectDailyLogTab from '../components/ProjectDailyLogTab'
+import PropertyIntelligenceTab from '../components/PropertyIntelligenceTab'
+import AiDraftActionsPanel from '../components/AiDraftActionsPanel'
+import ShareDocumentsModal from '../components/ShareDocumentsModal'
 
-const TABS = ['Overview', 'Schedule', 'Checklist', 'Tasks', 'Documents', 'Directory', 'Daily Log']
+const TABS = ['Overview', 'Property', 'Schedule', 'Checklist', 'Tasks', 'Documents', 'Directory', 'Daily Log']
 
 const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-transparent'
 
@@ -617,6 +620,11 @@ function DocForm({ doc, projectId, onClose, onSave }) {
     url: doc?.url || '',
     stageId: doc?.stageId || 'feasibility',
     category: doc?.category || 'other',
+    revision: doc?.revision || '',
+    drawingNumber: doc?.drawingNumber || '',
+    discipline: doc?.discipline || '',
+    issuedFor: doc?.issuedFor || '',
+    documentStatus: doc?.documentStatus || 'current',
     notes: doc?.notes || '',
   })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -630,6 +638,11 @@ function DocForm({ doc, projectId, onClose, onSave }) {
       url,
       notes: form.notes.trim(),
       stageId: form.stageId,
+      revision: form.revision.trim(),
+      drawingNumber: form.drawingNumber.trim(),
+      discipline: form.discipline.trim(),
+      issuedFor: form.issuedFor.trim(),
+      documentStatus: form.documentStatus,
       source: url.includes('drive.google.com') ? 'google_drive' : 'manual_link',
       driveUrl: url.includes('drive.google.com') ? url : '',
     })
@@ -637,7 +650,7 @@ function DocForm({ doc, projectId, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h3 className="font-semibold text-gray-900 text-sm">{doc ? 'Edit document' : 'Add document'}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={15} /></button>
@@ -661,6 +674,32 @@ function DocForm({ doc, projectId, onClose, onSave }) {
             <label className="block text-xs font-medium text-gray-600 mb-1.5">Stage folder</label>
             <select className={inputCls} value={form.stageId} onChange={e => set('stageId', e.target.value)}>
               {STAGES.map(stage => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Drawing number</label>
+              <input className={inputCls} value={form.drawingNumber} onChange={e => set('drawingNumber', e.target.value)} placeholder="A-101" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Revision</label>
+              <input className={inputCls} value={form.revision} onChange={e => set('revision', e.target.value)} placeholder="P1 / Rev A" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Discipline</label>
+              <input className={inputCls} value={form.discipline} onChange={e => set('discipline', e.target.value)} placeholder="Architectural / Civil / Structural" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Issued for</label>
+              <input className={inputCls} value={form.issuedFor} onChange={e => set('issuedFor', e.target.value)} placeholder="Consent / Pricing / Construction" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Document status</label>
+            <select className={inputCls} value={form.documentStatus} onChange={e => set('documentStatus', e.target.value)}>
+              {['current', 'draft', 'superseded', 'issued', 'approved', 'for review'].map(status => (
+                <option key={status} value={status}>{status}</option>
+              ))}
             </select>
           </div>
           <div>
@@ -687,8 +726,11 @@ function DocumentsTab({ project }) {
   const [editingDriveFolder, setEditingDriveFolder] = useState(false)
   const [driveFolderUrl, setDriveFolderUrl] = useState(project.driveFolderUrl || '')
   const [openError, setOpenError] = useState('')
+  const [selectedDocs, setSelectedDocs] = useState(new Set())
+  const [shareDocs, setShareDocs] = useState(null)
 
   const projectDocs = documents.filter(d => d.projectId === project.id)
+  const selectedProjectDocs = projectDocs.filter(doc => selectedDocs.has(doc.id))
 
   const handleAdd = async (data) => {
     await addDocument({ ...data, projectId: project.id, addedBy: '' })
@@ -717,6 +759,15 @@ function DocumentsTab({ project }) {
       return
     }
     if (doc.url) window.open(doc.url, '_blank', 'noopener,noreferrer')
+  }
+
+  const toggleDoc = id => {
+    setSelectedDocs(current => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   return (
@@ -763,15 +814,26 @@ function DocumentsTab({ project }) {
         )}
       </div>
 
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-gray-500">{projectDocs.length} document{projectDocs.length !== 1 ? 's' : ''}</p>
-        <button
-          onClick={() => setShowForm(true)}
-          className="inline-flex items-center gap-1.5 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
-        >
-          <Plus size={14} />
-          Add document
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {selectedProjectDocs.length > 0 && (
+            <button
+              onClick={() => setShareDocs(selectedProjectDocs)}
+              className="inline-flex items-center gap-1.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <LinkIcon size={14} />
+              Share selected
+            </button>
+          )}
+          <button
+            onClick={() => setShowForm(true)}
+            className="inline-flex items-center gap-1.5 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Plus size={14} />
+            Add document
+          </button>
+        </div>
       </div>
 
       {projectDocs.length === 0 ? (
@@ -781,6 +843,12 @@ function DocumentsTab({ project }) {
           {openError && <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">{openError}</div>}
           {projectDocs.map(doc => (
             <div key={doc.id} className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-center gap-3 group hover:border-gray-200 transition-colors">
+              <input
+                type="checkbox"
+                checked={selectedDocs.has(doc.id)}
+                onChange={() => toggleDoc(doc.id)}
+                className="h-4 w-4 rounded border-gray-300 text-forest-600 focus:ring-forest-500"
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <button
@@ -804,6 +872,15 @@ function DocumentsTab({ project }) {
                     </span>
                   )}
                 </div>
+                {(doc.drawingNumber || doc.revision || doc.discipline || doc.issuedFor || doc.documentStatus) && (
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-400">
+                    {doc.drawingNumber && <span>{doc.drawingNumber}</span>}
+                    {doc.revision && <span>Rev {doc.revision}</span>}
+                    {doc.discipline && <span>{doc.discipline}</span>}
+                    {doc.issuedFor && <span>{doc.issuedFor}</span>}
+                    {doc.documentStatus && <span>{doc.documentStatus}</span>}
+                  </div>
+                )}
                 {doc.notes && <p className="text-xs text-gray-400 mt-0.5 truncate">{doc.notes}</p>}
               </div>
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
@@ -828,6 +905,7 @@ function DocumentsTab({ project }) {
 
       {showForm && <DocForm projectId={project.id} onClose={() => setShowForm(false)} onSave={handleAdd} />}
       {editDoc && <DocForm doc={editDoc} projectId={project.id} onClose={() => setEditDoc(null)} onSave={handleEdit} />}
+      {shareDocs && <ShareDocumentsModal project={project} documents={shareDocs} onClose={() => setShareDocs(null)} />}
     </div>
   )
 }
@@ -835,12 +913,13 @@ function DocumentsTab({ project }) {
 // ── Overview Tab ──────────────────────────────────────────────────────────────
 
 function OverviewTab({ project }) {
-  const { checklistItems, activityLog, documents, projectContacts, companies, contacts, dailyLogs, milestones, scheduleTasks } = useStore()
+  const { checklistItems, activityLog, documents, projectContacts, companies, contacts, dailyLogs, milestones, scheduleTasks, propertyProfiles } = useStore()
   const items = checklistItems.filter(i => i.projectId === project.id)
   const activeStageIds = project.activeStageIds?.length ? project.activeStageIds : [project.currentStage]
   const activeStages = STAGES.filter(stage => activeStageIds.includes(stage.id))
   const projectDocs = documents.filter(doc => doc.projectId === project.id).slice(0, 5)
   const projectDirectory = projectContacts.filter(item => item.projectId === project.id)
+  const propertyProfile = propertyProfiles.find(item => item.projectId === project.id)
   const recentLogs = dailyLogs
     .filter(log => log.projectId === project.id)
     .slice()
@@ -896,6 +975,8 @@ function OverviewTab({ project }) {
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
       {/* Left column */}
       <div className="xl:col-span-2 space-y-4">
+        <AiDraftActionsPanel project={project} />
+
         {/* Project info card */}
         <div className="bg-white rounded-xl border border-gray-100 p-5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3 text-sm">
@@ -928,6 +1009,20 @@ function OverviewTab({ project }) {
             <p className="text-sm text-gray-600 mt-3 pt-3 border-t border-gray-50">{project.description}</p>
           )}
         </div>
+
+        {propertyProfile && (
+          <div className="bg-white rounded-xl border border-gray-100 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700">Property intelligence</h3>
+                <p className="mt-1 text-xs text-gray-500">{propertyProfile.hazardSummary?.summary || 'Property profile captured.'}</p>
+              </div>
+              <span className="rounded-full bg-ocean-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-ocean-700">
+                {propertyProfile.sourceStatus?.council || 'linked'}
+              </span>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-4">
           <div className="bg-white rounded-xl border border-gray-100 p-5">
@@ -1396,6 +1491,7 @@ export default function ProjectWorkspace() {
       <div className="flex-1 overflow-auto">
         <div className="p-6 max-w-7xl mx-auto">
           {activeTab === 'Overview' && <OverviewTab project={project} />}
+          {activeTab === 'Property' && <PropertyIntelligenceTab project={project} />}
           {activeTab === 'Checklist' && <ChecklistView projectId={project.id} />}
           {activeTab === 'Tasks' && <AssignedTasksTab project={project} />}
           {activeTab === 'Schedule' && <ScheduleTab project={project} />}

@@ -13,6 +13,7 @@ import Calendar from './pages/Calendar'
 import Documents from './pages/Documents'
 import Team from './pages/Team'
 import Settings from './pages/Settings'
+import SharePage from './pages/SharePage'
 import useStore from './store/useStore'
 import { supabase } from './lib/supabase'
 
@@ -54,6 +55,32 @@ function ErrorScreen({ message }) {
   )
 }
 
+function ProtectedApp({ authLoading, session, loading, error }) {
+  if (authLoading) return <LoadingScreen />
+  if (!session) return <AuthGate />
+  if (loading) return <LoadingScreen />
+  if (error) return <ErrorScreen message={error} />
+
+  return (
+    <Routes>
+      <Route path="/" element={<Layout />}>
+        <Route index element={<Dashboard />} />
+        <Route path="projects" element={<AllProjects />} />
+        <Route path="projects/new" element={<NewProject />} />
+        <Route path="projects/:projectId" element={<ProjectWorkspace />} />
+        <Route path="workflow" element={<Workflow />} />
+        <Route path="checklist/:projectId" element={<ChecklistPage />} />
+        <Route path="tasks" element={<Tasks />} />
+        <Route path="calendar" element={<Calendar />} />
+        <Route path="schedule" element={<Navigate to="/calendar" replace />} />
+        <Route path="documents" element={<Documents />} />
+        <Route path="team" element={<Team />} />
+        <Route path="settings" element={<Settings />} />
+      </Route>
+    </Routes>
+  )
+}
+
 export default function App() {
   const { loading, error, initialize, reset } = useStore()
   const [session, setSession] = useState(null)
@@ -83,28 +110,11 @@ export default function App() {
     if (session?.user) initialize(session.user)
   }, [session?.user?.id])
 
-  if (authLoading) return <LoadingScreen />
-  if (!session) return <AuthGate />
-  if (loading) return <LoadingScreen />
-  if (error) return <ErrorScreen message={error} />
-
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="projects" element={<AllProjects />} />
-          <Route path="projects/new" element={<NewProject />} />
-          <Route path="projects/:projectId" element={<ProjectWorkspace />} />
-          <Route path="workflow" element={<Workflow />} />
-          <Route path="checklist/:projectId" element={<ChecklistPage />} />
-          <Route path="tasks" element={<Tasks />} />
-          <Route path="calendar" element={<Calendar />} />
-          <Route path="schedule" element={<Navigate to="/calendar" replace />} />
-          <Route path="documents" element={<Documents />} />
-          <Route path="team" element={<Team />} />
-          <Route path="settings" element={<Settings />} />
-        </Route>
+        <Route path="/share/:token" element={<SharePage />} />
+        <Route path="/*" element={<ProtectedApp authLoading={authLoading} session={session} loading={loading} error={error} />} />
       </Routes>
     </BrowserRouter>
   )

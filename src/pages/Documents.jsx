@@ -16,6 +16,7 @@ import {
 import useStore from '../store/useStore'
 import { supabase } from '../lib/supabase'
 import { STAGES, STAGE_MAP } from '../data/stages'
+import ShareDocumentsModal from '../components/ShareDocumentsModal'
 
 const DOCUMENT_BUCKET = 'documents'
 const CATEGORIES = ['contract', 'consent', 'drawing', 'report', 'invoice', 'photo', 'email', 'other']
@@ -84,6 +85,11 @@ function DocModal({ doc, projects, onClose, onSave }) {
     projectId: doc?.projectId || '',
     stageId: doc?.stageId || 'feasibility',
     category: doc?.category || 'other',
+    revision: doc?.revision || '',
+    drawingNumber: doc?.drawingNumber || '',
+    discipline: doc?.discipline || '',
+    issuedFor: doc?.issuedFor || '',
+    documentStatus: doc?.documentStatus || 'current',
     notes: doc?.notes || '',
   })
 
@@ -131,6 +137,30 @@ function DocModal({ doc, projects, onClose, onSave }) {
               {CATEGORIES.map(c => <option key={c} value={c}>{CAT_LABELS[c]}</option>)}
             </select>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Drawing no.</label>
+              <input className={inputCls} value={form.drawingNumber} onChange={e => set('drawingNumber', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Revision</label>
+              <input className={inputCls} value={form.revision} onChange={e => set('revision', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Discipline</label>
+              <input className={inputCls} value={form.discipline} onChange={e => set('discipline', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Issued for</label>
+              <input className={inputCls} value={form.issuedFor} onChange={e => set('issuedFor', e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Document status</label>
+            <select className={inputCls} value={form.documentStatus} onChange={e => set('documentStatus', e.target.value)}>
+              {['current', 'draft', 'superseded', 'issued', 'approved', 'for review'].map(status => <option key={status} value={status}>{status}</option>)}
+            </select>
+          </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5">Notes</label>
             <textarea className={`${inputCls} resize-none`} rows={2} placeholder="Any notes..." value={form.notes} onChange={e => set('notes', e.target.value)} />
@@ -147,6 +177,11 @@ function DocModal({ doc, projects, onClose, onSave }) {
                 name: form.name.trim(),
                 url,
                 notes: form.notes.trim(),
+                revision: form.revision.trim(),
+                drawingNumber: form.drawingNumber.trim(),
+                discipline: form.discipline.trim(),
+                issuedFor: form.issuedFor.trim(),
+                documentStatus: form.documentStatus,
                 source: url ? (url.includes('drive.google.com') ? 'google_drive' : 'manual_link') : doc?.source || 'manual_link',
                 driveUrl: url.includes('drive.google.com') ? url : '',
               })
@@ -167,6 +202,11 @@ function DocumentVault({ projects, profile, currentUser, addDocument, onAddLink 
   const [projectId, setProjectId] = useState('')
   const [stageId, setStageId] = useState('feasibility')
   const [category, setCategory] = useState('other')
+  const [revision, setRevision] = useState('')
+  const [drawingNumber, setDrawingNumber] = useState('')
+  const [discipline, setDiscipline] = useState('')
+  const [issuedFor, setIssuedFor] = useState('')
+  const [documentStatus, setDocumentStatus] = useState('current')
   const [notes, setNotes] = useState('')
   const [dragActive, setDragActive] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -206,6 +246,11 @@ function DocumentVault({ projects, profile, currentUser, addDocument, onAddLink 
           mimeType: file.type || 'application/octet-stream',
           fileSize: file.size,
           uploadedBy: profile?.id || '',
+          revision,
+          drawingNumber,
+          discipline,
+          issuedFor,
+          documentStatus,
           addedBy: currentUser || profile?.name || '',
         })
         if (!saved) throw new Error('Document record could not be saved. Run the V1 Supabase migration, then upload again.')
@@ -292,6 +337,30 @@ function DocumentVault({ projects, profile, currentUser, addDocument, onAddLink 
               {CATEGORIES.map(c => <option key={c} value={c}>{CAT_LABELS[c]}</option>)}
             </select>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Drawing no.</label>
+              <input className={inputCls} value={drawingNumber} onChange={event => setDrawingNumber(event.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Revision</label>
+              <input className={inputCls} value={revision} onChange={event => setRevision(event.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Discipline</label>
+              <input className={inputCls} value={discipline} onChange={event => setDiscipline(event.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Issued for</label>
+              <input className={inputCls} value={issuedFor} onChange={event => setIssuedFor(event.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Document status</label>
+            <select className={inputCls} value={documentStatus} onChange={event => setDocumentStatus(event.target.value)}>
+              {['current', 'draft', 'superseded', 'issued', 'approved', 'for review'].map(status => <option key={status} value={status}>{status}</option>)}
+            </select>
+          </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5">Notes</label>
             <textarea className={`${inputCls} resize-none`} rows={3} value={notes} onChange={event => setNotes(event.target.value)} />
@@ -325,6 +394,7 @@ export default function Documents() {
   const [selected, setSelected] = useState(new Set())
   const [bulk, setBulk] = useState({ projectId: '', stageId: '', category: '' })
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [shareDocs, setShareDocs] = useState(null)
 
   const stageCounts = useMemo(() => {
     const counts = Object.fromEntries(STAGES.map(stage => [stage.id, 0]))
@@ -346,6 +416,7 @@ export default function Documents() {
   }, [documents, filterProject, filterCategory, filterStage, search])
 
   const selectedIds = [...selected].filter(id => documents.some(doc => doc.id === id))
+  const selectedDocs = documents.filter(doc => selectedIds.includes(doc.id))
   const visibleIds = filtered.map(doc => doc.id)
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selected.has(id))
 
@@ -487,6 +558,7 @@ export default function Documents() {
                 {CATEGORIES.map(c => <option key={c} value={c}>{CAT_LABELS[c]}</option>)}
               </select>
               <button onClick={applyBulk} className="h-8 rounded-md bg-forest-600 px-3 text-xs font-semibold text-white hover:bg-forest-700">Apply</button>
+              <button onClick={() => setShareDocs(selectedDocs)} className="h-8 rounded-md border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 hover:bg-gray-50">Share selected</button>
               {confirmBulkDelete ? (
                 <div className="flex items-center gap-1">
                   <button onClick={removeSelected} className="h-8 rounded-md bg-red-600 px-3 text-xs font-semibold text-white hover:bg-red-700">Delete</button>
@@ -541,6 +613,15 @@ export default function Documents() {
                             <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 transition-opacity text-ocean-400" />
                           </button>
                           <SourceBadge source={doc.source} />
+                          {(doc.drawingNumber || doc.revision || doc.discipline || doc.issuedFor || doc.documentStatus) && (
+                            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-400">
+                              {doc.drawingNumber && <span>{doc.drawingNumber}</span>}
+                              {doc.revision && <span>Rev {doc.revision}</span>}
+                              {doc.discipline && <span>{doc.discipline}</span>}
+                              {doc.issuedFor && <span>{doc.issuedFor}</span>}
+                              {doc.documentStatus && <span>{doc.documentStatus}</span>}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 hidden sm:table-cell text-xs text-gray-500">{STAGE_MAP[doc.stageId]?.label || 'General'}</td>
                         <td className="px-4 py-3 hidden sm:table-cell">
@@ -585,6 +666,13 @@ export default function Documents() {
                 if (modal === 'add') addDocument(form)
                 else updateDocument(modal.id, form)
               }}
+            />
+          )}
+          {shareDocs && (
+            <ShareDocumentsModal
+              project={projects.find(project => project.id === shareDocs[0]?.projectId) || null}
+              documents={shareDocs}
+              onClose={() => setShareDocs(null)}
             />
           )}
         </div>

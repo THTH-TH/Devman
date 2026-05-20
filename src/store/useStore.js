@@ -36,6 +36,7 @@ const mapProject = r => ({
   postalCode: r.postal_code || '',
   country: r.country || '',
   propertySnapshot: r.property_snapshot || null,
+  propertyProfileId: r.property_profile_id || '',
   driveFolderUrl: r.drive_folder_url || '',
   driveRootFolderId: r.drive_root_folder_id || '',
   teamMembers: r.team_members || [],
@@ -104,6 +105,11 @@ const mapDocument = r => ({
   driveUrl: r.drive_url || '',
   gmailMessageId: r.gmail_message_id || '',
   gmailThreadId: r.gmail_thread_id || '',
+  revision: r.revision || '',
+  drawingNumber: r.drawing_number || '',
+  discipline: r.discipline || '',
+  issuedFor: r.issued_for || '',
+  documentStatus: r.document_status || 'current',
   createdAt: r.created_at,
 })
 
@@ -139,6 +145,7 @@ const mapScheduleTask = r => ({
   actualStart: r.actual_start || '',
   actualEnd: r.actual_end || '',
   dependencyId: r.dependency_id || '',
+  projectContactId: r.project_contact_id || '',
   lagDays: r.lag_days ?? 0,
   internalOwner: r.internal_owner || '',
   isMilestone: r.is_milestone || false,
@@ -240,11 +247,98 @@ const mapScheduleTemplateItem = r => ({
   sortOrder: r.sort_order ?? 0,
 })
 
+const mapPropertyProfile = r => ({
+  id: r.id,
+  projectId: r.project_id || '',
+  address: r.address || '',
+  formattedAddress: r.formatted_address || '',
+  placeId: r.place_id || '',
+  latitude: r.latitude ?? null,
+  longitude: r.longitude ?? null,
+  suburb: r.suburb || '',
+  city: r.city || '',
+  region: r.region || '',
+  postalCode: r.postal_code || '',
+  country: r.country || 'New Zealand',
+  sourceStatus: r.source_status || {},
+  titleSummary: r.title_summary || {},
+  parcelSummary: r.parcel_summary || {},
+  councilSummary: r.council_summary || {},
+  zoningSummary: r.zoning_summary || {},
+  hazardSummary: r.hazard_summary || {},
+  servicesSummary: r.services_summary || {},
+  valuationSummary: r.valuation_summary || {},
+  demographicsSummary: r.demographics_summary || {},
+  mapLinks: r.map_links || {},
+  rawPayload: r.raw_payload || {},
+  lastRefreshedAt: r.last_refreshed_at || '',
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+})
+
+const mapPropertyLayer = r => ({
+  id: r.id,
+  projectId: r.project_id || '',
+  profileId: r.profile_id || '',
+  layerType: r.layer_type || '',
+  name: r.name || '',
+  source: r.source || '',
+  sourceUrl: r.source_url || '',
+  confidence: r.confidence || 'not available',
+  geometry: r.geometry || null,
+  attributes: r.attributes || {},
+  capturedAt: r.captured_at || '',
+  createdAt: r.created_at,
+})
+
+const mapPropertySourceRun = r => ({
+  id: r.id,
+  projectId: r.project_id || '',
+  profileId: r.profile_id || '',
+  source: r.source || '',
+  status: r.status || 'not available',
+  message: r.message || '',
+  request: r.request || {},
+  response: r.response || {},
+  createdAt: r.created_at,
+})
+
+const mapDocumentShare = r => ({
+  id: r.id,
+  token: r.token || '',
+  projectId: r.project_id || '',
+  documentIds: Array.isArray(r.document_ids) ? r.document_ids : [],
+  documentSnapshot: Array.isArray(r.document_snapshot) ? r.document_snapshot : [],
+  title: r.title || '',
+  expiresAt: r.expires_at || '',
+  revokedAt: r.revoked_at || '',
+  createdBy: r.created_by || '',
+  accessCount: r.access_count ?? 0,
+  lastAccessedAt: r.last_accessed_at || '',
+  createdAt: r.created_at,
+})
+
+const mapAiActionDraft = r => ({
+  id: r.id,
+  projectId: r.project_id || '',
+  actionType: r.action_type || '',
+  title: r.title || '',
+  rationale: r.rationale || '',
+  payload: r.payload || {},
+  status: r.status || 'pending',
+  createdBy: r.created_by || '',
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+  appliedAt: r.applied_at || '',
+  dismissedAt: r.dismissed_at || '',
+})
+
 const stripEnhancedScheduleColumns = row => {
   const {
     actual_start,
     actual_end,
     dependency_id,
+    project_contact_id,
     lag_days,
     internal_owner,
     is_milestone,
@@ -256,7 +350,7 @@ const stripEnhancedScheduleColumns = row => {
 
 const missingEnhancedScheduleColumn = error =>
   error?.code === 'PGRST204' ||
-  /actual_start|actual_end|dependency_id|lag_days|internal_owner|is_milestone|notes/i.test(error?.message || '')
+  /actual_start|actual_end|dependency_id|project_contact_id|lag_days|internal_owner|is_milestone|notes/i.test(error?.message || '')
 
 const stripEnhancedProjectColumns = row => {
   const {
@@ -276,6 +370,7 @@ const stripEnhancedProjectColumns = row => {
     postal_code,
     country,
     property_snapshot,
+    property_profile_id,
     drive_folder_url,
     drive_root_folder_id,
     active_stage_ids,
@@ -286,7 +381,7 @@ const stripEnhancedProjectColumns = row => {
 
 const missingEnhancedProjectColumn = error =>
   error?.code === 'PGRST204' ||
-  /bc_number|legal_description|owner_contact_person|owner_mailing_address|owner_phone|owner_email|building_work_description|place_id|latitude|longitude|suburb|city|region|postal_code|country|property_snapshot|drive_folder_url|drive_root_folder_id|active_stage_ids/i.test(error?.message || '')
+  /bc_number|legal_description|owner_contact_person|owner_mailing_address|owner_phone|owner_email|building_work_description|place_id|latitude|longitude|suburb|city|region|postal_code|country|property_snapshot|property_profile_id|drive_folder_url|drive_root_folder_id|active_stage_ids/i.test(error?.message || '')
 
 const stripEnhancedDocumentColumns = row => {
   const {
@@ -301,6 +396,11 @@ const stripEnhancedDocumentColumns = row => {
     mime_type,
     file_size,
     uploaded_by,
+    revision,
+    drawing_number,
+    discipline,
+    issued_for,
+    document_status,
     ...legacy
   } = row
   return legacy
@@ -308,7 +408,7 @@ const stripEnhancedDocumentColumns = row => {
 
 const missingEnhancedDocumentColumn = error =>
   error?.code === 'PGRST204' ||
-  /drive_file_id|drive_url|source|gmail_message_id|gmail_thread_id|stage_id|storage_path|file_name|mime_type|file_size|uploaded_by/i.test(error?.message || '')
+  /drive_file_id|drive_url|source|gmail_message_id|gmail_thread_id|stage_id|storage_path|file_name|mime_type|file_size|uploaded_by|revision|drawing_number|discipline|issued_for|document_status/i.test(error?.message || '')
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 const useStore = create((set, get) => ({
@@ -327,6 +427,11 @@ const useStore = create((set, get) => ({
   dailyLogs: [],
   scheduleTemplates: [],
   scheduleTemplateItems: [],
+  propertyProfiles: [],
+  propertyLayers: [],
+  propertySourceRuns: [],
+  documentShares: [],
+  aiActionDrafts: [],
   sessionUser: null,
   profile: null,
   currentUser: localStorage.getItem('devman_current_user') || '',
@@ -350,6 +455,11 @@ const useStore = create((set, get) => ({
       dailyLogs: [],
       scheduleTemplates: [],
       scheduleTemplateItems: [],
+      propertyProfiles: [],
+      propertyLayers: [],
+      propertySourceRuns: [],
+      documentShares: [],
+      aiActionDrafts: [],
       sessionUser: null,
       profile: null,
       currentUser: '',
@@ -437,7 +547,7 @@ const useStore = create((set, get) => ({
 
       // New tables — load gracefully (tables may not exist yet)
       try {
-        const [tr, sr, ev, co, ct, pc, dl, st, sti] = await Promise.all([
+        const [tr, sr, ev, co, ct, pc, dl, st, sti, pp, pl, psr, ds, aid] = await Promise.all([
           supabase.from('tasks').select('*').order('created_at', { ascending: false }),
           supabase.from('schedule_tasks').select('*').order('sort_order'),
           supabase.from('calendar_events').select('*').order('event_date'),
@@ -447,6 +557,11 @@ const useStore = create((set, get) => ({
           supabase.from('daily_logs').select('*').order('log_date', { ascending: false }),
           supabase.from('schedule_templates').select('*').order('name'),
           supabase.from('schedule_template_items').select('*').order('sort_order'),
+          supabase.from('property_profiles').select('*').order('updated_at', { ascending: false }),
+          supabase.from('property_layers').select('*').order('created_at', { ascending: false }),
+          supabase.from('property_source_runs').select('*').order('created_at', { ascending: false }).limit(500),
+          supabase.from('document_shares').select('*').order('created_at', { ascending: false }),
+          supabase.from('ai_action_drafts').select('*').order('created_at', { ascending: false }),
         ])
         if (!tr.error) set({ tasks: tr.data.map(mapTask) })
         if (!sr.error) set({ scheduleTasks: sr.data.map(mapScheduleTask) })
@@ -457,6 +572,11 @@ const useStore = create((set, get) => ({
         if (!dl.error) set({ dailyLogs: dl.data.map(mapDailyLog) })
         if (!st.error) set({ scheduleTemplates: st.data.map(mapScheduleTemplate) })
         if (!sti.error) set({ scheduleTemplateItems: sti.data.map(mapScheduleTemplateItem) })
+        if (!pp.error) set({ propertyProfiles: pp.data.map(mapPropertyProfile) })
+        if (!pl.error) set({ propertyLayers: pl.data.map(mapPropertyLayer) })
+        if (!psr.error) set({ propertySourceRuns: psr.data.map(mapPropertySourceRun) })
+        if (!ds.error) set({ documentShares: ds.data.map(mapDocumentShare) })
+        if (!aid.error) set({ aiActionDrafts: aid.data.map(mapAiActionDraft) })
       } catch {
         console.warn('tasks / schedule_tasks tables not yet created — run SQL in Supabase')
       }
@@ -586,6 +706,47 @@ const useStore = create((set, get) => ({
           return s
         })
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'property_profiles' }, payload => {
+        const { eventType, new: row, old } = payload
+        set(s => {
+          if (eventType === 'INSERT') return { propertyProfiles: [mapPropertyProfile(row), ...s.propertyProfiles.filter(item => item.id !== row.id)] }
+          if (eventType === 'UPDATE') return { propertyProfiles: s.propertyProfiles.map(item => item.id === row.id ? mapPropertyProfile(row) : item) }
+          if (eventType === 'DELETE') return { propertyProfiles: s.propertyProfiles.filter(item => item.id !== old.id) }
+          return s
+        })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'property_layers' }, payload => {
+        const { eventType, new: row, old } = payload
+        set(s => {
+          if (eventType === 'INSERT') return { propertyLayers: [mapPropertyLayer(row), ...s.propertyLayers] }
+          if (eventType === 'UPDATE') return { propertyLayers: s.propertyLayers.map(item => item.id === row.id ? mapPropertyLayer(row) : item) }
+          if (eventType === 'DELETE') return { propertyLayers: s.propertyLayers.filter(item => item.id !== old.id) }
+          return s
+        })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'property_source_runs' }, payload => {
+        if (payload.eventType === 'INSERT') {
+          set(s => ({ propertySourceRuns: [mapPropertySourceRun(payload.new), ...s.propertySourceRuns].slice(0, 500) }))
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'document_shares' }, payload => {
+        const { eventType, new: row, old } = payload
+        set(s => {
+          if (eventType === 'INSERT') return { documentShares: [mapDocumentShare(row), ...s.documentShares] }
+          if (eventType === 'UPDATE') return { documentShares: s.documentShares.map(item => item.id === row.id ? mapDocumentShare(row) : item) }
+          if (eventType === 'DELETE') return { documentShares: s.documentShares.filter(item => item.id !== old.id) }
+          return s
+        })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ai_action_drafts' }, payload => {
+        const { eventType, new: row, old } = payload
+        set(s => {
+          if (eventType === 'INSERT') return { aiActionDrafts: [mapAiActionDraft(row), ...s.aiActionDrafts] }
+          if (eventType === 'UPDATE') return { aiActionDrafts: s.aiActionDrafts.map(item => item.id === row.id ? mapAiActionDraft(row) : item) }
+          if (eventType === 'DELETE') return { aiActionDrafts: s.aiActionDrafts.filter(item => item.id !== old.id) }
+          return s
+        })
+      })
       .subscribe()
   },
 
@@ -621,6 +782,7 @@ const useStore = create((set, get) => ({
       postal_code: data.postalCode || '',
       country: data.country || '',
       property_snapshot: data.propertySnapshot || null,
+      property_profile_id: data.propertyProfileId || '',
       drive_folder_url: data.driveFolderUrl || '',
       drive_root_folder_id: data.driveRootFolderId || '',
       team_members: data.teamMembers || [],
@@ -671,6 +833,7 @@ const useStore = create((set, get) => ({
     if (data.postalCode !== undefined) updates.postal_code = data.postalCode
     if (data.country !== undefined) updates.country = data.country
     if (data.propertySnapshot !== undefined) updates.property_snapshot = data.propertySnapshot
+    if (data.propertyProfileId !== undefined) updates.property_profile_id = data.propertyProfileId
     if (data.driveFolderUrl !== undefined) updates.drive_folder_url = data.driveFolderUrl
     if (data.driveRootFolderId !== undefined) updates.drive_root_folder_id = data.driveRootFolderId
     if (data.teamMembers !== undefined) updates.team_members = data.teamMembers
@@ -705,6 +868,11 @@ const useStore = create((set, get) => ({
       calendarEvents: s.calendarEvents.filter(t => t.projectId !== id),
       projectContacts: s.projectContacts.filter(t => t.projectId !== id),
       dailyLogs: s.dailyLogs.filter(t => t.projectId !== id),
+      propertyProfiles: s.propertyProfiles.filter(t => t.projectId !== id),
+      propertyLayers: s.propertyLayers.filter(t => t.projectId !== id),
+      propertySourceRuns: s.propertySourceRuns.filter(t => t.projectId !== id),
+      documentShares: s.documentShares.filter(t => t.projectId !== id),
+      aiActionDrafts: s.aiActionDrafts.filter(t => t.projectId !== id),
     }))
     const { error } = await supabase.from('projects').delete().eq('id', id)
     if (error) console.error('deleteProject error:', error)
@@ -953,6 +1121,7 @@ const useStore = create((set, get) => ({
       actual_start: data.actualStart || null,
       actual_end: data.actualEnd || null,
       dependency_id: data.dependencyId || null,
+      project_contact_id: data.projectContactId || null,
       lag_days: data.lagDays ?? 0,
       internal_owner: data.internalOwner || '',
       is_milestone: data.isMilestone || false,
@@ -992,6 +1161,7 @@ const useStore = create((set, get) => ({
       actual_start: task.actualStart || null,
       actual_end: task.actualEnd || null,
       dependency_id: task.dependencyId || null,
+      project_contact_id: task.projectContactId || null,
       lag_days: task.lagDays ?? 0,
       internal_owner: task.internalOwner || '',
       is_milestone: task.isMilestone || false,
@@ -1029,6 +1199,7 @@ const useStore = create((set, get) => ({
     if (data.actualStart !== undefined) updates.actual_start = data.actualStart || null
     if (data.actualEnd !== undefined) updates.actual_end = data.actualEnd || null
     if (data.dependencyId !== undefined) updates.dependency_id = data.dependencyId || null
+    if (data.projectContactId !== undefined) updates.project_contact_id = data.projectContactId || null
     if (data.lagDays !== undefined) updates.lag_days = data.lagDays ?? 0
     if (data.internalOwner !== undefined) updates.internal_owner = data.internalOwner
     if (data.isMilestone !== undefined) updates.is_milestone = data.isMilestone
@@ -1061,6 +1232,7 @@ const useStore = create((set, get) => ({
     if (data.name !== undefined) updates.name = data.name
     if (data.phase !== undefined) updates.phase = data.phase
     if (data.assignee !== undefined) updates.assignee = data.assignee
+    if (data.projectContactId !== undefined) updates.project_contact_id = data.projectContactId || null
     if (data.internalOwner !== undefined) updates.internal_owner = data.internalOwner
     if (data.status !== undefined) updates.status = data.status
     if (data.progress !== undefined) updates.progress = data.progress
@@ -1120,6 +1292,11 @@ const useStore = create((set, get) => ({
       drive_file_id: data.driveFileId || '',
       gmail_message_id: data.gmailMessageId || '',
       gmail_thread_id: data.gmailThreadId || '',
+      revision: data.revision || '',
+      drawing_number: data.drawingNumber || '',
+      discipline: data.discipline || '',
+      issued_for: data.issuedFor || '',
+      document_status: data.documentStatus || 'current',
     }
     const doc = mapDocument({ ...row, created_at: new Date().toISOString() })
     set(s => ({ documents: [doc, ...s.documents] }))
@@ -1160,6 +1337,11 @@ const useStore = create((set, get) => ({
     if (data.driveFileId !== undefined) updates.drive_file_id = data.driveFileId
     if (data.gmailMessageId !== undefined) updates.gmail_message_id = data.gmailMessageId
     if (data.gmailThreadId !== undefined) updates.gmail_thread_id = data.gmailThreadId
+    if (data.revision !== undefined) updates.revision = data.revision
+    if (data.drawingNumber !== undefined) updates.drawing_number = data.drawingNumber
+    if (data.discipline !== undefined) updates.discipline = data.discipline
+    if (data.issuedFor !== undefined) updates.issued_for = data.issuedFor
+    if (data.documentStatus !== undefined) updates.document_status = data.documentStatus
     set(s => ({ documents: s.documents.map(d => d.id === id ? { ...d, ...data } : d) }))
     const { error } = await supabase.from('documents').update(updates).eq('id', id)
     if (error) {
@@ -1189,6 +1371,11 @@ const useStore = create((set, get) => ({
     if (data.projectId !== undefined) updates.project_id = data.projectId || null
     if (data.stageId !== undefined) updates.stage_id = data.stageId || ''
     if (data.category !== undefined) updates.category = data.category
+    if (data.revision !== undefined) updates.revision = data.revision
+    if (data.drawingNumber !== undefined) updates.drawing_number = data.drawingNumber
+    if (data.discipline !== undefined) updates.discipline = data.discipline
+    if (data.issuedFor !== undefined) updates.issued_for = data.issuedFor
+    if (data.documentStatus !== undefined) updates.document_status = data.documentStatus
     set(s => ({ documents: s.documents.map(d => ids.includes(d.id) ? { ...d, ...data } : d) }))
     const { error } = await supabase.from('documents').update(updates).in('id', ids)
     if (error) console.error('updateBatchDocuments error:', error)
@@ -1211,6 +1398,197 @@ const useStore = create((set, get) => ({
   },
 
   // ── Team Members ──────────────────────────────────────────────────────────
+  // Property intelligence
+  async upsertPropertyProfile(data) {
+    const id = data.id || data.propertyProfileId || genId()
+    const now = new Date().toISOString()
+    const existing = get().propertyProfiles.find(item => item.id === id || item.projectId === data.projectId)
+    const row = {
+      id: existing?.id || id,
+      project_id: data.projectId,
+      address: data.address || '',
+      formatted_address: data.formattedAddress || data.address || '',
+      place_id: data.placeId || '',
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
+      suburb: data.suburb || '',
+      city: data.city || '',
+      region: data.region || '',
+      postal_code: data.postalCode || '',
+      country: data.country || 'New Zealand',
+      source_status: data.sourceStatus || {},
+      title_summary: data.titleSummary || {},
+      parcel_summary: data.parcelSummary || {},
+      council_summary: data.councilSummary || {},
+      zoning_summary: data.zoningSummary || {},
+      hazard_summary: data.hazardSummary || {},
+      services_summary: data.servicesSummary || {},
+      valuation_summary: data.valuationSummary || {},
+      demographics_summary: data.demographicsSummary || {},
+      map_links: data.mapLinks || {},
+      raw_payload: data.rawPayload || {},
+      last_refreshed_at: data.lastRefreshedAt || now,
+      updated_at: now,
+    }
+    const profile = mapPropertyProfile({ ...row, created_at: existing?.createdAt || now })
+    set(s => ({
+      propertyProfiles: [profile, ...s.propertyProfiles.filter(item => item.id !== profile.id && item.projectId !== profile.projectId)],
+      projects: s.projects.map(project => project.id === profile.projectId ? { ...project, propertyProfileId: profile.id } : project),
+    }))
+    const { error } = await supabase.from('property_profiles').upsert(row)
+    if (error) console.error('upsertPropertyProfile error:', error)
+    await get().updateProject(profile.projectId, { propertyProfileId: profile.id })
+    return profile
+  },
+
+  async addPropertySourceRun(data) {
+    const id = data.id || genId()
+    const row = {
+      id,
+      project_id: data.projectId,
+      profile_id: data.profileId || null,
+      source: data.source || '',
+      status: data.status || 'not available',
+      message: data.message || '',
+      request: data.request || {},
+      response: data.response || {},
+    }
+    const item = mapPropertySourceRun({ ...row, created_at: new Date().toISOString() })
+    set(s => ({ propertySourceRuns: [item, ...s.propertySourceRuns].slice(0, 500) }))
+    const { error } = await supabase.from('property_source_runs').insert(row)
+    if (error) console.error('addPropertySourceRun error:', error)
+    return item
+  },
+
+  async addPropertyLayer(data) {
+    const id = data.id || genId()
+    const row = {
+      id,
+      project_id: data.projectId,
+      profile_id: data.profileId || null,
+      layer_type: data.layerType || '',
+      name: data.name || '',
+      source: data.source || '',
+      source_url: data.sourceUrl || '',
+      confidence: data.confidence || 'not available',
+      geometry: data.geometry || null,
+      attributes: data.attributes || {},
+    }
+    const item = mapPropertyLayer({ ...row, created_at: new Date().toISOString(), captured_at: new Date().toISOString() })
+    set(s => ({ propertyLayers: [item, ...s.propertyLayers] }))
+    const { error } = await supabase.from('property_layers').insert(row)
+    if (error) console.error('addPropertyLayer error:', error)
+    return item
+  },
+
+  async addDocumentShare(data) {
+    const id = data.id || genId()
+    const token = data.token || crypto.randomUUID().replaceAll('-', '')
+    const row = {
+      id,
+      token,
+      project_id: data.projectId || null,
+      document_ids: data.documentIds || [],
+      document_snapshot: data.documentSnapshot || [],
+      title: data.title || '',
+      expires_at: data.expiresAt || null,
+      revoked_at: null,
+      created_by: data.createdBy || get().currentUser || '',
+    }
+    const item = mapDocumentShare({ ...row, access_count: 0, created_at: new Date().toISOString() })
+    set(s => ({ documentShares: [item, ...s.documentShares] }))
+    const { error } = await supabase.from('document_shares').insert(row)
+    if (error) {
+      console.error('addDocumentShare error:', error)
+      set(s => ({ documentShares: s.documentShares.filter(share => share.id !== id) }))
+    }
+    return item
+  },
+
+  async revokeDocumentShare(id) {
+    const revokedAt = new Date().toISOString()
+    set(s => ({ documentShares: s.documentShares.map(share => share.id === id ? { ...share, revokedAt } : share) }))
+    const { error } = await supabase.from('document_shares').update({ revoked_at: revokedAt }).eq('id', id)
+    if (error) console.error('revokeDocumentShare error:', error)
+  },
+
+  async addAiActionDraft(data) {
+    const id = data.id || genId()
+    const now = new Date().toISOString()
+    const row = {
+      id,
+      project_id: data.projectId,
+      action_type: data.actionType || data.action_type || '',
+      title: data.title || '',
+      rationale: data.rationale || '',
+      payload: data.payload || {},
+      status: data.status || 'pending',
+      created_by: data.createdBy || get().currentUser || '',
+      created_at: now,
+      updated_at: now,
+    }
+    const draft = mapAiActionDraft(row)
+    set(s => ({ aiActionDrafts: [draft, ...s.aiActionDrafts] }))
+    const { error } = await supabase.from('ai_action_drafts').insert(row)
+    if (error) console.error('addAiActionDraft error:', error)
+    return draft
+  },
+
+  async updateAiActionDraft(id, data) {
+    const updates = { updated_at: new Date().toISOString() }
+    if (data.title !== undefined) updates.title = data.title
+    if (data.rationale !== undefined) updates.rationale = data.rationale
+    if (data.payload !== undefined) updates.payload = data.payload
+    if (data.status !== undefined) updates.status = data.status
+    set(s => ({ aiActionDrafts: s.aiActionDrafts.map(draft => draft.id === id ? { ...draft, ...data, updatedAt: updates.updated_at } : draft) }))
+    const { error } = await supabase.from('ai_action_drafts').update(updates).eq('id', id)
+    if (error) console.error('updateAiActionDraft error:', error)
+  },
+
+  async dismissAiActionDraft(id) {
+    const dismissedAt = new Date().toISOString()
+    set(s => ({ aiActionDrafts: s.aiActionDrafts.map(draft => draft.id === id ? { ...draft, status: 'dismissed', dismissedAt } : draft) }))
+    const { error } = await supabase.from('ai_action_drafts').update({ status: 'dismissed', dismissed_at: dismissedAt, updated_at: dismissedAt }).eq('id', id)
+    if (error) console.error('dismissAiActionDraft error:', error)
+  },
+
+  async applyAiActionDraft(id) {
+    const draft = get().aiActionDrafts.find(item => item.id === id)
+    if (!draft) return
+    const payload = draft.payload || {}
+    if (draft.actionType === 'create_task') {
+      await get().addTask({
+        projectId: draft.projectId,
+        title: payload.title || draft.title,
+        description: payload.description || draft.rationale,
+        assignee: payload.assignee || '',
+        dueDate: payload.dueDate || '',
+        priority: payload.priority || 'medium',
+        status: payload.status || 'open',
+      })
+    }
+    if (draft.actionType === 'create_schedule_task') {
+      await get().addScheduleTask({
+        projectId: draft.projectId,
+        name: payload.name || payload.title || draft.title,
+        phase: payload.phase || '',
+        startDate: payload.startDate || '',
+        endDate: payload.endDate || payload.dueDate || '',
+        durationDays: payload.durationDays ?? null,
+        status: payload.status || 'not-started',
+        assignee: payload.assignee || '',
+        internalOwner: payload.internalOwner || '',
+        projectContactId: payload.projectContactId || '',
+        isMilestone: Boolean(payload.isMilestone),
+        notes: payload.notes || draft.rationale,
+      })
+    }
+    const appliedAt = new Date().toISOString()
+    set(s => ({ aiActionDrafts: s.aiActionDrafts.map(item => item.id === id ? { ...item, status: 'applied', appliedAt, updatedAt: appliedAt } : item) }))
+    const { error } = await supabase.from('ai_action_drafts').update({ status: 'applied', applied_at: appliedAt, updated_at: appliedAt }).eq('id', id)
+    if (error) console.error('applyAiActionDraft error:', error)
+  },
+
   async addTeamMember(data) {
     const id = genId()
     const row = { id, name: data.name, role: data.role || '', email: data.email || '', phone: data.phone || '' }

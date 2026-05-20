@@ -313,12 +313,19 @@ function TaskForm({ projectId, phaseOptions, onClose }) {
 }
 
 function TaskEditDrawer({ task, phaseOptions, onClose }) {
-  const { updateScheduleTask, deleteScheduleTask } = useStore()
+  const { updateScheduleTask, deleteScheduleTask, projectContacts, contacts, companies } = useStore()
+  const contactLabel = item => {
+    const person = contacts.find(contact => contact.id === item.contactId)
+    const company = companies.find(company => company.id === item.companyId)
+    return [person?.name, company?.name, item.projectRole || item.discipline].filter(Boolean).join(' / ') || 'Project contact'
+  }
+  const availableProjectContacts = projectContacts.filter(item => item.projectId === task.projectId)
   const [form, setForm] = useState({
     name: task.name || '',
     phase: task.phase || '',
     assignee: task.assignee || '',
     internalOwner: task.internalOwner || '',
+    projectContactId: task.projectContactId || '',
     startDate: formatInput(task.startDate),
     endDate: formatInput(task.endDate),
     status: task.status || 'not-started',
@@ -400,6 +407,13 @@ function TaskEditDrawer({ task, phaseOptions, onClose }) {
               <input className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-ocean-400" value={form.internalOwner} onChange={e => set('internalOwner', e.target.value)} />
             </div>
           </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Project contact / contractor</label>
+            <select className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-ocean-400" value={form.projectContactId} onChange={e => set('projectContactId', e.target.value)}>
+              <option value="">No project contact</option>
+              {availableProjectContacts.map(item => <option key={item.id} value={item.id}>{contactLabel(item)}</option>)}
+            </select>
+          </div>
           <label className="flex items-center gap-2 text-sm text-gray-700">
             <input type="checkbox" checked={form.isMilestone} onChange={e => set('isMilestone', e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-forest-600 focus:ring-forest-500" />
             Show on global milestone calendar
@@ -439,6 +453,9 @@ function TaskListView({ projectId, projectStartDate, tasks, showProject = false 
     addBatchScheduleTasks,
     scheduleTemplates,
     scheduleTemplateItems,
+    projectContacts,
+    contacts,
+    companies,
   } = useStore()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -447,7 +464,7 @@ function TaskListView({ projectId, projectStartDate, tasks, showProject = false 
   const [showNewTask, setShowNewTask] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [selected, setSelected] = useState(new Set())
-  const [bulk, setBulk] = useState({ status: '', phase: '', assignee: '', internalOwner: '', shiftDays: '', milestone: '' })
+  const [bulk, setBulk] = useState({ status: '', phase: '', assignee: '', internalOwner: '', projectContactId: '', shiftDays: '', milestone: '' })
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [editTask, setEditTask] = useState(null)
   const [csvImport, setCsvImport] = useState(null)
@@ -475,6 +492,12 @@ function TaskListView({ projectId, projectStartDate, tasks, showProject = false 
     ? scheduleTemplates
     : [{ id: 'archispace-standard-development-programme', name: 'Archispace Standard Development Programme', isDefault: true }]
   const activeTemplateId = selectedTemplateId || availableTemplates.find(t => t.isDefault)?.id || availableTemplates[0]?.id || ''
+  const availableProjectContacts = projectContacts.filter(item => item.projectId === projectId)
+  const contactLabel = item => {
+    const person = contacts.find(contact => contact.id === item.contactId)
+    const company = companies.find(company => company.id === item.companyId)
+    return [person?.name, company?.name, item.projectRole || item.discipline].filter(Boolean).join(' / ') || 'Project contact'
+  }
 
   const toggleGroup = phase => {
     setCollapsed(current => {
@@ -528,11 +551,12 @@ function TaskListView({ projectId, projectStartDate, tasks, showProject = false 
     if (bulk.phase.trim()) payload.phase = bulk.phase.trim()
     if (bulk.assignee.trim()) payload.assignee = bulk.assignee.trim()
     if (bulk.internalOwner.trim()) payload.internalOwner = bulk.internalOwner.trim()
+    if (bulk.projectContactId) payload.projectContactId = bulk.projectContactId
     if (bulk.milestone) payload.isMilestone = bulk.milestone === 'yes'
     if (bulk.shiftDays) payload.shiftDays = Number(bulk.shiftDays)
     if (!Object.keys(payload).length) return
     await updateBatchScheduleTasks(selectedIds, payload)
-    setBulk({ status: '', phase: '', assignee: '', internalOwner: '', shiftDays: '', milestone: '' })
+    setBulk({ status: '', phase: '', assignee: '', internalOwner: '', projectContactId: '', shiftDays: '', milestone: '' })
     setSelected(new Set())
   }
 
@@ -636,6 +660,10 @@ function TaskListView({ projectId, projectStartDate, tasks, showProject = false 
           <datalist id="bulk-schedule-phases">{phases.map(phase => <option key={phase} value={phase} />)}</datalist>
           <input className="h-8 w-32 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" placeholder="Assignee" value={bulk.assignee} onChange={e => setBulk(current => ({ ...current, assignee: e.target.value }))} />
           <input className="h-8 w-32 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" placeholder="Owner" value={bulk.internalOwner} onChange={e => setBulk(current => ({ ...current, internalOwner: e.target.value }))} />
+          <select className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" value={bulk.projectContactId} onChange={e => setBulk(current => ({ ...current, projectContactId: e.target.value }))}>
+            <option value="">Project contact</option>
+            {availableProjectContacts.map(item => <option key={item.id} value={item.id}>{contactLabel(item)}</option>)}
+          </select>
           <input type="number" className="h-8 w-24 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" placeholder="Shift days" value={bulk.shiftDays} onChange={e => setBulk(current => ({ ...current, shiftDays: e.target.value }))} />
           <select className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs outline-none focus:border-ocean-400" value={bulk.milestone} onChange={e => setBulk(current => ({ ...current, milestone: e.target.value }))}>
             <option value="">Milestone</option>

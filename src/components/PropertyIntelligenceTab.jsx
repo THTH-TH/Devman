@@ -32,6 +32,9 @@ const sourceLabels = [
   ['Google Maps', 'googleMaps'],
   ['LINZ', 'linz'],
   ['Council GIS', 'council'],
+  ['Zoning', 'zoning'],
+  ['Flooding', 'hazards'],
+  ['Services', 'services'],
   ['Title / ownership', 'titleOwnership'],
   ['Valuation', 'valuation'],
   ['Demographics', 'demographics'],
@@ -88,6 +91,55 @@ function InfoPanel({ title, icon: Icon, summary, status, sourceUrl, children }) 
         </a>
       )}
     </section>
+  )
+}
+
+function DetailPill({ label, value }) {
+  if (!value && value !== 0) return null
+  return (
+    <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</div>
+      <div className="mt-1 text-xs font-semibold text-gray-800">{value}</div>
+    </div>
+  )
+}
+
+function EvidenceList({ items = [], empty = 'No returned records.', renderItem }) {
+  if (!items.length) return <div className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">{empty}</div>
+  return (
+    <div className="mt-3 space-y-2">
+      {items.slice(0, 6).map((item, index) => (
+        <div key={`${item.layerId || item.assetType || index}-${item.compKey || item.value || index}`} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+          {renderItem(item)}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function UtilityGroup({ title, items = [] }) {
+  return (
+    <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-xs font-bold text-gray-800">{title}</div>
+        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-500">{items.length}</span>
+      </div>
+      {items.length === 0 ? (
+        <div className="text-xs text-gray-400">No nearby assets returned.</div>
+      ) : (
+        <div className="space-y-1.5">
+          {items.slice(0, 4).map((item, index) => (
+            <div key={`${item.compKey || item.unitId || index}`} className="text-xs leading-5 text-gray-600">
+              <span className="font-semibold text-gray-800">{item.assetType}</span>
+              {item.diameter ? ` - ${item.diameter}mm` : ''}
+              {item.material ? ` ${item.material}` : ''}
+              {item.comments ? ` - ${item.comments}` : ''}
+              {item.asBuiltNumber ? ` - As-built ${item.asBuiltNumber}` : ''}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -178,8 +230,8 @@ export default function PropertyIntelligenceTab({ project }) {
     legalDescription: existingProfile?.titleSummary?.legalDescription || project.legalDescription || '',
     owner: existingProfile?.titleSummary?.owner || project.owner || '',
     titleSummary: existingProfile?.titleSummary?.summary || '',
-    zoningSummary: existingProfile?.zoningSummary?.summary || '',
-    servicesSummary: existingProfile?.servicesSummary?.summary || '',
+    zoningSummary: existingProfile?.zoningSummary?.manualNotes || '',
+    servicesSummary: existingProfile?.servicesSummary?.manualNotes || '',
     valuationSummary: existingProfile?.valuationSummary?.summary || '',
     demographicsSummary: existingProfile?.demographicsSummary?.summary || '',
   }))
@@ -190,6 +242,9 @@ export default function PropertyIntelligenceTab({ project }) {
   const titleOwner = activeProfile.titleSummary?.owner || project.owner || 'Manual evidence required'
   const legalDescription = activeProfile.titleSummary?.legalDescription || project.legalDescription || 'Manual evidence required'
   const hazardSummary = activeProfile.hazardSummary?.summary || 'Hazard check not captured yet.'
+  const zoningDetails = activeProfile.zoningSummary?.details || {}
+  const hazardItems = activeProfile.hazardSummary?.items || []
+  const serviceGroups = activeProfile.servicesSummary?.groups || {}
 
   const runs = useMemo(
     () => propertySourceRuns.filter(run => run.projectId === project.id).slice(0, 6),
@@ -244,8 +299,18 @@ export default function PropertyIntelligenceTab({ project }) {
         owner: manual.owner,
         summary: manual.titleSummary || manual.legalDescription || 'Manual title/legal notes saved.',
       },
-      zoningSummary: { ...(activeProfile.zoningSummary || {}), status: 'manual', summary: manual.zoningSummary },
-      servicesSummary: { ...(activeProfile.servicesSummary || {}), status: 'manual', summary: manual.servicesSummary },
+      zoningSummary: {
+        ...(activeProfile.zoningSummary || {}),
+        manualNotes: manual.zoningSummary,
+        status: activeProfile.zoningSummary?.status || 'manual',
+        summary: activeProfile.zoningSummary?.summary || manual.zoningSummary,
+      },
+      servicesSummary: {
+        ...(activeProfile.servicesSummary || {}),
+        manualNotes: manual.servicesSummary,
+        status: activeProfile.servicesSummary?.status || 'manual',
+        summary: activeProfile.servicesSummary?.summary || manual.servicesSummary,
+      },
       valuationSummary: { ...(activeProfile.valuationSummary || {}), status: manual.valuationSummary ? 'manual' : 'not available', summary: manual.valuationSummary },
       demographicsSummary: { ...(activeProfile.demographicsSummary || {}), status: manual.demographicsSummary ? 'manual' : 'not available', summary: manual.demographicsSummary },
       sourceStatus: { ...(activeProfile.sourceStatus || {}), titleOwnership: 'manual' },
@@ -343,15 +408,41 @@ export default function PropertyIntelligenceTab({ project }) {
 
         <InfoPanel title="Council records" icon={Building2} status={activeProfile.councilSummary?.status} summary={activeProfile.councilSummary?.summary} sourceUrl={activeProfile.councilSummary?.sourceUrl || activeProfile.mapLinks?.councilMaps} />
 
-        <InfoPanel title="Zoning and planning" icon={MapPin} status={activeProfile.zoningSummary?.status} summary={activeProfile.zoningSummary?.summary} sourceUrl={activeProfile.zoningSummary?.sourceUrl || activeProfile.mapLinks?.councilMaps}>
+        <InfoPanel title="Zoning and planning" icon={MapPin} status={activeProfile.zoningSummary?.status} summary={activeProfile.zoningSummary?.summary} sourceUrl={activeProfile.zoningSummary?.sourceUrl || activeProfile.mapLinks?.taurangaZoning || activeProfile.mapLinks?.councilMaps}>
+          {(zoningDetails.zone || zoningDetails.description || zoningDetails.ruleId) && (
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <DetailPill label="Zone" value={zoningDetails.zone} />
+              <DetailPill label="Description" value={zoningDetails.description} />
+              <DetailPill label="Rule" value={zoningDetails.ruleId} />
+            </div>
+          )}
           <Field label="Planning notes">
             <textarea className={`${inputCls} mt-3 min-h-[72px] resize-none`} value={manual.zoningSummary} onChange={e => set('zoningSummary', e.target.value)} placeholder="Zone, overlays, activity status, density constraints, setbacks..." />
           </Field>
         </InfoPanel>
 
-        <InfoPanel title="Natural hazards / flooding" icon={Waves} status={activeProfile.hazardSummary?.status} summary={hazardSummary} sourceUrl={activeProfile.hazardSummary?.sourceUrl || activeProfile.mapLinks?.taurangaNaturalHazards} />
+        <InfoPanel title="Natural hazards / flooding" icon={Waves} status={activeProfile.hazardSummary?.status} summary={hazardSummary} sourceUrl={activeProfile.hazardSummary?.sourceUrl || activeProfile.mapLinks?.taurangaNaturalHazards}>
+          <EvidenceList
+            items={hazardItems}
+            empty="No council flooding/hazard records returned at the selected point."
+            renderItem={item => (
+              <>
+                <div className="text-xs font-semibold text-gray-800">{item.classification || item.value || item.layerName}</div>
+                <div className="mt-0.5 text-[11px] text-gray-500">{[item.layerName, item.source, item.ruleId].filter(Boolean).join(' - ')}</div>
+              </>
+            )}
+          />
+        </InfoPanel>
 
-        <InfoPanel title="Services and utilities" icon={Zap} status={activeProfile.servicesSummary?.status} summary={activeProfile.servicesSummary?.summary}>
+        <InfoPanel title="Services and utilities" icon={Zap} status={activeProfile.servicesSummary?.status} summary={activeProfile.servicesSummary?.summary} sourceUrl={activeProfile.servicesSummary?.sourceUrl || activeProfile.mapLinks?.taurangaUtilities}>
+          <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-3">
+            <UtilityGroup title="Water" items={serviceGroups.Water || []} />
+            <UtilityGroup title="Stormwater" items={serviceGroups.Stormwater || []} />
+            <UtilityGroup title="Wastewater" items={serviceGroups.Wastewater || []} />
+          </div>
+          {activeProfile.servicesSummary?.searchRadiusMeters && (
+            <div className="mt-2 text-[11px] text-gray-400">Search radius: {activeProfile.servicesSummary.searchRadiusMeters}m from selected coordinates.</div>
+          )}
           <Field label="Services notes">
             <textarea className={`${inputCls} mt-3 min-h-[72px] resize-none`} value={manual.servicesSummary} onChange={e => set('servicesSummary', e.target.value)} placeholder="Stormwater, wastewater, water, power, access, telecoms..." />
           </Field>

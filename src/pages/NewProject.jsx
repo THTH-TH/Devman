@@ -6,7 +6,6 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronRight,
-  ExternalLink,
   FileText,
   FolderOpen,
   LandPlot,
@@ -21,6 +20,7 @@ import { CHECKLIST_TEMPLATE } from '../data/checklistTemplate'
 import { MILESTONE_TEMPLATE } from '../data/milestones'
 import { buildScheduleTasksFromTemplateItems } from '../data/scheduleTemplate'
 import AddressAutocomplete, { buildGoogleMapsUrl } from '../components/AddressAutocomplete'
+import PropertyMapEmbed from '../components/PropertyMapEmbed'
 
 const STATUS_OPTIONS = ['Active', 'On Hold', 'Blocked', 'Complete']
 const STEPS = [
@@ -144,7 +144,6 @@ function StepBar({ current }) {
 
 function PropertySnapshot({ place, form }) {
   const snapshot = useMemo(() => buildPropertySnapshot(place, form), [place, form])
-  const mapUrl = snapshot.location.mapUrl
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -159,27 +158,29 @@ function PropertySnapshot({ place, form }) {
       </div>
 
       <div className="p-5 space-y-5">
-        <div className="rounded-xl bg-gray-50 border border-gray-100 p-4">
-          <div className="flex gap-3">
-            <div className="w-10 h-10 rounded-lg bg-forest-50 text-forest-700 flex items-center justify-center shrink-0">
-              <MapPin size={18} />
-            </div>
-            <div className="min-w-0">
-              <div className="font-semibold text-gray-900 text-sm">{snapshot.identity.address || 'Address pending'}</div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500 mt-1">
-                {snapshot.location.suburb && <span>{snapshot.location.suburb}</span>}
-                {snapshot.location.region && <span>{snapshot.location.region}</span>}
-                {snapshot.location.postalCode && <span>Postcode {snapshot.location.postalCode}</span>}
-                {snapshot.location.latitude && snapshot.location.longitude && (
-                  <span className="font-mono">{Number(snapshot.location.latitude).toFixed(6)}, {Number(snapshot.location.longitude).toFixed(6)}</span>
-                )}
-              </div>
-              {mapUrl && (
-                <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-ocean-600 hover:underline mt-2">
-                  Open in Google Maps
-                  <ExternalLink size={11} />
-                </a>
-              )}
+        <PropertyMapEmbed
+          address={snapshot.identity.address}
+          latitude={snapshot.location.latitude}
+          longitude={snapshot.location.longitude}
+          mapLinks={{ googleMaps: snapshot.location.mapUrl }}
+          title={snapshot.identity.address || 'Address pending'}
+          subtitle="Project site"
+          heightClass="h-[280px]"
+        />
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Address source</div>
+            <div className="mt-1 text-sm font-semibold text-gray-800">{snapshot.source === 'google_places' ? 'Google Places' : 'Manual entry'}</div>
+          </div>
+          <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Location</div>
+            <div className="mt-1 text-sm font-semibold text-gray-800">{[snapshot.location.suburb, snapshot.location.region, snapshot.location.postalCode].filter(Boolean).join(', ') || 'Not captured yet'}</div>
+          </div>
+          <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Coordinates</div>
+            <div className="mt-1 font-mono text-xs font-semibold text-gray-800">
+              {snapshot.location.latitude && snapshot.location.longitude ? `${Number(snapshot.location.latitude).toFixed(6)}, ${Number(snapshot.location.longitude).toFixed(6)}` : 'Manual address'}
             </div>
           </div>
         </div>
@@ -195,9 +196,9 @@ function PropertySnapshot({ place, form }) {
           <div className="flex items-start gap-3">
             <LandPlot size={16} className="text-forest-600 mt-0.5 shrink-0" />
             <div>
-              <div className="text-xs font-semibold text-gray-700">Next intelligence layer</div>
+              <div className="text-xs font-semibold text-gray-700">Property intelligence on save</div>
               <p className="text-xs text-gray-500 mt-1">
-                Title, zoning, council records and valuation fields are ready in the snapshot structure. The live data pull needs a property intelligence data source or Edge Function connected to this Supabase project.
+                DevMan will create a property profile with map links, LINZ/council evidence links, hazard status, title/legal fields, services notes, valuation placeholders and demographics placeholders. Restricted or licensed data stays marked as manual until a proper source is connected.
               </p>
             </div>
           </div>
@@ -437,6 +438,14 @@ export default function NewProject() {
                 <FileText size={16} className="text-forest-600" />
                 <h3 className="text-sm font-bold text-gray-900">Project key</h3>
               </div>
+              <PropertyMapEmbed
+                address={form.address}
+                latitude={form.latitude}
+                longitude={form.longitude}
+                title={form.address || 'Search preview'}
+                subtitle="Address preview"
+                heightClass="h-[220px]"
+              />
               <div className="space-y-3">
                 {[
                   'Address identity and coordinates',
@@ -467,21 +476,33 @@ export default function NewProject() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-              <div className="font-semibold text-gray-900">{placeDetails.formattedAddress}</div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-2">
-                {placeDetails.suburb && <span>{placeDetails.suburb}</span>}
-                {placeDetails.city && <span>{placeDetails.city}</span>}
-                {placeDetails.region && <span>{placeDetails.region}</span>}
-                {placeDetails.postalCode && <span>Postcode {placeDetails.postalCode}</span>}
-                {placeDetails.lat && placeDetails.lng && <span className="font-mono">{placeDetails.lat.toFixed(6)}, {placeDetails.lng.toFixed(6)}</span>}
+            <PropertyMapEmbed
+              address={placeDetails.formattedAddress}
+              latitude={placeDetails.lat}
+              longitude={placeDetails.lng}
+              mapLinks={{ googleMaps: buildGoogleMapsUrl(placeDetails) }}
+              title={placeDetails.formattedAddress}
+              subtitle="Confirm project site"
+              heightClass="h-[360px]"
+            />
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Suburb</div>
+                <div className="mt-1 text-sm font-semibold text-gray-800">{placeDetails.suburb || 'Not captured'}</div>
               </div>
-              {buildGoogleMapsUrl(placeDetails) && (
-                <a href={buildGoogleMapsUrl(placeDetails)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-ocean-600 hover:underline mt-3">
-                  Open in Google Maps
-                  <ExternalLink size={11} />
-                </a>
-              )}
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">City</div>
+                <div className="mt-1 text-sm font-semibold text-gray-800">{placeDetails.city || 'Not captured'}</div>
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Region</div>
+                <div className="mt-1 text-sm font-semibold text-gray-800">{placeDetails.region || 'Not captured'}</div>
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Postcode</div>
+                <div className="mt-1 text-sm font-semibold text-gray-800">{placeDetails.postalCode || 'Not captured'}</div>
+              </div>
             </div>
 
             <div className="flex justify-between pt-2">

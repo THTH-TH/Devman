@@ -1,17 +1,23 @@
 import { useMemo, useState } from 'react'
 import {
   AlertCircle,
+  Building2,
   ExternalLink,
+  Gauge,
   LandPlot,
+  Layers,
   Loader2,
   Map,
   MapPin,
   RefreshCw,
-  Satellite,
   Save,
+  School,
+  ShieldAlert,
   Waves,
+  Zap,
 } from 'lucide-react'
 import useStore from '../store/useStore'
+import PropertyMapEmbed from './PropertyMapEmbed'
 
 const inputCls = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-ocean-400'
 
@@ -21,6 +27,15 @@ const statusClasses = {
   manual: 'bg-amber-50 text-amber-700 border-amber-100',
   'not available': 'bg-gray-100 text-gray-500 border-gray-200',
 }
+
+const sourceLabels = [
+  ['Google Maps', 'googleMaps'],
+  ['LINZ', 'linz'],
+  ['Council GIS', 'council'],
+  ['Title / ownership', 'titleOwnership'],
+  ['Valuation', 'valuation'],
+  ['Demographics', 'demographics'],
+]
 
 function SourceBadge({ status }) {
   const value = status || 'not available'
@@ -40,51 +55,18 @@ function Field({ label, children }) {
   )
 }
 
-function PropertyMap({ profile, project }) {
-  const key = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-  const latitude = profile?.latitude ?? project.latitude
-  const longitude = profile?.longitude ?? project.longitude
-  const address = profile?.formattedAddress || profile?.address || project.address
-  const query = latitude && longitude ? `${latitude},${longitude}` : address
-  const embed = key && query ? `https://www.google.com/maps/embed/v1/place?key=${key}&q=${encodeURIComponent(query)}` : ''
-  const mapsUrl = profile?.mapLinks?.googleMaps || (query ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}` : '')
-  const streetView = profile?.mapLinks?.streetView || (latitude && longitude ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${latitude},${longitude}` : mapsUrl)
-
+function QuickFact({ label, value, icon: Icon, status }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-gray-100 bg-white">
-      <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-forest-50 text-forest-700">
-            <MapPin size={18} />
-          </div>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-bold text-gray-900">{address || 'No address captured'}</div>
-            <div className="mt-0.5 text-xs text-gray-500">
-              {latitude && longitude ? `${Number(latitude).toFixed(6)}, ${Number(longitude).toFixed(6)}` : 'Manual address needs coordinates'}
-            </div>
-          </div>
+    <div className="rounded-xl border border-gray-100 bg-white p-4">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {Icon && <Icon size={15} className="text-forest-600" />}
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {mapsUrl && (
-            <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">
-              <Map size={13} /> Maps
-            </a>
-          )}
-          {streetView && (
-            <a href={streetView} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">
-              <Satellite size={13} /> Street
-            </a>
-          )}
-        </div>
+        {status && <SourceBadge status={status} />}
       </div>
-      {embed ? (
-        <iframe title="Property map" src={embed} className="h-[320px] w-full border-0" loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
-      ) : (
-        <div className="flex h-[260px] items-center justify-center bg-gray-50 px-6 text-center text-sm text-gray-500">
-          Add `VITE_GOOGLE_MAPS_API_KEY` to show the embedded map here. The external Google Maps link still works.
-        </div>
-      )}
-    </section>
+      <div className="text-sm font-semibold leading-5 text-gray-900">{value || 'Not captured yet'}</div>
+    </div>
   )
 }
 
@@ -107,6 +89,76 @@ function InfoPanel({ title, icon: Icon, summary, status, sourceUrl, children }) 
       )}
     </section>
   )
+}
+
+function SourceStrip({ sourceStatus = {} }) {
+  return (
+    <section className="rounded-xl border border-gray-100 bg-white p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-sm font-bold text-gray-900">Data source status</h3>
+        <span className="text-xs text-gray-400">Live where possible, manual where restricted</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+        {sourceLabels.map(([label, key]) => (
+          <div key={key} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+            <div className="mb-1 truncate text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</div>
+            <SourceBadge status={sourceStatus[key]} />
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function formatDateTime(value) {
+  if (!value) return 'Not refreshed yet'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Not refreshed yet'
+  return date.toLocaleString('en-NZ', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function buildFallbackProfile(project) {
+  return {
+    projectId: project.id,
+    formattedAddress: project.address,
+    address: project.address,
+    placeId: project.placeId,
+    latitude: project.latitude,
+    longitude: project.longitude,
+    suburb: project.suburb,
+    city: project.city,
+    region: project.region,
+    postalCode: project.postalCode,
+    country: project.country || 'New Zealand',
+    sourceStatus: {
+      googleMaps: project.latitude && project.longitude ? 'live' : 'manual',
+      linz: 'linked',
+      council: 'linked',
+      titleOwnership: 'manual',
+      valuation: 'not available',
+      demographics: 'not available',
+    },
+    titleSummary: {
+      status: 'manual',
+      summary: project.legalDescription || 'Title/legal evidence not captured yet.',
+      legalDescription: project.legalDescription || '',
+      owner: project.owner || '',
+    },
+    parcelSummary: { status: 'linked', summary: 'LINZ parcel/cadastral search link will be generated on refresh.' },
+    councilSummary: { status: 'linked', summary: 'Council property records and GIS links will be generated on refresh.' },
+    zoningSummary: { status: 'manual', summary: 'Planning and zoning notes not captured yet.' },
+    hazardSummary: { status: 'linked', summary: 'Refresh to check Tauranga/BOP hazard links where available.' },
+    servicesSummary: { status: 'manual', summary: 'Services notes not captured yet.' },
+    valuationSummary: { status: 'not available', summary: 'Valuation/rental placeholders only.' },
+    demographicsSummary: { status: 'not available', summary: 'Schools/demographics placeholders only.' },
+    mapLinks: {},
+  }
 }
 
 export default function PropertyIntelligenceTab({ project }) {
@@ -132,36 +184,12 @@ export default function PropertyIntelligenceTab({ project }) {
     demographicsSummary: existingProfile?.demographicsSummary?.summary || '',
   }))
 
-  const activeProfile = profile || existingProfile || {
-    projectId: project.id,
-    formattedAddress: project.address,
-    address: project.address,
-    placeId: project.placeId,
-    latitude: project.latitude,
-    longitude: project.longitude,
-    suburb: project.suburb,
-    city: project.city,
-    region: project.region,
-    postalCode: project.postalCode,
-    country: project.country || 'New Zealand',
-    sourceStatus: {
-      googleMaps: project.latitude && project.longitude ? 'live' : 'manual',
-      linz: 'linked',
-      council: 'linked',
-      titleOwnership: 'manual',
-      valuation: 'not available',
-      demographics: 'not available',
-    },
-    titleSummary: { status: 'manual', summary: project.legalDescription || 'Title/legal evidence not captured yet.', legalDescription: project.legalDescription || '', owner: project.owner || '' },
-    parcelSummary: { status: 'linked', summary: 'LINZ parcel/cadastral search link will be generated on refresh.' },
-    councilSummary: { status: 'linked', summary: 'Council GIS links will be generated on refresh.' },
-    zoningSummary: { status: 'manual', summary: 'Planning and zoning notes not captured yet.' },
-    hazardSummary: { status: 'linked', summary: 'Refresh to check Tauranga/BOP hazard links where available.' },
-    servicesSummary: { status: 'manual', summary: 'Services notes not captured yet.' },
-    valuationSummary: { status: 'not available', summary: 'Valuation/rental placeholders only.' },
-    demographicsSummary: { status: 'not available', summary: 'Schools/demographics placeholders only.' },
-    mapLinks: {},
-  }
+  const activeProfile = profile || existingProfile || buildFallbackProfile(project)
+  const address = activeProfile.formattedAddress || activeProfile.address || project.address
+  const locationLabel = [activeProfile.suburb, activeProfile.city, activeProfile.region, activeProfile.postalCode].filter(Boolean).join(', ')
+  const titleOwner = activeProfile.titleSummary?.owner || project.owner || 'Manual evidence required'
+  const legalDescription = activeProfile.titleSummary?.legalDescription || project.legalDescription || 'Manual evidence required'
+  const hazardSummary = activeProfile.hazardSummary?.summary || 'Hazard check not captured yet.'
 
   const runs = useMemo(
     () => propertySourceRuns.filter(run => run.projectId === project.id).slice(0, 6),
@@ -238,7 +266,7 @@ export default function PropertyIntelligenceTab({ project }) {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-lg font-bold text-gray-900">Property Intelligence</h2>
-          <p className="text-sm text-gray-500">Maps, source links, due-diligence notes and manual evidence for the site.</p>
+          <p className="text-sm text-gray-500">Map, title evidence, council checks, hazards, services, valuation notes and due-diligence source status.</p>
         </div>
         <button
           onClick={refresh}
@@ -257,7 +285,37 @@ export default function PropertyIntelligenceTab({ project }) {
         </div>
       )}
 
-      <PropertyMap profile={activeProfile} project={project} />
+      <PropertyMapEmbed
+        address={address}
+        latitude={activeProfile.latitude ?? project.latitude}
+        longitude={activeProfile.longitude ?? project.longitude}
+        mapLinks={activeProfile.mapLinks}
+        title={address || project.name}
+        subtitle="Site map"
+        heightClass="h-[420px]"
+      />
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <QuickFact label="Property" icon={MapPin} value={address} status={activeProfile.sourceStatus?.googleMaps} />
+        <QuickFact label="Location" icon={Map} value={locationLabel || 'Manual location'} status={activeProfile.sourceStatus?.googleMaps} />
+        <QuickFact label="Legal description" icon={LandPlot} value={legalDescription} status={activeProfile.titleSummary?.status || activeProfile.sourceStatus?.titleOwnership} />
+        <QuickFact label="Owner / entity" icon={Building2} value={titleOwner} status={activeProfile.sourceStatus?.titleOwnership} />
+      </div>
+
+      <SourceStrip sourceStatus={activeProfile.sourceStatus} />
+
+      <section className="rounded-xl border border-ocean-100 bg-ocean-50/50 p-5">
+        <div className="flex items-start gap-3">
+          <ShieldAlert size={18} className="mt-0.5 shrink-0 text-ocean-700" />
+          <div>
+            <h3 className="text-sm font-bold text-gray-900">Relab-style dossier, with clear evidence levels</h3>
+            <p className="mt-1 text-sm leading-6 text-gray-600">
+              DevMan now shows the map and the intelligence panels directly. Live Google coordinates and Tauranga hazard checks can be captured automatically; title ownership, valuation, services and planning conclusions remain manual or linked until the right council/LINZ/licensed feeds are connected.
+            </p>
+            <div className="mt-3 text-xs text-gray-500">Last refreshed: {formatDateTime(activeProfile.lastRefreshedAt)}</div>
+          </div>
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <InfoPanel
@@ -275,32 +333,39 @@ export default function PropertyIntelligenceTab({ project }) {
             </Field>
             <div className="sm:col-span-2">
               <Field label="Title notes">
-                <textarea className={`${inputCls} min-h-[72px] resize-none`} value={manual.titleSummary} onChange={e => set('titleSummary', e.target.value)} />
+                <textarea className={`${inputCls} min-h-[72px] resize-none`} value={manual.titleSummary} onChange={e => set('titleSummary', e.target.value)} placeholder="Title issue date, interests, easements, covenants, solicitor notes..." />
               </Field>
             </div>
           </div>
         </InfoPanel>
 
-        <InfoPanel title="Parcel and boundary" icon={Map} status={activeProfile.parcelSummary?.status} summary={activeProfile.parcelSummary?.summary} sourceUrl={activeProfile.parcelSummary?.sourceUrl || activeProfile.mapLinks?.linzSearch} />
+        <InfoPanel title="Parcel and boundary" icon={Layers} status={activeProfile.parcelSummary?.status} summary={activeProfile.parcelSummary?.summary} sourceUrl={activeProfile.parcelSummary?.sourceUrl || activeProfile.mapLinks?.linzSearch} />
+
+        <InfoPanel title="Council records" icon={Building2} status={activeProfile.councilSummary?.status} summary={activeProfile.councilSummary?.summary} sourceUrl={activeProfile.councilSummary?.sourceUrl || activeProfile.mapLinks?.councilMaps} />
+
         <InfoPanel title="Zoning and planning" icon={MapPin} status={activeProfile.zoningSummary?.status} summary={activeProfile.zoningSummary?.summary} sourceUrl={activeProfile.zoningSummary?.sourceUrl || activeProfile.mapLinks?.councilMaps}>
           <Field label="Planning notes">
-            <textarea className={`${inputCls} mt-3 min-h-[72px] resize-none`} value={manual.zoningSummary} onChange={e => set('zoningSummary', e.target.value)} />
+            <textarea className={`${inputCls} mt-3 min-h-[72px] resize-none`} value={manual.zoningSummary} onChange={e => set('zoningSummary', e.target.value)} placeholder="Zone, overlays, activity status, density constraints, setbacks..." />
           </Field>
         </InfoPanel>
-        <InfoPanel title="Natural hazards / flooding" icon={Waves} status={activeProfile.hazardSummary?.status} summary={activeProfile.hazardSummary?.summary} sourceUrl={activeProfile.hazardSummary?.sourceUrl || activeProfile.mapLinks?.taurangaNaturalHazards} />
-        <InfoPanel title="Services and utilities" icon={LandPlot} status={activeProfile.servicesSummary?.status} summary={activeProfile.servicesSummary?.summary}>
+
+        <InfoPanel title="Natural hazards / flooding" icon={Waves} status={activeProfile.hazardSummary?.status} summary={hazardSummary} sourceUrl={activeProfile.hazardSummary?.sourceUrl || activeProfile.mapLinks?.taurangaNaturalHazards} />
+
+        <InfoPanel title="Services and utilities" icon={Zap} status={activeProfile.servicesSummary?.status} summary={activeProfile.servicesSummary?.summary}>
           <Field label="Services notes">
             <textarea className={`${inputCls} mt-3 min-h-[72px] resize-none`} value={manual.servicesSummary} onChange={e => set('servicesSummary', e.target.value)} placeholder="Stormwater, wastewater, water, power, access, telecoms..." />
           </Field>
         </InfoPanel>
-        <InfoPanel title="Valuation and rental" icon={LandPlot} status={activeProfile.valuationSummary?.status} summary={activeProfile.valuationSummary?.summary}>
+
+        <InfoPanel title="Valuation and rental" icon={Gauge} status={activeProfile.valuationSummary?.status} summary={activeProfile.valuationSummary?.summary}>
           <Field label="Manual valuation notes">
-            <textarea className={`${inputCls} mt-3 min-h-[72px] resize-none`} value={manual.valuationSummary} onChange={e => set('valuationSummary', e.target.value)} />
+            <textarea className={`${inputCls} mt-3 min-h-[72px] resize-none`} value={manual.valuationSummary} onChange={e => set('valuationSummary', e.target.value)} placeholder="CV, land value, market estimate, rental range, source date..." />
           </Field>
         </InfoPanel>
-        <InfoPanel title="Schools and demographics" icon={MapPin} status={activeProfile.demographicsSummary?.status} summary={activeProfile.demographicsSummary?.summary}>
+
+        <InfoPanel title="Schools and demographics" icon={School} status={activeProfile.demographicsSummary?.status} summary={activeProfile.demographicsSummary?.summary}>
           <Field label="Manual demographic notes">
-            <textarea className={`${inputCls} mt-3 min-h-[72px] resize-none`} value={manual.demographicsSummary} onChange={e => set('demographicsSummary', e.target.value)} />
+            <textarea className={`${inputCls} mt-3 min-h-[72px] resize-none`} value={manual.demographicsSummary} onChange={e => set('demographicsSummary', e.target.value)} placeholder="School zones, local demand, household profile, suburb notes..." />
           </Field>
         </InfoPanel>
       </div>

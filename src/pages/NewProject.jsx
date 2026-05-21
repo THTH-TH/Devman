@@ -25,7 +25,7 @@ import { MILESTONE_TEMPLATE } from '../data/milestones'
 import { buildScheduleTasksFromTemplateItems } from '../data/scheduleTemplate'
 import AddressAutocomplete, { buildGoogleMapsUrl } from '../components/AddressAutocomplete'
 import PropertyMapEmbed from '../components/PropertyMapEmbed'
-import PlanningLayerMap from '../components/SafePlanningLayerMap'
+import PlanningLayerMap from '../components/PlanningLayerMap'
 
 const STATUS_OPTIONS = ['Active', 'On Hold', 'Blocked', 'Complete']
 const STEPS = [

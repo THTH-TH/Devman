@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import PropertyMapEmbed from './PropertyMapEmbed'
-import PlanningLayerMap from './SafePlanningLayerMap'
+import PlanningLayerMap from './PlanningLayerMap'
 
 const inputCls = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-ocean-400'
 

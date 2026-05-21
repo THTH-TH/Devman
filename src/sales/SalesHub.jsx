@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Navigate, NavLink, Route, Routes, useParams } from 'react-router-dom'
+import { Link, Navigate, NavLink, Route, Routes, useParams } from 'react-router-dom'
 import {
   AlertCircle,
   CheckCircle2,
@@ -172,12 +172,13 @@ function SalesShell() {
       <div className="min-h-0 flex-1 overflow-auto">
         <Routes>
           <Route index element={<SalesDashboard openLead={openLead} />} />
+          <Route path="projects" element={<ProjectsPage openLead={openLead} />} />
+          <Route path="projects/:projectId" element={<ProjectSalesPage openLead={openLead} />} />
           <Route path="pipeline" element={<PipelinePage openLead={openLead} />} />
           <Route path="leads" element={<LeadsPage openLead={openLead} />} />
           <Route path="leads/:leadId" element={<LeadDeepLink openLead={openLead} />} />
           <Route path="presales" element={<PresalesPage openLead={openLead} />} />
           <Route path="sheets" element={<SheetSyncPage />} />
-          <Route path="projects/*" element={<Navigate to="/sales/presales" replace />} />
           <Route path="units/*" element={<Navigate to="/sales/presales" replace />} />
           <Route path="tasks/*" element={<Navigate to="/sales" replace />} />
           <Route path="templates/*" element={<Navigate to="/sales" replace />} />
@@ -546,6 +547,243 @@ function LeadsTable({ openLead, projectName = '' }) {
 
 function SmallButton(props) {
   return <button {...props} className="rounded-md border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50" />
+}
+
+function ProjectsPage({ openLead }) {
+  const { projects, leads, units } = useSalesStore()
+  const activeLeads = leads.filter(lead => !lead.archived && lead.pipelineStage !== 'Lost / Not Now')
+
+  return (
+    <>
+      <PageHeader title="Sales Projects" subtitle="Start with the development, then work the leads, units, and presales from there." />
+      <div className="mx-auto max-w-7xl space-y-6 p-6">
+        <div className="grid gap-4 xl:grid-cols-3">
+          {projects.map(project => {
+            const metrics = projectMetrics(project, activeLeads, units)
+            const projectLeads = activeLeads.filter(lead => lead.projectInterest?.includes(project.name))
+            const closeLeads = projectLeads.filter(lead => ['Unit Selected', 'S&P Sent', 'Signed', 'Deposit Paid', 'Unconditional'].includes(lead.pipelineStage))
+            return (
+              <Link key={project.id} to={`/sales/projects/${project.id}`} className={`rounded-xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${project.id === 'beachwaters' ? 'border-forest-200 ring-2 ring-forest-50' : 'border-gray-100'}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-bold text-gray-900">{project.name}</h2>
+                    <p className="mt-1 text-sm text-gray-500">{project.location} - {project.product}</p>
+                  </div>
+                  <Badge className={project.id === 'beachwaters' ? 'bg-forest-50 text-forest-700' : 'bg-gray-100 text-gray-600'}>{project.status}</Badge>
+                </div>
+                {project.id === 'beachwaters' && (
+                  <div className="mt-4 rounded-lg border border-forest-100 bg-forest-50 p-3">
+                    <div className="text-sm font-bold text-forest-800">5 presales required</div>
+                    <div className="mt-1 text-xs text-forest-700">{metrics.presalesAchieved} achieved - {Math.max(0, 5 - metrics.presalesAchieved)} to go</div>
+                  </div>
+                )}
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <MiniStat label="Leads" value={projectLeads.length} />
+                  <MiniStat label="Hot" value={projectLeads.filter(lead => lead.temperature === 'Hot').length} />
+                  <MiniStat label="Close" value={closeLeads.length} />
+                  <MiniStat label="Avail." value={metrics.availableUnits} />
+                  <MiniStat label="S&P" value={metrics.spOut} />
+                  <MiniStat label="Uncond." value={metrics.unconditional} />
+                </div>
+                <div className="mt-4">
+                  <div className="mb-1 flex justify-between text-xs font-semibold text-gray-500">
+                    <span>Presales</span>
+                    <span>{metrics.presalesAchieved}/{project.presalesRequired}</span>
+                  </div>
+                  <ProgressBar value={metrics.progress} />
+                </div>
+                <div className="mt-4 flex items-center justify-between text-sm font-semibold text-forest-700">
+                  Open project <ChevronRight size={15} />
+                </div>
+              </Link>
+            )
+          })}
+        </div>
+
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="font-bold text-gray-900">Project-first workflow</h2>
+              <p className="mt-1 text-sm text-gray-500">Use Projects for the development view, Pipeline for the board, Leads for the clean list, and Presales for targets.</p>
+            </div>
+            <NavLink to="/sales/pipeline" className="rounded-lg bg-forest-600 px-3 py-2 text-sm font-semibold text-white hover:bg-forest-700">Open pipeline</NavLink>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function ProjectSalesPage({ openLead }) {
+  const { projectId } = useParams()
+  const { projects, leads, units, updateProject, updateUnit } = useSalesStore()
+  const [tab, setTab] = useState('overview')
+  const project = projects.find(item => item.id === projectId)
+  if (!project) return <Navigate to="/sales/projects" replace />
+
+  const activeLeads = leads.filter(lead => !lead.archived && lead.pipelineStage !== 'Lost / Not Now')
+  const projectLeads = activeLeads.filter(lead => lead.projectInterest?.includes(project.name))
+  const projectUnits = units.filter(unit => unit.projectId === project.id)
+  const metrics = projectMetrics(project, activeLeads, units)
+  const closeLeads = projectLeads.filter(lead => ['Unit Selected', 'S&P Sent', 'Signed', 'Deposit Paid', 'Unconditional'].includes(lead.pipelineStage))
+  const hotLeads = projectLeads.filter(lead => lead.temperature === 'Hot')
+
+  return (
+    <>
+      <PageHeader
+        title={project.name}
+        subtitle={`${project.location} sales workspace`}
+        action={<Link to="/sales/projects" className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Back to projects</Link>}
+      />
+      <div className="mx-auto max-w-7xl space-y-5 p-6">
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-xl font-bold text-gray-900">{project.name}</h2>
+                <Badge className="bg-forest-50 text-forest-700">{project.status}</Badge>
+              </div>
+              <p className="mt-1 text-sm text-gray-500">{project.product || project.description}</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <MiniStat label="Required" value={project.presalesRequired} />
+              <MiniStat label="Achieved" value={metrics.presalesAchieved} />
+              <MiniStat label="Gap" value={metrics.presalesGap} />
+            </div>
+          </div>
+          <div className="mt-4">
+            <ProgressBar value={metrics.progress} />
+          </div>
+        </div>
+
+        <div className="flex gap-1 overflow-x-auto rounded-xl border border-gray-100 bg-white p-2 shadow-sm">
+          {[
+            ['overview', 'Overview'],
+            ['leads', 'Leads'],
+            ['pipeline', 'Pipeline'],
+            ['units', 'Units'],
+            ['settings', 'Sales Settings'],
+          ].map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)} className={`rounded-lg px-3 py-2 text-sm font-semibold ${tab === id ? 'bg-forest-600 text-white' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'overview' && (
+          <div className="grid gap-6 xl:grid-cols-[1fr_0.85fr]">
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <MetricCard label="Project leads" value={projectLeads.length} />
+                <MetricCard label="Hot leads" value={hotLeads.length} tone="bg-red-50" />
+                <MetricCard label="Close leads" value={closeLeads.length} />
+                <MetricCard label="Likely presales" value={metrics.likelyPresales} />
+              </div>
+              <ProjectStageList leads={projectLeads} openLead={openLead} />
+            </div>
+            <div className="space-y-6">
+              <RecentLeads title="Hot leads" leads={hotLeads.slice(0, 6)} openLead={openLead} />
+              <RecentLeads title="Close to sale" leads={closeLeads.slice(0, 6)} openLead={openLead} />
+            </div>
+          </div>
+        )}
+
+        {tab === 'leads' && <LeadsTable openLead={openLead} projectName={project.name} />}
+
+        {tab === 'pipeline' && <ProjectStageList leads={projectLeads} openLead={openLead} detailed />}
+
+        {tab === 'units' && <ProjectUnitTable units={projectUnits} leads={leads} openLead={openLead} updateUnit={updateUnit} />}
+
+        {tab === 'settings' && (
+          <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+            <h2 className="font-bold text-gray-900">Sales Settings</h2>
+            <p className="mt-1 text-sm text-gray-500">Light project settings only. This does not connect to DevMan project management.</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <Field label="Total units"><input className={inputCls} type="number" defaultValue={project.totalUnits} onBlur={event => updateProject(project.id, { totalUnits: event.target.value })} /></Field>
+              <Field label="Presales required"><input className={inputCls} type="number" defaultValue={project.presalesRequired} onBlur={event => updateProject(project.id, { presalesRequired: event.target.value })} /></Field>
+              <Field label="Presales achieved"><input className={inputCls} type="number" defaultValue={project.presalesAchieved} onBlur={event => updateProject(project.id, { presalesAchieved: event.target.value })} /></Field>
+            </div>
+            <Field label="Project sales notes"><textarea className={`${inputCls} mt-3 min-h-24`} defaultValue={project.projectNotes} onBlur={event => updateProject(project.id, { projectNotes: event.target.value })} /></Field>
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+function ProjectStageList({ leads, openLead, detailed = false }) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+      <h2 className="font-bold text-gray-900">Project pipeline</h2>
+      <div className="mt-4 space-y-3">
+        {PIPELINE_STAGES.filter(stage => stage !== 'Lost / Not Now').map(stage => {
+          const stageLeads = leads.filter(lead => lead.pipelineStage === stage)
+          return (
+            <div key={stage} className="rounded-lg border border-gray-100">
+              <div className="flex items-center justify-between bg-gray-50 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <Badge className={STAGE_COLORS[stage]}>{stage}</Badge>
+                  <span className="text-xs text-gray-400">{stageLeads.length} lead{stageLeads.length === 1 ? '' : 's'}</span>
+                </div>
+              </div>
+              {(detailed || stageLeads.length > 0) && (
+                <div className="divide-y divide-gray-50">
+                  {stageLeads.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-gray-400">No leads here.</div>
+                  ) : stageLeads.map(lead => (
+                    <button key={lead.id} onClick={() => openLead(lead.id)} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50">
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-gray-900">{leadName(lead)}</div>
+                        <div className="truncate text-xs text-gray-500">{suggestedNextAction(lead)}</div>
+                      </div>
+                      <Badge className={TEMP_COLORS[lead.temperature]}>{lead.temperature}</Badge>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ProjectUnitTable({ units, leads, openLead, updateUnit }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+      <div className="border-b border-gray-100 px-5 py-4">
+        <h2 className="font-bold text-gray-900">Units</h2>
+        <p className="mt-1 text-sm text-gray-500">Light sales tracking only: status and attached buyer.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[850px] text-sm">
+          <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-400">
+            <tr>{['Unit', 'Type', 'Price', 'Status', 'Attached lead', 'Notes'].map(head => <th key={head} className="px-4 py-3 text-left">{head}</th>)}</tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {units.map(unit => {
+              const lead = leads.find(item => item.id === unit.assignedLeadId)
+              return (
+                <tr key={unit.id}>
+                  <td className="px-4 py-3 font-semibold text-gray-900">{unit.unitNumber}</td>
+                  <td className="px-4 py-3 text-gray-600">{unit.typology}</td>
+                  <td className="px-4 py-3 text-gray-600">{money(unit.price)}</td>
+                  <td className="px-4 py-3">
+                    <select className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs" value={unit.status} onChange={event => updateUnit(unit.id, { status: event.target.value })}>
+                      {['Available', 'Enquiry', 'Reserved', 'S&P Out', 'Under Contract', 'Deposit Paid', 'Unconditional', 'Settled', 'Hold'].map(status => <option key={status}>{status}</option>)}
+                    </select>
+                  </td>
+                  <td className="px-4 py-3">{lead ? <button onClick={() => openLead(lead.id)} className="font-semibold text-forest-700 hover:underline">{leadName(lead)}</button> : <span className="text-gray-400">-</span>}</td>
+                  <td className="px-4 py-3 text-gray-500">{unit.notes || '-'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
 }
 
 function LeadDrawer({ lead, onClose }) {

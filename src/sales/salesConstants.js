@@ -117,6 +117,7 @@ export const ACTIVITY_TYPES = [
 
 export const SALES_NAV = [
   { to: '/sales', label: 'Dashboard', end: true },
+  { to: '/sales/projects', label: 'Projects' },
   { to: '/sales/pipeline', label: 'Pipeline' },
   { to: '/sales/leads', label: 'Leads' },
   { to: '/sales/presales', label: 'Presales' },

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
-import * as EsriLeaflet from 'esri-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { ExternalLink, Layers, MapPin, SlidersHorizontal } from 'lucide-react'
 import { buildGisLayersConfig } from '../data/gisLayers'
@@ -25,9 +24,8 @@ function normaliseServiceUrl(url = '') {
 function buildArcgisExportUrl({ serviceUrl, layerIds, map }) {
   const bounds = map.getBounds()
   const size = map.getSize()
-  const extent = EsriLeaflet.Util.boundsToExtent(bounds)
   const params = new URLSearchParams({
-    bbox: `${extent.xmin},${extent.ymin},${extent.xmax},${extent.ymax}`,
+    bbox: `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`,
     size: `${Math.max(1, Math.round(size.x))},${Math.max(1, Math.round(size.y))}`,
     dpi: '96',
     format: 'png32',

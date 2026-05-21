@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   FolderKanban,
   Columns,
+  BadgeDollarSign,
   FileText,
   Calendar,
   ListTodo,
@@ -17,6 +18,7 @@ const mainNav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/projects', label: 'All Projects', icon: FolderKanban },
   { to: '/workflow', label: 'Workflow', icon: Columns },
+  { to: '/sales', label: 'Sales Hub', icon: BadgeDollarSign },
 ]
 
 const toolsNav = [

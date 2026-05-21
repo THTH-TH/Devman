@@ -14,6 +14,7 @@ import Documents from './pages/Documents'
 import Team from './pages/Team'
 import Settings from './pages/Settings'
 import SharePage from './pages/SharePage'
+import SalesHub from './sales/SalesHub'
 import useStore from './store/useStore'
 import { supabase } from './lib/supabase'
 
@@ -76,6 +77,7 @@ function ProtectedApp({ authLoading, session, loading, error }) {
         <Route path="documents" element={<Documents />} />
         <Route path="team" element={<Team />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="sales/*" element={<SalesHub />} />
       </Route>
     </Routes>
   )

@@ -2,18 +2,25 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, NavLink, Route, Routes, useParams } from 'react-router-dom'
 import {
   AlertCircle,
+  Bot,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
+  Download,
   ExternalLink,
+  Filter,
   LayoutDashboard,
   Mail,
-  Phone,
+  MoreHorizontal,
+  PanelTop,
   Plus,
+  Plug,
   RefreshCw,
   Search,
   Table2,
   Trash2,
   X,
+  UserCircle,
 } from 'lucide-react'
 import useSalesStore from './useSalesStore'
 import {
@@ -23,7 +30,11 @@ import {
   LEAD_SOURCES,
   PIPELINE_CLOSED_STAGE,
   PIPELINE_CLOSE_STAGES,
+  PIPELINE_CONTRACT_STAGE,
+  PIPELINE_MEETING_STAGE,
   PIPELINE_NEW_STAGE,
+  PIPELINE_OFFER_STAGE,
+  PIPELINE_QUALIFIED_STAGE,
   PIPELINE_STAGES,
   PIPELINE_WON_STAGE,
   SALES_NAV,
@@ -176,8 +187,8 @@ function SalesShell() {
           <Route path="projects" element={<ProjectsPage openLead={openLead} />} />
           <Route path="projects/:projectId" element={<ProjectSalesPage openLead={openLead} onAddLead={() => setShowAddLead(true)} />} />
           <Route path="pipeline" element={<PipelinePage openLead={openLead} onAddLead={() => setShowAddLead(true)} />} />
-          <Route path="leads" element={<LeadsPage openLead={openLead} />} />
-          <Route path="leads/:leadId" element={<LeadDeepLink openLead={openLead} />} />
+          <Route path="leads" element={<LeadsPage openLead={openLead} onAddLead={() => setShowAddLead(true)} />} />
+          <Route path="leads/:leadId" element={<LeadDeepLink openLead={openLead} onAddLead={() => setShowAddLead(true)} />} />
           <Route path="presales" element={<PresalesPage openLead={openLead} />} />
           <Route path="sheets" element={<SheetSyncPage />} />
           <Route path="units/*" element={<Navigate to="/sales/presales" replace />} />
@@ -195,12 +206,12 @@ function SalesShell() {
   )
 }
 
-function LeadDeepLink({ openLead }) {
+function LeadDeepLink({ openLead, onAddLead }) {
   const { leadId } = useParams()
   useEffect(() => {
     if (leadId) openLead(leadId)
   }, [leadId, openLead])
-  return <LeadsPage openLead={openLead} />
+  return <LeadsPage openLead={openLead} onAddLead={onAddLead} />
 }
 
 function SalesDashboard({ openLead }) {
@@ -580,18 +591,58 @@ function PipelineTable({ leads, openLead }) {
   )
 }
 
-function LeadsPage({ openLead }) {
+function LeadsPage({ openLead, onAddLead }) {
   return (
-    <>
-      <PageHeader title="Leads" subtitle="Clean working table for inbound leads." />
-      <div className="mx-auto max-w-7xl p-6">
-        <LeadsTable openLead={openLead} />
+    <div className="min-h-full bg-white">
+      <div className="border-b border-gray-100 bg-white px-6 py-5">
+        <div className="mx-auto max-w-[1680px]">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-3xl font-semibold tracking-tight text-[#1f2937]">Leads</h1>
+                <ChevronDown size={20} className="text-gray-500" />
+              </div>
+              <div className="mt-5 flex items-center gap-7 border-b border-gray-100 text-sm">
+                <button className="border-b-2 border-ocean-600 pb-3 font-semibold text-gray-900">Main table</button>
+                <button className="pb-3 font-medium text-gray-500 hover:text-gray-900">Lead submission form</button>
+                <button className="pb-3 text-xl leading-none text-gray-600 hover:text-gray-900">+</button>
+              </div>
+            </div>
+            <div className="hidden flex-wrap items-center justify-end gap-5 text-sm font-medium text-gray-700 lg:flex">
+              <div className="inline-flex items-center gap-2">
+                <span className="-space-x-2">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-700 ring-2 ring-white">TH</span>
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-purple-100 text-xs font-bold text-purple-700 ring-2 ring-white">DW</span>
+                </span>
+                AI Agents <ChevronDown size={15} />
+              </div>
+              <MondayHeaderAction icon={Download} label="Import" />
+              <MondayHeaderAction icon={Plug} label="Integrate" />
+              <MondayHeaderAction icon={Bot} label="Automate / 6" />
+              <MondayHeaderAction icon={UserCircle} label="Agents" />
+              <button className="rounded-md border border-gray-200 px-3 py-2 font-semibold text-gray-700 hover:bg-gray-50">Invite / 1</button>
+              <MoreHorizontal size={20} className="text-gray-600" />
+            </div>
+          </div>
+        </div>
       </div>
-    </>
+      <div className="mx-auto max-w-[1680px] p-6">
+        <LeadsTable openLead={openLead} onAddLead={onAddLead} />
+      </div>
+    </div>
   )
 }
 
-function LeadsTable({ openLead, projectName = '' }) {
+function MondayHeaderAction({ icon: Icon, label }) {
+  return (
+    <button className="inline-flex items-center gap-2 text-gray-700 hover:text-gray-950">
+      <Icon size={18} />
+      {label}
+    </button>
+  )
+}
+
+function LeadsTable({ openLead, projectName = '', onAddLead }) {
   const { leads, projects, markContacted, markInfoSent, moveLeadStage, updateLead, archiveLead } = useSalesStore()
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState({ project: projectName, source: '', stage: '', assignedTo: '', temperature: '' })
@@ -623,87 +674,344 @@ function LeadsTable({ openLead, projectName = '' }) {
     const lostReason = window.prompt('Closed lost / not proceeding reason?', lead.lostReason || 'Not now')
     if (lostReason !== null) moveLeadStage(lead.id, PIPELINE_CLOSED_STAGE, { lostReason })
   }
+  const groups = [
+    {
+      id: 'new',
+      title: 'New Leads',
+      titleClass: 'text-[#579bfc]',
+      accentClass: 'bg-[#579bfc]',
+      rows: filtered.filter(lead => lead.pipelineStage === PIPELINE_NEW_STAGE),
+    },
+    {
+      id: 'active',
+      title: 'Active Leads',
+      titleClass: 'text-[#1f8b4c]',
+      accentClass: 'bg-[#00a25b]',
+      rows: filtered.filter(lead => lead.pipelineStage !== PIPELINE_NEW_STAGE && lead.pipelineStage !== PIPELINE_CLOSED_STAGE),
+    },
+    {
+      id: 'closed',
+      title: 'Closed / Not Proceeding',
+      titleClass: 'text-gray-500',
+      accentClass: 'bg-gray-400',
+      rows: filtered.filter(lead => lead.pipelineStage === PIPELINE_CLOSED_STAGE),
+    },
+  ].filter((group, index) => index === 0 || group.rows.length)
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap gap-3">
-          <div className="relative min-w-72 flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
-            <input className={`${inputCls} pl-8`} placeholder="Search name, email, phone" value={search} onChange={event => setSearch(event.target.value)} />
-          </div>
-          {!projectName && <div className="w-44"><Select value={filters.project} onChange={value => setFilter('project', value)} options={projects.map(project => project.name)} placeholder="All projects" /></div>}
-          <div className="w-40"><Select value={filters.source} onChange={value => setFilter('source', value)} options={LEAD_SOURCES} placeholder="Source" /></div>
-          <div className="w-44"><Select value={filters.stage} onChange={value => setFilter('stage', value)} options={PIPELINE_STAGES} placeholder="Stage" /></div>
-          <div className="w-40"><Select value={filters.assignedTo} onChange={value => setFilter('assignedTo', value)} options={ASSIGNEES} placeholder="Owner" /></div>
-          <div className="w-40"><Select value={filters.temperature} onChange={value => setFilter('temperature', value)} options={TEMPERATURES} placeholder="Temp" /></div>
-          <div className="w-44"><Select value={sort} onChange={setSort} options={[['stale', 'Stale first'], ['newest', 'Newest'], ['nextAction', 'Next action'], ['hottest', 'Hottest'], ['lastContacted', 'Last contacted']]} /></div>
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-center gap-3">
+        <button onClick={onAddLead} className="inline-flex overflow-hidden rounded-md bg-ocean-600 text-sm font-semibold text-white shadow-sm hover:bg-ocean-700">
+          <span className="px-4 py-2.5">New lead</span>
+          <span className="inline-flex items-center border-l border-white/20 px-2"><ChevronDown size={16} /></span>
+        </button>
+        <div className="relative min-w-64">
+          <Search className="absolute left-0 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+          <input
+            className="w-full border-0 bg-transparent py-2 pl-8 pr-3 text-base text-gray-900 outline-none placeholder:text-gray-500 focus:ring-0"
+            placeholder="Search"
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+          />
         </div>
+        <BoardSelect icon={UserCircle} value={filters.assignedTo} onChange={value => setFilter('assignedTo', value)} options={ASSIGNEES} label="Person" />
+        {!projectName && <BoardSelect icon={PanelTop} value={filters.project} onChange={value => setFilter('project', value)} options={projects.map(project => project.name)} label="Project" />}
+        <BoardSelect icon={Filter} value={filters.stage} onChange={value => setFilter('stage', value)} options={PIPELINE_STAGES} label="Filter" wide />
+        <BoardSelect icon={LayoutDashboard} value={filters.source} onChange={value => setFilter('source', value)} options={LEAD_SOURCES} label="Source" />
+        <BoardSelect icon={MoreHorizontal} value={sort} onChange={setSort} options={[['stale', 'Stale first'], ['newest', 'Newest'], ['nextAction', 'Next action'], ['hottest', 'Hottest'], ['lastContacted', 'Last contacted']]} label="Sort" />
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1050px] text-sm">
-            <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-400">
-              <tr>
-                {['Lead', 'Project', 'Source', 'Stage', 'Temp', 'Owner', 'Last contacted', 'Next action', 'Notes', 'Quick actions'].map(head => (
-                  <th key={head} className="px-4 py-3 text-left font-semibold">{head}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map(lead => (
-                <tr key={lead.id} onClick={() => openLead(lead.id)} className="cursor-pointer hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <div className="font-semibold text-gray-900">{leadName(lead)}</div>
-                    <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
-                      {lead.phone && <span className="inline-flex items-center gap-1"><Phone size={11} />{lead.phone}</span>}
-                      {lead.email && <span className="inline-flex items-center gap-1"><Mail size={11} />{lead.email}</span>}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{lead.projectInterest || '-'}</td>
-                  <td className="px-4 py-3 text-gray-600">{lead.source}</td>
-                  <td className="px-4 py-3"><Badge className={STAGE_COLORS[lead.pipelineStage]}>{lead.pipelineStage}</Badge></td>
-                  <td className="px-4 py-3"><Badge className={TEMP_COLORS[lead.temperature]}>{lead.temperature}</Badge></td>
-                  <td className="px-4 py-3">
-                    <select
-                      className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs"
-                      value={lead.assignedTo}
-                      onClick={event => event.stopPropagation()}
-                      onChange={event => updateLead(lead.id, { assignedTo: event.target.value })}
-                    >
-                      {ASSIGNEES.map(item => <option key={item}>{item}</option>)}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{formatShortDate(lead.lastContactedAt)}</td>
-                  <td className={`px-4 py-3 ${isOverdue(lead.nextActionDate) ? 'font-semibold text-red-600' : 'text-gray-600'}`}>
-                    <div className="max-w-[190px] truncate">{suggestedNextAction(lead)}</div>
-                    <div className="text-xs text-gray-400">{formatShortDate(lead.nextActionDate)}</div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-500"><div className="max-w-[190px] truncate">{lead.notes || '-'}</div></td>
-                  <td className="px-4 py-3" onClick={event => event.stopPropagation()}>
-                    <div className="flex flex-wrap gap-1">
-                      <SmallButton onClick={() => markContacted(lead.id)}>Contacted</SmallButton>
-                      <SmallButton onClick={() => markInfoSent(lead.id)}>Info sent</SmallButton>
-                      <SmallButton onClick={() => markLost(lead)}>Lost</SmallButton>
-                      <SmallButton onClick={() => archiveLead(lead.id)}>Archive</SmallButton>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan={10} className="px-4 py-12 text-center text-gray-400">No leads match these filters.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+      <div className="space-y-10">
+        {groups.map(group => (
+          <MondayLeadGroup
+            key={group.id}
+            group={group}
+            openLead={openLead}
+            onAddLead={onAddLead}
+            markContacted={markContacted}
+            markInfoSent={markInfoSent}
+            markLost={markLost}
+            moveLeadStage={moveLeadStage}
+            updateLead={updateLead}
+            archiveLead={archiveLead}
+          />
+        ))}
       </div>
+
+      <button type="button" className="inline-flex items-center gap-3 rounded-md border border-gray-200 bg-white px-4 py-3 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+        <Plus size={20} /> Add new group
+      </button>
     </div>
   )
 }
 
-function SmallButton(props) {
-  return <button {...props} className="rounded-md border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50" />
+function BoardSelect({ icon: Icon, value, onChange, options, label, wide = false }) {
+  return (
+    <div className={`relative inline-flex items-center ${wide ? 'min-w-48' : 'min-w-32'}`}>
+      <Icon className="pointer-events-none absolute left-2.5 text-gray-500" size={19} />
+      <select
+        value={value || ''}
+        onChange={event => onChange(event.target.value)}
+        className="h-10 w-full appearance-none rounded-md border border-transparent bg-white pl-9 pr-8 text-base font-medium text-gray-700 outline-none hover:bg-gray-50 focus:border-ocean-200 focus:ring-2 focus:ring-ocean-100"
+      >
+        <option value="">{label}</option>
+        {options.map(option => {
+          const optionValue = Array.isArray(option) ? option[0] : option
+          const optionLabel = Array.isArray(option) ? option[1] : option
+          return <option key={optionValue} value={optionValue}>{optionLabel}</option>
+        })}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-2.5 text-gray-500" size={15} />
+    </div>
+  )
+}
+
+function MondayLeadGroup({ group, openLead, onAddLead, markContacted, markInfoSent, markLost, moveLeadStage, updateLead, archiveLead }) {
+  const stageTotals = PIPELINE_STAGES.map(stage => group.rows.filter(lead => lead.pipelineStage === stage).length)
+  const sourceTotals = LEAD_SOURCES.slice(0, 5).map(source => group.rows.filter(lead => lead.source === source).length)
+  return (
+    <section>
+      <div className="mb-3 flex items-center gap-3">
+        <ChevronDown size={22} className={group.titleClass} />
+        <h2 className={`text-2xl font-semibold ${group.titleClass}`}>{group.title}</h2>
+        <span className="text-sm text-gray-400">{group.rows.length} Lead{group.rows.length === 1 ? '' : 's'}</span>
+      </div>
+      <div className="overflow-hidden rounded-md border border-[#d7dde8] bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1680px] border-separate border-spacing-0 text-[15px]">
+            <thead>
+              <tr className="text-gray-700">
+                <th className={`sticky left-0 z-10 w-11 border-r border-b border-[#d7dde8] px-3 py-3 text-left ${group.accentClass}`} />
+                <th className="w-12 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center">
+                  <input type="checkbox" className="h-5 w-5 rounded border-gray-300" aria-label="Select group" />
+                </th>
+                <th className="w-[260px] border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Lead</th>
+                <th className="w-14 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center" />
+                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Status</th>
+                <th className="w-48 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Activities timeline</th>
+                <th className="w-12 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">+</th>
+                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Action</th>
+                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Project</th>
+                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Buyer type</th>
+                <th className="w-64 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Email</th>
+                <th className="w-52 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Phone</th>
+                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Lead Source</th>
+                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Last interaction</th>
+                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Owner</th>
+                <th className="w-72 border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Next action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {group.rows.map(lead => (
+                <MondayLeadRow
+                  key={lead.id}
+                  lead={lead}
+                  accentClass={group.accentClass}
+                  openLead={openLead}
+                  markContacted={markContacted}
+                  markInfoSent={markInfoSent}
+                  markLost={markLost}
+                  moveLeadStage={moveLeadStage}
+                  updateLead={updateLead}
+                  archiveLead={archiveLead}
+                />
+              ))}
+              {!group.rows.length && (
+                <tr>
+                  <td className={`border-r border-[#d7dde8] ${group.accentClass}`} />
+                  <td colSpan={15} className="border-b border-[#d7dde8] px-4 py-5 text-gray-400">No leads in this group.</td>
+                </tr>
+              )}
+              <tr>
+                <td className={`border-r border-[#d7dde8] ${group.accentClass}`} />
+                <td className="border-r border-[#d7dde8] px-3 py-3 text-center"><input type="checkbox" className="h-5 w-5 rounded border-gray-200 opacity-50" aria-label="Add row placeholder" /></td>
+                <td colSpan={14} className="border-b border-[#d7dde8] px-4 py-3 text-gray-500">
+                  <button onClick={onAddLead} className="hover:text-gray-900">+ Add lead</button>
+                </td>
+              </tr>
+              <tr>
+                <td />
+                <td colSpan={3} />
+                <td className="border-x border-b border-[#d7dde8] p-2">
+                  <SummaryBar totals={stageTotals} palette={PIPELINE_STAGES.map(stage => stageSummaryColor(stage))} />
+                </td>
+                <td colSpan={7} />
+                <td className="border-x border-b border-[#d7dde8] p-2">
+                  <SummaryBar totals={sourceTotals} palette={LEAD_SOURCES.slice(0, 5).map(source => sourceSummaryColor(source))} />
+                </td>
+                <td colSpan={3} />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function MondayLeadRow({ lead, accentClass, openLead, markContacted, markInfoSent, markLost, moveLeadStage, updateLead, archiveLead }) {
+  const overdue = isOverdue(lead.nextActionDate)
+  const stale = lead.temperature === 'Hot' && daysSince(lead.lastContactedAt) >= 2
+  const source = lead.source || 'Other'
+  const handleStage = event => {
+    event.stopPropagation()
+    if (event.target.value === PIPELINE_CLOSED_STAGE) {
+      markLost(lead)
+      return
+    }
+    moveLeadStage(lead.id, event.target.value)
+  }
+
+  return (
+    <tr onClick={() => openLead(lead.id)} className="cursor-pointer bg-white hover:bg-[#f7f9fb]">
+      <td className={`border-r border-b border-[#d7dde8] ${accentClass}`} />
+      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center"><input type="checkbox" className="h-5 w-5 rounded border-gray-300" aria-label={`Select ${leadName(lead)}`} onClick={event => event.stopPropagation()} /></td>
+      <td className="border-r border-b border-[#d7dde8] px-4 py-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate font-medium text-gray-800">{leadName(lead)}</div>
+            <div className="mt-0.5 flex items-center gap-2">
+              <Badge className={TEMP_COLORS[lead.temperature]}>{lead.temperature}</Badge>
+              {(stale || overdue) && <span className="text-xs font-semibold text-red-600">{overdue ? 'Overdue' : 'Stale'}</span>}
+            </div>
+          </div>
+        </div>
+      </td>
+      <td className="border-r border-b border-[#d7dde8] px-2 py-2 text-center">
+        <button onClick={event => { event.stopPropagation(); openLead(lead.id) }} className="inline-flex h-7 w-7 items-center justify-center rounded border border-gray-300 text-gray-500 hover:bg-gray-50" aria-label="Open lead notes">
+          <PanelTop size={16} />
+        </button>
+      </td>
+      <td className={`border-r border-b border-[#d7dde8] px-0 py-0 text-center ${stageCellClass(lead.pipelineStage)}`} onClick={event => event.stopPropagation()}>
+        <select value={lead.pipelineStage} onChange={handleStage} className="h-12 w-full appearance-none bg-transparent px-2 text-center text-sm font-semibold text-inherit outline-none">
+          {PIPELINE_STAGES.map(stage => <option key={stage} value={stage} className="bg-white text-gray-900">{stage}</option>)}
+        </select>
+      </td>
+      <td className="border-r border-b border-[#d7dde8] px-3 py-2">
+        <TimelineBars lead={lead} />
+      </td>
+      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center">
+        <button onClick={event => { event.stopPropagation(); markContacted(lead.id) }} className="text-2xl leading-none text-gray-600 hover:text-gray-950">+</button>
+      </td>
+      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center">
+        <button onClick={event => { event.stopPropagation(); openLead(lead.id) }} className="rounded-md bg-green-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-800">Open lead</button>
+      </td>
+      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center text-gray-700">{lead.projectInterest || '-'}</td>
+      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center text-gray-700">{lead.buyerType || 'Unknown'}</td>
+      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center">
+        {lead.email ? <a onClick={event => event.stopPropagation()} href={`mailto:${lead.email}`} className="font-medium text-[#2176d2] hover:underline">{lead.email}</a> : <span className="text-gray-400">-</span>}
+      </td>
+      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center">
+        {lead.phone ? <span className="inline-flex items-center gap-2 text-[#2176d2]"><span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-bold text-gray-500">NZ</span>{lead.phone}</span> : <span className="text-gray-400">-</span>}
+      </td>
+      <td className={`border-r border-b border-[#d7dde8] px-3 py-2 text-center text-sm font-semibold ${sourceCellClass(source)}`}>{source}</td>
+      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center text-gray-600">{formatShortDate(lead.lastContactedAt || lead.updatedAt || lead.createdAt)}</td>
+      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center" onClick={event => event.stopPropagation()}>
+        <div className="inline-flex items-center gap-2">
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-500">{ownerInitials(lead.assignedTo)}</span>
+          <select
+            className="max-w-28 appearance-none bg-transparent text-sm font-medium text-gray-700 outline-none"
+            value={lead.assignedTo}
+            onChange={event => updateLead(lead.id, { assignedTo: event.target.value })}
+          >
+            {ASSIGNEES.map(item => <option key={item}>{item}</option>)}
+          </select>
+        </div>
+      </td>
+      <td className="border-b border-[#d7dde8] px-3 py-2">
+        <div className="flex items-center gap-2">
+          <button onClick={event => { event.stopPropagation(); markInfoSent(lead.id) }} className="rounded border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50">Info</button>
+          <button onClick={event => { event.stopPropagation(); archiveLead(lead.id) }} className="rounded border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50">Archive</button>
+          <span className={`min-w-0 truncate ${overdue ? 'font-semibold text-red-600' : 'text-gray-600'}`}>{suggestedNextAction(lead)}</span>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+function TimelineBars({ lead }) {
+  const active = [
+    Boolean(lead.lastContactedAt),
+    Boolean(lead.documentsSent?.brochure),
+    Boolean(lead.documentsSent?.plans),
+    Boolean(lead.preferredUnits?.length),
+    PIPELINE_CLOSE_STAGES.includes(lead.pipelineStage),
+  ]
+  return (
+    <div className="flex items-center justify-center gap-1">
+      {Array.from({ length: 10 }).map((_, index) => (
+        <span key={index} className={`h-8 w-2 rounded-full ${active[index % active.length] ? (index % 2 ? 'bg-pink-300' : 'bg-sky-300') : 'bg-gray-100'}`} />
+      ))}
+    </div>
+  )
+}
+
+function SummaryBar({ totals, palette }) {
+  const total = totals.reduce((sum, item) => sum + item, 0)
+  if (!total) return <div className="h-8 rounded bg-gray-50" />
+  return (
+    <div className="flex h-8 overflow-hidden rounded-sm">
+      {totals.map((count, index) => count ? <div key={index} className={palette[index]} style={{ width: `${(count / total) * 100}%` }} /> : null)}
+    </div>
+  )
+}
+
+function stageCellClass(stage) {
+  const map = {
+    [PIPELINE_NEW_STAGE]: 'bg-[#f5b84c] text-white',
+    [PIPELINE_QUALIFIED_STAGE]: 'bg-[#5b8def] text-white',
+    [PIPELINE_MEETING_STAGE]: 'bg-[#7cc7f0] text-white',
+    [PIPELINE_OFFER_STAGE]: 'bg-[#f28b54] text-white',
+    [PIPELINE_CONTRACT_STAGE]: 'bg-[#9b72e7] text-white',
+    [PIPELINE_WON_STAGE]: 'bg-[#55c57a] text-white',
+    [PIPELINE_CLOSED_STAGE]: 'bg-[#9aa5b1] text-white',
+  }
+  return map[stage] || 'bg-gray-200 text-gray-700'
+}
+
+function sourceCellClass(source) {
+  const map = {
+    Meta: 'bg-[#5b6df6] text-white',
+    Website: 'bg-[#2f80ed] text-white',
+    'Trade Me': 'bg-[#2e7d32] text-white',
+    Instagram: 'bg-[#c026d3] text-white',
+    Facebook: 'bg-[#2563eb] text-white',
+    Email: 'bg-[#64748b] text-white',
+    Phone: 'bg-[#0f766e] text-white',
+    Agent: 'bg-[#7c3aed] text-white',
+    Referral: 'bg-[#16a34a] text-white',
+    'Walk-in': 'bg-[#ea580c] text-white',
+    'Existing Contact': 'bg-[#475569] text-white',
+    Other: 'bg-[#9aa5b1] text-white',
+  }
+  return map[source] || map.Other
+}
+
+function stageSummaryColor(stage) {
+  return {
+    [PIPELINE_NEW_STAGE]: 'bg-[#f5b84c]',
+    [PIPELINE_QUALIFIED_STAGE]: 'bg-[#5b8def]',
+    [PIPELINE_MEETING_STAGE]: 'bg-[#7cc7f0]',
+    [PIPELINE_OFFER_STAGE]: 'bg-[#f28b54]',
+    [PIPELINE_CONTRACT_STAGE]: 'bg-[#9b72e7]',
+    [PIPELINE_WON_STAGE]: 'bg-[#55c57a]',
+    [PIPELINE_CLOSED_STAGE]: 'bg-[#9aa5b1]',
+  }[stage] || 'bg-gray-300'
+}
+
+function sourceSummaryColor(source) {
+  return {
+    Meta: 'bg-[#5b6df6]',
+    Website: 'bg-[#2f80ed]',
+    'Trade Me': 'bg-[#2e7d32]',
+    Instagram: 'bg-[#c026d3]',
+    Facebook: 'bg-[#2563eb]',
+  }[source] || 'bg-gray-300'
+}
+
+function ownerInitials(name = '') {
+  if (!name || name === 'Unassigned') return '--'
+  return name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase()
 }
 
 function ProjectsPage({ openLead }) {

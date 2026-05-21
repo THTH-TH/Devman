@@ -1,12 +1,13 @@
 import crypto from 'node:crypto'
 import { google } from 'googleapis'
+import Papa from 'papaparse'
 import { createClient } from '@supabase/supabase-js'
 
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 
 const FIELD_ALIASES = {
   leadId: ['lead id', 'id', 'submission id', 'response id'],
-  fullName: ['name', 'full name', 'lead name', 'contact name', 'buyer name'],
+  fullName: ['name', 'full name', 'lead name', 'contact name', 'buyer name', 'customer name'],
   firstName: ['first name', 'firstname', 'first'],
   lastName: ['last name', 'lastname', 'surname'],
   email: ['email', 'email address', 'e-mail'],
@@ -19,10 +20,11 @@ const FIELD_ALIASES = {
   depositCapacity: ['deposit', 'deposit capacity'],
   preferredUnits: ['preferred unit', 'preferred units', 'unit', 'unit interest'],
   message: ['message', 'notes', 'enquiry', 'comments', 'question'],
-  createdAt: ['created', 'created at', 'date', 'timestamp', 'submitted at', 'submission date'],
+  createdAt: ['created', 'created at', 'date', 'date received', 'received', 'received at', 'timestamp', 'submitted at', 'submission date'],
   nextAction: ['next action', 'follow up', 'follow-up'],
   nextActionDate: ['next action date', 'follow up date', 'follow-up date'],
   temperature: ['temperature', 'lead temperature', 'hot warm cold'],
+  emailSent: ['email sent', 'sent email', 'info sent', 'auto email sent', 'brochure sent', 'pack sent'],
 }
 
 const WORKFLOW_DEFAULTS = {
@@ -76,6 +78,11 @@ function getServiceAccountCredentials() {
   }
 }
 
+function hasServiceAccountConfig() {
+  const { clientEmail, privateKey } = getServiceAccountCredentials()
+  return Boolean(clientEmail && privateKey)
+}
+
 function sheetsClient() {
   const { clientEmail, privateKey } = getServiceAccountCredentials()
   if (!clientEmail || !privateKey) {
@@ -90,6 +97,11 @@ function sheetsClient() {
     serviceAccountEmail: clientEmail,
     sheets: google.sheets({ version: 'v4', auth }),
   }
+}
+
+function parseSheetGid(value = '') {
+  const match = String(value).match(/[?&]gid=(\d+)/)
+  return match?.[1] || '0'
 }
 
 function normalise(value = '') {
@@ -175,6 +187,13 @@ function parseDate(value) {
   return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString()
 }
 
+function parseBoolean(value) {
+  const text = normalise(value)
+  if (!text) return false
+  if (['no', 'n', 'false', '0', 'not sent', 'unsent'].includes(text)) return false
+  return true
+}
+
 function buildLeadFromRow({ raw, fieldMap, defaults, connection, rowNumber }) {
   const explicitFullName = getMapped(raw, fieldMap, 'fullName')
   const firstName = getMapped(raw, fieldMap, 'firstName')
@@ -188,6 +207,8 @@ function buildLeadFromRow({ raw, fieldMap, defaults, connection, rowNumber }) {
   const source = getMapped(raw, fieldMap, 'source') || defaults.source || connection.source_hint || 'Other'
   const leadId = getMapped(raw, fieldMap, 'leadId')
   const createdAt = getMapped(raw, fieldMap, 'createdAt')
+  const emailSentHeader = fieldMap?.emailSent
+  const emailSent = emailSentHeader ? parseBoolean(getMapped(raw, fieldMap, 'emailSent')) : null
   const preferredUnits = asArray(getMapped(raw, fieldMap, 'preferredUnits'))
   const sourceRowKey = leadId
     ? `lead:${leadId}`
@@ -214,40 +235,91 @@ function buildLeadFromRow({ raw, fieldMap, defaults, connection, rowNumber }) {
     finance_status: getMapped(raw, fieldMap, 'financeStatus') || defaults.financeStatus || WORKFLOW_DEFAULTS.financeStatus,
     temperature: normaliseTemperature(getMapped(raw, fieldMap, 'temperature'), defaults.temperature || WORKFLOW_DEFAULTS.temperature),
   }
+  const documentsSent = emailSentHeader
+    ? { emailSent, brochure: emailSent, plans: emailSent, priceList: emailSent }
+    : null
 
   return {
     sourceRowKey,
-    sourceRowHash: hash({ raw, inbound }),
+    sourceRowHash: hash({ raw, inbound, documentsSent }),
     message,
     createdAt,
     inbound,
+    documentsSent,
   }
 }
 
-async function readSheet({ spreadsheetId, sheetName, rangeA1, headerRow = 1 }) {
-  const { serviceAccountEmail, sheets } = sheetsClient()
-  const meta = await sheets.spreadsheets.get({
-    spreadsheetId,
-    fields: 'properties.title,sheets.properties.title',
-  })
-  const sheetTitles = meta.data.sheets?.map(sheet => sheet.properties?.title).filter(Boolean) || []
-  const selectedSheet = sheetName || sheetTitles[0]
-  if (!selectedSheet) throw new Error('No sheets were found in this spreadsheet')
-  const range = rangeA1 || `${escapeSheetName(selectedSheet)}!A1:Z1000`
-  const valuesResponse = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range,
-    valueRenderOption: 'FORMATTED_VALUE',
-  })
-  const values = valuesResponse.data.values || []
-  const parsed = rowsToObjects(values, headerRow)
+async function readPublicSheet({ spreadsheetId, spreadsheetUrl, headerRow = 1 }) {
+  const gid = parseSheetGid(spreadsheetUrl)
+  const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`
+  const response = await fetch(url, { redirect: 'follow' })
+  const text = await response.text()
+  const looksLikeHtml = /<html|<!doctype/i.test(text.slice(0, 500))
+  if (!response.ok || looksLikeHtml) {
+    throw new Error('The Google Sheet is not viewable from its link')
+  }
+  const parsedCsv = Papa.parse(text, { skipEmptyLines: false })
+  if (parsedCsv.errors?.length) {
+    throw new Error(parsedCsv.errors[0].message || 'Could not parse the Google Sheet CSV export')
+  }
+  const values = parsedCsv.data.map(row => Array.isArray(row) ? row : [])
   return {
-    serviceAccountEmail,
-    spreadsheetTitle: meta.data.properties?.title || '',
-    sheetTitles,
-    sheetName: selectedSheet,
-    range,
-    ...parsed,
+    serviceAccountEmail: '',
+    spreadsheetTitle: 'Google Sheet',
+    sheetTitles: [],
+    sheetName: `gid ${gid}`,
+    range: url,
+    accessMode: 'public-link',
+    ...rowsToObjects(values, headerRow),
+  }
+}
+
+async function readSheet({ spreadsheetId, spreadsheetUrl, sheetName, rangeA1, headerRow = 1 }) {
+  let serviceError = null
+  if (!hasServiceAccountConfig()) {
+    serviceError = new Error('Google service account is not configured')
+  } else {
+    try {
+      const { serviceAccountEmail, sheets } = sheetsClient()
+      const meta = await sheets.spreadsheets.get({
+        spreadsheetId,
+        fields: 'properties.title,sheets.properties.title',
+      })
+      const sheetTitles = meta.data.sheets?.map(sheet => sheet.properties?.title).filter(Boolean) || []
+      const selectedSheet = sheetName || sheetTitles[0]
+      if (!selectedSheet) throw new Error('No sheets were found in this spreadsheet')
+      const range = rangeA1 || `${escapeSheetName(selectedSheet)}!A1:Z1000`
+      const valuesResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range,
+        valueRenderOption: 'FORMATTED_VALUE',
+      })
+      const values = valuesResponse.data.values || []
+      const parsed = rowsToObjects(values, headerRow)
+      return {
+        serviceAccountEmail,
+        spreadsheetTitle: meta.data.properties?.title || '',
+        sheetTitles,
+        sheetName: selectedSheet,
+        range,
+        accessMode: 'service-account',
+        ...parsed,
+      }
+    } catch (error) {
+      serviceError = error
+    }
+  }
+
+  try {
+    return await readPublicSheet({ spreadsheetId, spreadsheetUrl, headerRow })
+  } catch (publicError) {
+    const message = [
+      'Google Sheet could not be read.',
+      'Share it with the DevMan service account, or set the sheet to "Anyone with the link can view".',
+      serviceError?.message,
+      publicError.message,
+    ].filter(Boolean).join(' ')
+    throw Object.assign(new Error(message), { status: serviceError?.status || 400 })
   }
 }
 
@@ -256,6 +328,7 @@ async function preview(body) {
   if (!spreadsheetId) throw Object.assign(new Error('Spreadsheet URL or ID is required'), { status: 400 })
   const data = await readSheet({
     spreadsheetId,
+    spreadsheetUrl: body.spreadsheetUrl,
     sheetName: body.sheetName,
     rangeA1: body.rangeA1,
     headerRow: body.headerRow || 1,
@@ -311,6 +384,7 @@ async function syncConnection(client, connectionId) {
   try {
     const sheet = await readSheet({
       spreadsheetId: connection.spreadsheet_id,
+      spreadsheetUrl: connection.spreadsheet_url,
       sheetName: connection.sheet_name,
       rangeA1: connection.range_a1,
       headerRow: mapping?.header_row || 1,
@@ -319,7 +393,7 @@ async function syncConnection(client, connectionId) {
     const defaults = mapping?.defaults || {}
     const { data: existingRows, error: existingError } = await client
       .from('sales_leads')
-      .select('id,email,phone,notes,source_row_key,source_row_hash')
+      .select('id,email,phone,notes,source_row_key,source_row_hash,created_at')
     if (existingError) throw existingError
 
     const byKey = new Map()
@@ -372,6 +446,9 @@ async function syncConnection(client, connectionId) {
           ...metadata,
           updated_at: new Date().toISOString(),
         }
+        const parsedCreatedAt = parseDate(parsed.createdAt)
+        if (parsedCreatedAt) updates.created_at = parsedCreatedAt
+        if (parsed.documentsSent) updates.documents_sent = parsed.documentsSent
         const { error } = await client.from('sales_leads').update(updates).eq('id', existing.id)
         if (error) {
           errors.push({ rowNumber, error: error.message })
@@ -393,7 +470,7 @@ async function syncConnection(client, connectionId) {
         pipeline_stage: WORKFLOW_DEFAULTS.pipelineStage,
         has_finance_approval: false,
         needs_broker_intro: parsed.inbound.finance_status === 'Needs broker',
-        documents_sent: {},
+        documents_sent: parsed.documentsSent || {},
         tags: ['sheet-sync'],
         probability: 10,
         archived: false,

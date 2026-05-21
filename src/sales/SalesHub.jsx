@@ -509,7 +509,6 @@ function PipelineCard({ lead, openLead, onDragStart }) {
         <div>Created: {formatShortDate(lead.createdAt)}</div>
         <div className="line-clamp-2">Next: {suggestedNextAction(lead)}</div>
       </div>
-      <ActivityDots lead={lead} />
       {(stale || isOverdue(lead.nextActionDate)) && (
         <div className="mt-3 inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">
           <AlertCircle size={12} /> {isOverdue(lead.nextActionDate) ? 'Overdue' : 'Stale hot lead'}
@@ -530,23 +529,6 @@ function ViewToggle({ value, onChange }) {
           <Icon size={14} /> {label}
         </button>
       ))}
-    </div>
-  )
-}
-
-function ActivityDots({ lead }) {
-  const active = [
-    Boolean(lead.lastContactedAt),
-    Boolean(lead.documentsSent?.brochure || lead.documentsSent?.plans),
-    Boolean(lead.preferredUnits?.length),
-    PIPELINE_CLOSE_STAGES.includes(lead.pipelineStage),
-  ]
-  return (
-    <div className="mt-3 flex items-center gap-1 border-t border-gray-100 pt-2">
-      {Array.from({ length: 10 }).map((_, index) => (
-        <span key={index} className={`h-5 w-1.5 rounded-full ${active[index % active.length] ? (index % 2 ? 'bg-ocean-300' : 'bg-pink-300') : 'bg-gray-100'}`} />
-      ))}
-      <span className="ml-auto text-xs font-semibold text-ocean-600">+</span>
     </div>
   )
 }
@@ -767,8 +749,6 @@ function BoardSelect({ icon: Icon, value, onChange, options, label, wide = false
 }
 
 function MondayLeadGroup({ group, openLead, onAddLead, markContacted, markInfoSent, markLost, moveLeadStage, updateLead, archiveLead }) {
-  const stageTotals = PIPELINE_STAGES.map(stage => group.rows.filter(lead => lead.pipelineStage === stage).length)
-  const sourceTotals = LEAD_SOURCES.slice(0, 5).map(source => group.rows.filter(lead => lead.source === source).length)
   return (
     <section>
       <div className="mb-3 flex items-center gap-3">
@@ -778,7 +758,7 @@ function MondayLeadGroup({ group, openLead, onAddLead, markContacted, markInfoSe
       </div>
       <div className="overflow-hidden rounded-md border border-[#d7dde8] bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1680px] border-separate border-spacing-0 text-[15px]">
+          <table className="w-full min-w-[1500px] border-separate border-spacing-0 text-[15px]">
             <thead>
               <tr className="text-gray-700">
                 <th className={`sticky left-0 z-10 w-11 border-r border-b border-[#d7dde8] px-3 py-3 text-left ${group.accentClass}`} />
@@ -788,15 +768,14 @@ function MondayLeadGroup({ group, openLead, onAddLead, markContacted, markInfoSe
                 <th className="w-[260px] border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Lead</th>
                 <th className="w-14 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center" />
                 <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Status</th>
-                <th className="w-48 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Activities timeline</th>
-                <th className="w-12 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">+</th>
                 <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Action</th>
                 <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Project</th>
                 <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Buyer type</th>
                 <th className="w-64 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Email</th>
                 <th className="w-52 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Phone</th>
+                <th className="w-36 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Email sent</th>
                 <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Lead Source</th>
-                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Last interaction</th>
+                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Date received</th>
                 <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Owner</th>
                 <th className="w-72 border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Next action</th>
               </tr>
@@ -819,27 +798,15 @@ function MondayLeadGroup({ group, openLead, onAddLead, markContacted, markInfoSe
               {!group.rows.length && (
                 <tr>
                   <td className={`border-r border-[#d7dde8] ${group.accentClass}`} />
-                  <td colSpan={15} className="border-b border-[#d7dde8] px-4 py-5 text-gray-400">No leads in this group.</td>
+                  <td colSpan={14} className="border-b border-[#d7dde8] px-4 py-5 text-gray-400">No leads in this group.</td>
                 </tr>
               )}
               <tr>
                 <td className={`border-r border-[#d7dde8] ${group.accentClass}`} />
                 <td className="border-r border-[#d7dde8] px-3 py-3 text-center"><input type="checkbox" className="h-5 w-5 rounded border-gray-200 opacity-50" aria-label="Add row placeholder" /></td>
-                <td colSpan={14} className="border-b border-[#d7dde8] px-4 py-3 text-gray-500">
+                <td colSpan={13} className="border-b border-[#d7dde8] px-4 py-3 text-gray-500">
                   <button onClick={onAddLead} className="hover:text-gray-900">+ Add lead</button>
                 </td>
-              </tr>
-              <tr>
-                <td />
-                <td colSpan={3} />
-                <td className="border-x border-b border-[#d7dde8] p-2">
-                  <SummaryBar totals={stageTotals} palette={PIPELINE_STAGES.map(stage => stageSummaryColor(stage))} />
-                </td>
-                <td colSpan={7} />
-                <td className="border-x border-b border-[#d7dde8] p-2">
-                  <SummaryBar totals={sourceTotals} palette={LEAD_SOURCES.slice(0, 5).map(source => sourceSummaryColor(source))} />
-                </td>
-                <td colSpan={3} />
               </tr>
             </tbody>
           </table>
@@ -853,6 +820,7 @@ function MondayLeadRow({ lead, accentClass, openLead, markContacted, markInfoSen
   const overdue = isOverdue(lead.nextActionDate)
   const stale = lead.temperature === 'Hot' && daysSince(lead.lastContactedAt) >= 2
   const source = lead.source || 'Other'
+  const emailWasSent = Boolean(lead.documentsSent?.emailSent || lead.documentsSent?.brochure || lead.documentsSent?.plans || lead.documentsSent?.priceList)
   const handleStage = event => {
     event.stopPropagation()
     if (event.target.value === PIPELINE_CLOSED_STAGE) {
@@ -887,12 +855,6 @@ function MondayLeadRow({ lead, accentClass, openLead, markContacted, markInfoSen
           {PIPELINE_STAGES.map(stage => <option key={stage} value={stage} className="bg-white text-gray-900">{stage}</option>)}
         </select>
       </td>
-      <td className="border-r border-b border-[#d7dde8] px-3 py-2">
-        <TimelineBars lead={lead} />
-      </td>
-      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center">
-        <button onClick={event => { event.stopPropagation(); markContacted(lead.id) }} className="text-2xl leading-none text-gray-600 hover:text-gray-950">+</button>
-      </td>
       <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center">
         <button onClick={event => { event.stopPropagation(); openLead(lead.id) }} className="rounded-md bg-green-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-800">Open lead</button>
       </td>
@@ -904,8 +866,9 @@ function MondayLeadRow({ lead, accentClass, openLead, markContacted, markInfoSen
       <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center">
         {lead.phone ? <span className="inline-flex items-center gap-2 text-[#2176d2]"><span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-bold text-gray-500">NZ</span>{lead.phone}</span> : <span className="text-gray-400">-</span>}
       </td>
+      <td className={`border-r border-b border-[#d7dde8] px-3 py-2 text-center text-sm font-semibold ${emailWasSent ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{emailWasSent ? 'Sent' : 'Not sent'}</td>
       <td className={`border-r border-b border-[#d7dde8] px-3 py-2 text-center text-sm font-semibold ${sourceCellClass(source)}`}>{source}</td>
-      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center text-gray-600">{formatShortDate(lead.lastContactedAt || lead.updatedAt || lead.createdAt)}</td>
+      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center text-gray-600">{formatShortDate(lead.createdAt)}</td>
       <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center" onClick={event => event.stopPropagation()}>
         <div className="inline-flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-500">{ownerInitials(lead.assignedTo)}</span>
@@ -926,33 +889,6 @@ function MondayLeadRow({ lead, accentClass, openLead, markContacted, markInfoSen
         </div>
       </td>
     </tr>
-  )
-}
-
-function TimelineBars({ lead }) {
-  const active = [
-    Boolean(lead.lastContactedAt),
-    Boolean(lead.documentsSent?.brochure),
-    Boolean(lead.documentsSent?.plans),
-    Boolean(lead.preferredUnits?.length),
-    PIPELINE_CLOSE_STAGES.includes(lead.pipelineStage),
-  ]
-  return (
-    <div className="flex items-center justify-center gap-1">
-      {Array.from({ length: 10 }).map((_, index) => (
-        <span key={index} className={`h-8 w-2 rounded-full ${active[index % active.length] ? (index % 2 ? 'bg-pink-300' : 'bg-sky-300') : 'bg-gray-100'}`} />
-      ))}
-    </div>
-  )
-}
-
-function SummaryBar({ totals, palette }) {
-  const total = totals.reduce((sum, item) => sum + item, 0)
-  if (!total) return <div className="h-8 rounded bg-gray-50" />
-  return (
-    <div className="flex h-8 overflow-hidden rounded-sm">
-      {totals.map((count, index) => count ? <div key={index} className={palette[index]} style={{ width: `${(count / total) * 100}%` }} /> : null)}
-    </div>
   )
 }
 
@@ -985,28 +921,6 @@ function sourceCellClass(source) {
     Other: 'bg-[#9aa5b1] text-white',
   }
   return map[source] || map.Other
-}
-
-function stageSummaryColor(stage) {
-  return {
-    [PIPELINE_NEW_STAGE]: 'bg-[#f5b84c]',
-    [PIPELINE_QUALIFIED_STAGE]: 'bg-[#5b8def]',
-    [PIPELINE_MEETING_STAGE]: 'bg-[#7cc7f0]',
-    [PIPELINE_OFFER_STAGE]: 'bg-[#f28b54]',
-    [PIPELINE_CONTRACT_STAGE]: 'bg-[#9b72e7]',
-    [PIPELINE_WON_STAGE]: 'bg-[#55c57a]',
-    [PIPELINE_CLOSED_STAGE]: 'bg-[#9aa5b1]',
-  }[stage] || 'bg-gray-300'
-}
-
-function sourceSummaryColor(source) {
-  return {
-    Meta: 'bg-[#5b6df6]',
-    Website: 'bg-[#2f80ed]',
-    'Trade Me': 'bg-[#2e7d32]',
-    Instagram: 'bg-[#c026d3]',
-    Facebook: 'bg-[#2563eb]',
-  }[source] || 'bg-gray-300'
 }
 
 function ownerInitials(name = '') {
@@ -1153,7 +1067,7 @@ function ProjectSalesPage({ openLead, onAddLead }) {
           </div>
         )}
 
-        {tab === 'leads' && <ProjectLeadsTable leads={projectLeads} openLead={openLead} />}
+        {tab === 'leads' && <ProjectLeadsTable projectName={project.name} openLead={openLead} onAddLead={onAddLead} />}
 
         {tab === 'pipeline' && <PipelineBoardSection leads={projectLeads} openLead={openLead} onAddLead={onAddLead} title={`${project.name} pipeline`} />}
 
@@ -1214,75 +1128,8 @@ function ProjectStageList({ leads, openLead, detailed = false }) {
   )
 }
 
-function ProjectLeadsTable({ leads, openLead }) {
-  const { updateLead } = useSalesStore()
-  const [search, setSearch] = useState('')
-  const [stage, setStage] = useState('')
-  const [owner, setOwner] = useState('')
-  const [temperature, setTemperature] = useState('')
-  const q = search.toLowerCase()
-  const rows = sortLeads(leads.filter(lead => {
-    if (q && ![lead.fullName, lead.email, lead.phone, lead.notes].join(' ').toLowerCase().includes(q)) return false
-    if (stage && lead.pipelineStage !== stage) return false
-    if (owner && lead.assignedTo !== owner) return false
-    if (temperature && lead.temperature !== temperature) return false
-    return true
-  }), 'stale')
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
-      <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-3">
-        <div className="relative min-w-72 flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={13} />
-          <input className="w-full rounded-md border border-gray-200 bg-white py-1.5 pl-8 pr-3 text-sm outline-none focus:border-forest-400 focus:ring-2 focus:ring-forest-100" placeholder="Search project leads" value={search} onChange={event => setSearch(event.target.value)} />
-        </div>
-        <div className="w-40"><Select value={stage} onChange={setStage} options={PIPELINE_STAGES} placeholder="Stage" /></div>
-        <div className="w-36"><Select value={owner} onChange={setOwner} options={ASSIGNEES} placeholder="Owner" /></div>
-        <div className="w-36"><Select value={temperature} onChange={setTemperature} options={TEMPERATURES} placeholder="Temp" /></div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1040px] text-[13px]">
-          <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-400">
-            <tr>
-              {['Name', 'Email', 'Phone', 'Owner', 'Stage', 'Temp', 'Last activity', 'Next action', 'Notes'].map(head => (
-                <th key={head} className="px-3 py-2 text-left font-semibold">{head}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {rows.map(lead => {
-              const initials = leadName(lead).split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase()
-              return (
-                <tr key={lead.id} onClick={() => openLead(lead.id)} className="cursor-pointer hover:bg-gray-50">
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ocean-50 text-[10px] font-bold text-ocean-700">{initials || '?'}</span>
-                      <span className="truncate font-semibold text-ocean-700">{leadName(lead)}</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2"><div className="max-w-[210px] truncate font-medium text-ocean-700">{lead.email || '-'}</div></td>
-                  <td className="px-3 py-2 text-gray-600">{lead.phone || '-'}</td>
-                  <td className="px-3 py-2" onClick={event => event.stopPropagation()}>
-                    <select className="max-w-[150px] rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700" value={lead.assignedTo} onChange={event => updateLead(lead.id, { assignedTo: event.target.value })}>
-                      {ASSIGNEES.map(item => <option key={item}>{item}</option>)}
-                    </select>
-                  </td>
-                  <td className="px-3 py-2"><Badge className={STAGE_COLORS[lead.pipelineStage]}>{lead.pipelineStage}</Badge></td>
-                  <td className="px-3 py-2"><Badge className={TEMP_COLORS[lead.temperature]}>{lead.temperature}</Badge></td>
-                  <td className="px-3 py-2 text-gray-600">{formatShortDate(lead.lastContactedAt || lead.updatedAt || lead.createdAt)}</td>
-                  <td className={`px-3 py-2 ${isOverdue(lead.nextActionDate) ? 'font-semibold text-red-600' : 'text-gray-600'}`}>
-                    <div className="max-w-[190px] truncate">{suggestedNextAction(lead)}</div>
-                  </td>
-                  <td className="px-3 py-2 text-gray-500"><div className="max-w-[240px] truncate">{lead.notes || '-'}</div></td>
-                </tr>
-              )
-            })}
-            {rows.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-400">No project leads match these filters.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
+function ProjectLeadsTable({ projectName, openLead, onAddLead }) {
+  return <LeadsTable openLead={openLead} projectName={projectName} onAddLead={onAddLead} />
 }
 
 function ProjectUnitTable({ units, leads, openLead, updateUnit }) {
@@ -1323,11 +1170,10 @@ function ProjectUnitTable({ units, leads, openLead, updateUnit }) {
 }
 
 function LeadDrawer({ lead, onClose }) {
-  const { projects, units, activities, updateLead, markContacted, markInfoSent, moveLeadStage, assignUnitToLead, addLeadNote } = useSalesStore()
+  const { projects, units, updateLead, markContacted, markInfoSent, moveLeadStage, assignUnitToLead, addLeadNote } = useSalesStore()
   const [form, setForm] = useState(lead)
   const [note, setNote] = useState('')
   const [unitId, setUnitId] = useState('')
-  const leadActivities = activities.filter(activity => activity.leadId === lead.id).slice(0, 12)
   const projectOptions = projects.map(project => project.name)
   const matchingUnits = units.filter(unit => !form.projectInterest || unit.projectName === form.projectInterest || form.projectInterest.includes(unit.projectName))
   const gmailUrl = lead.email ? `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(lead.email)}` : ''
@@ -1422,20 +1268,11 @@ function LeadDrawer({ lead, onClose }) {
             </div>
           </Section>
 
-          <Section title="Notes and activity">
+          <Section title="Notes">
             <Field label="Notes"><textarea className={`${inputCls} min-h-28`} value={form.notes || ''} onChange={event => set('notes', event.target.value)} /></Field>
             <div className="flex gap-2">
               <input className={inputCls} value={note} placeholder="Add quick note" onChange={event => setNote(event.target.value)} />
               <Button onClick={addNote}>Add</Button>
-            </div>
-            <div className="space-y-2">
-              {leadActivities.map(activity => (
-                <div key={activity.id} className="rounded-lg bg-gray-50 px-3 py-2 text-sm">
-                  <div className="font-semibold text-gray-800">{activity.title}</div>
-                  <div className="text-gray-500">{activity.description}</div>
-                  <div className="mt-1 text-xs text-gray-400">{formatDate(activity.createdAt)}</div>
-                </div>
-              ))}
             </div>
           </Section>
         </div>
@@ -1567,6 +1404,11 @@ function SheetSyncPage() {
   const [busy, setBusy] = useState(false)
 
   const set = (key, value) => setForm(current => ({ ...current, [key]: value }))
+  const setSheetUrl = value => {
+    setPreview(null)
+    setFieldMap({})
+    setForm(current => ({ ...current, spreadsheetUrl: value, spreadsheetId: '' }))
+  }
 
   const runPreview = async () => {
     setBusy(true)
@@ -1576,7 +1418,39 @@ function SheetSyncPage() {
       setPreview(result)
       setFieldMap(result.suggestedFieldMap || {})
       set('spreadsheetId', result.spreadsheetId)
-      if (!form.sheetName) set('sheetName', result.sheetName)
+      if (!form.sheetName && result.accessMode === 'service-account') set('sheetName', result.sheetName)
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const connectAndSync = async () => {
+    if (!form.spreadsheetUrl && !form.spreadsheetId) {
+      setMessage('Paste the Google Sheet link first.')
+      return
+    }
+    setBusy(true)
+    setMessage('')
+    try {
+      const result = await previewSheetConnection(form)
+      const nextFieldMap = Object.keys(fieldMap).length ? fieldMap : (result.suggestedFieldMap || {})
+      setPreview(result)
+      setFieldMap(nextFieldMap)
+      const connection = await addSheetConnection({
+        ...form,
+        spreadsheetId: form.spreadsheetId || result.spreadsheetId,
+        sheetName: form.sheetName || result.sheetName,
+        rangeA1: form.rangeA1 || (result.accessMode === 'service-account' ? result.range : ''),
+        name: form.name || `${form.projectHint || result.spreadsheetTitle || 'Lead'} leads`,
+      })
+      await saveSheetMapping(connection.id, { headerRow: form.headerRow, fieldMap: nextFieldMap, defaults })
+      const sync = await syncSheetConnection(connection.id)
+      setMessage(`Connected and synced: ${sync.rowsCreated} created, ${sync.rowsUpdated} updated, ${sync.rowsSkipped} skipped.`)
+      setPreview(null)
+      setFieldMap({})
+      setForm({ name: '', spreadsheetUrl: '', spreadsheetId: '', sheetName: '', rangeA1: '', projectHint: '', sourceHint: '', headerRow: 1 })
     } catch (error) {
       setMessage(error.message)
     } finally {
@@ -1596,6 +1470,7 @@ function SheetSyncPage() {
         ...form,
         spreadsheetId: form.spreadsheetId || preview.spreadsheetId,
         sheetName: form.sheetName || preview.sheetName,
+        rangeA1: form.rangeA1 || (preview.accessMode === 'service-account' ? preview.range : ''),
         name: form.name || `${form.projectHint || 'Lead'} sheet`,
       })
       await saveSheetMapping(connection.id, { headerRow: form.headerRow, fieldMap, defaults })
@@ -1639,9 +1514,26 @@ function SheetSyncPage() {
     ['preferredUnits', 'Preferred units'],
     ['message', 'Message / enquiry'],
     ['createdAt', 'Created date'],
+    ['emailSent', 'Email sent'],
     ['nextAction', 'Next action'],
     ['nextActionDate', 'Next action date'],
   ]
+  const coreFields = [
+    ['createdAt', 'Date received'],
+    ['fullName', 'Name'],
+    ['email', 'Email'],
+    ['phone', 'Phone'],
+    ['emailSent', 'Email sent'],
+  ]
+  const previewValue = (row, field) => {
+    const header = fieldMap[field]
+    if (field === 'fullName' && !header) {
+      const first = fieldMap.firstName ? row.values?.[fieldMap.firstName] : ''
+      const last = fieldMap.lastName ? row.values?.[fieldMap.lastName] : ''
+      return [first, last].filter(Boolean).join(' ') || '-'
+    }
+    return header ? row.values?.[header] || '-' : '-'
+  }
 
   return (
     <>
@@ -1661,42 +1553,53 @@ function SheetSyncPage() {
           <div className="flex items-start gap-3 rounded-lg bg-forest-50 p-3 text-sm text-forest-800">
             <AlertCircle className="mt-0.5 shrink-0" size={16} />
             <div>
-              Share each lead sheet with the DevMan service account email. DevMan reads sheets only; it does not write status back to Google Sheets in this version.
-              {preview?.serviceAccountEmail && <div className="mt-1 font-semibold">Service account: {preview.serviceAccountEmail}</div>}
+              Paste a Google Sheet link, choose the project, then connect and sync. If the sheet is set to anyone-with-link viewer, DevMan can read it directly; otherwise share it with the service account shown after preview.
+              {preview?.serviceAccountEmail && <div className="mt-1 font-semibold">Share the sheet with: {preview.serviceAccountEmail}</div>}
             </div>
           </div>
 
-          <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
-            <div className="space-y-3">
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Connection name"><input className={inputCls} value={form.name} onChange={event => set('name', event.target.value)} placeholder="Beachwaters Meta leads" /></Field>
-                <Field label="Project hint"><Select value={form.projectHint} onChange={value => set('projectHint', value)} options={projects.map(project => project.name)} placeholder="Project" /></Field>
-                <Field label="Spreadsheet URL"><input className={inputCls} value={form.spreadsheetUrl} onChange={event => set('spreadsheetUrl', event.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." /></Field>
-                <Field label="Spreadsheet ID"><input className={inputCls} value={form.spreadsheetId} onChange={event => set('spreadsheetId', event.target.value)} placeholder="Optional if URL is pasted" /></Field>
-                <Field label="Sheet tab name"><input className={inputCls} value={form.sheetName} onChange={event => set('sheetName', event.target.value)} placeholder="Leads" /></Field>
-                <Field label="Range"><input className={inputCls} value={form.rangeA1} onChange={event => set('rangeA1', event.target.value)} placeholder="'Leads'!A1:Z1000" /></Field>
-                <Field label="Source hint"><Select value={form.sourceHint} onChange={value => set('sourceHint', value)} options={LEAD_SOURCES} placeholder="Source" /></Field>
-                <Field label="Header row"><input type="number" min="1" className={inputCls} value={form.headerRow} onChange={event => set('headerRow', event.target.value)} /></Field>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={runPreview} disabled={busy || !sheetSyncReady} className="bg-forest-600 text-white hover:bg-forest-700"><Table2 size={15} /> Preview columns</Button>
-                <Button onClick={saveConnection} disabled={busy || !preview || !sheetSyncReady}>Save connection</Button>
-              </div>
-              {message && <div className={`rounded-lg px-3 py-2 text-sm ${/fail|error|required|configured/i.test(message) ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{message}</div>}
-            </div>
+          <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_220px_180px]">
+            <Field label="Google Sheet link"><input className={inputCls} value={form.spreadsheetUrl} onChange={event => setSheetUrl(event.target.value)} placeholder="Paste Google Sheet link here" /></Field>
+            <Field label="Project"><Select value={form.projectHint} onChange={value => set('projectHint', value)} options={projects.map(project => project.name)} placeholder="Project" /></Field>
+            <Field label="Source"><Select value={form.sourceHint} onChange={value => set('sourceHint', value)} options={LEAD_SOURCES} placeholder="Source" /></Field>
+          </div>
 
-            <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-              <h2 className="font-bold text-gray-900">Column mapping</h2>
-              {!preview ? (
-                <p className="mt-2 text-sm text-gray-500">Preview a sheet to map columns into Sales Hub fields.</p>
-              ) : (
-                <div className="mt-3 max-h-[520px] space-y-3 overflow-y-auto pr-1">
-                  <div className="rounded-lg bg-white p-3 text-sm text-gray-600">
-                    <b>{preview.spreadsheetTitle}</b><br />
-                    Tab: {preview.sheetName}. Headers found: {preview.headers.length}.
-                  </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button onClick={runPreview} disabled={busy || !sheetSyncReady}><Table2 size={15} /> Preview</Button>
+            <Button onClick={connectAndSync} disabled={busy || !sheetSyncReady} className="bg-forest-600 text-white hover:bg-forest-700"><RefreshCw size={15} /> Connect and sync</Button>
+            <Button onClick={() => runSync()} disabled={busy || !sheetConnections.length || !sheetSyncReady}>Sync existing sheets</Button>
+          </div>
+          {message && <div className={`mt-4 rounded-lg px-3 py-2 text-sm ${/fail|error|required|configured|share/i.test(message) ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{message}</div>}
+
+          {preview && (
+            <div className="mt-5 rounded-lg border border-gray-100 bg-gray-50 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="font-bold text-gray-900">{preview.spreadsheetTitle}</h2>
+                  <p className="mt-1 text-sm text-gray-500">Tab: {preview.sheetName}. DevMan found {preview.headers.length} columns. Access: {preview.accessMode === 'public-link' ? 'viewable link' : 'service account'}.</p>
+                </div>
+                <Button onClick={saveConnection} disabled={busy || !sheetSyncReady}>Save without syncing</Button>
+              </div>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[780px] text-sm">
+                  <thead className="text-xs uppercase tracking-wide text-gray-400">
+                    <tr>{coreFields.map(([, label]) => <th key={label} className="px-3 py-2 text-left">{label}</th>)}</tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 rounded-lg bg-white">
+                    {preview.rows.slice(0, 5).map(row => (
+                      <tr key={row.rowNumber}>
+                        {coreFields.map(([field]) => <td key={field} className="px-3 py-2 text-gray-700">{previewValue(row, field)}</td>)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <details className="mt-4 rounded-lg border border-gray-100 bg-white p-3">
+                <summary className="cursor-pointer text-sm font-semibold text-gray-700">Adjust column mapping</summary>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
                   {fields.map(([field, label]) => (
-                    <div key={field} className="grid grid-cols-[135px_1fr] items-center gap-2">
+                    <div key={field} className="grid grid-cols-[130px_1fr] items-center gap-2">
                       <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</div>
                       <select className={inputCls} value={fieldMap[field] || ''} onChange={event => setFieldMap(current => ({ ...current, [field]: event.target.value }))}>
                         <option value="">Not mapped</option>
@@ -1704,14 +1607,14 @@ function SheetSyncPage() {
                       </select>
                     </div>
                   ))}
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <Field label="Default owner"><Select value={defaults.assignedTo} onChange={value => setDefaults(current => ({ ...current, assignedTo: value }))} options={ASSIGNEES} /></Field>
-                    <Field label="Default temp"><Select value={defaults.temperature} onChange={value => setDefaults(current => ({ ...current, temperature: value }))} options={TEMPERATURES} /></Field>
-                  </div>
                 </div>
-              )}
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <Field label="Default owner"><Select value={defaults.assignedTo} onChange={value => setDefaults(current => ({ ...current, assignedTo: value }))} options={ASSIGNEES} /></Field>
+                  <Field label="Default temp"><Select value={defaults.temperature} onChange={value => setDefaults(current => ({ ...current, temperature: value }))} options={TEMPERATURES} /></Field>
+                </div>
+              </details>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">

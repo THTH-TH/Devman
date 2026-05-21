@@ -378,7 +378,7 @@ const useSalesStore = create((set, get) => ({
     await get().updateLead(id, {
       pipelineStage: lead.pipelineStage === PIPELINE_NEW_STAGE ? PIPELINE_QUALIFIED_STAGE : lead.pipelineStage,
       lastContactedAt: new Date().toISOString(),
-      documentsSent: { ...(lead.documentsSent || {}), brochure: true, plans: true, priceList: true },
+      documentsSent: { ...(lead.documentsSent || {}), emailSent: true, brochure: true, plans: true, priceList: true },
       nextAction: 'Follow up after info sent',
     })
     await get().addActivity({ leadId: id, type: 'Document Sent', title: 'Info marked sent', description: 'Brochure, plans and price information marked as sent.', createdBy: lead.assignedTo })

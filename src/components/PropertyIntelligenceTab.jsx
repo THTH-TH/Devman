@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import PropertyMapEmbed from './PropertyMapEmbed'
+import PlanningLayerMap from './PlanningLayerMap'
 
 const inputCls = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-ocean-400'
 
@@ -210,6 +211,7 @@ function buildFallbackProfile(project) {
     valuationSummary: { status: 'not available', summary: 'Valuation/rental placeholders only.' },
     demographicsSummary: { status: 'not available', summary: 'Schools/demographics placeholders only.' },
     mapLinks: {},
+    rawPayload: {},
   }
 }
 
@@ -350,14 +352,24 @@ export default function PropertyIntelligenceTab({ project }) {
         </div>
       )}
 
+      <PlanningLayerMap
+        address={address}
+        latitude={activeProfile.latitude ?? project.latitude}
+        longitude={activeProfile.longitude ?? project.longitude}
+        gisLayers={activeProfile.rawPayload?.gisLayers}
+        title="Planning layer map"
+        subtitle="Toggle council zoning, flood risk, water, stormwater and wastewater layers."
+        heightClass="h-[500px]"
+      />
+
       <PropertyMapEmbed
         address={address}
         latitude={activeProfile.latitude ?? project.latitude}
         longitude={activeProfile.longitude ?? project.longitude}
         mapLinks={activeProfile.mapLinks}
         title={address || project.name}
-        subtitle="Site map"
-        heightClass="h-[420px]"
+        subtitle="Google map, satellite and street-view links"
+        heightClass="h-[260px]"
       />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -373,9 +385,9 @@ export default function PropertyIntelligenceTab({ project }) {
         <div className="flex items-start gap-3">
           <ShieldAlert size={18} className="mt-0.5 shrink-0 text-ocean-700" />
           <div>
-            <h3 className="text-sm font-bold text-gray-900">Relab-style dossier, with clear evidence levels</h3>
+            <h3 className="text-sm font-bold text-gray-900">Property dossier, with clear evidence levels</h3>
             <p className="mt-1 text-sm leading-6 text-gray-600">
-              DevMan now shows the map and the intelligence panels directly. Live Google coordinates and Tauranga hazard checks can be captured automatically; title ownership, valuation, services and planning conclusions remain manual or linked until the right council/LINZ/licensed feeds are connected.
+              The layer map above is the visual planning check. The summaries below are selected-point or nearby identify results, and should be treated as supporting evidence until verified against council records and title documents.
             </p>
             <div className="mt-3 text-xs text-gray-500">Last refreshed: {formatDateTime(activeProfile.lastRefreshedAt)}</div>
           </div>
@@ -408,7 +420,7 @@ export default function PropertyIntelligenceTab({ project }) {
 
         <InfoPanel title="Council records" icon={Building2} status={activeProfile.councilSummary?.status} summary={activeProfile.councilSummary?.summary} sourceUrl={activeProfile.councilSummary?.sourceUrl || activeProfile.mapLinks?.councilMaps} />
 
-        <InfoPanel title="Zoning and planning" icon={MapPin} status={activeProfile.zoningSummary?.status} summary={activeProfile.zoningSummary?.summary} sourceUrl={activeProfile.zoningSummary?.sourceUrl || activeProfile.mapLinks?.taurangaZoning || activeProfile.mapLinks?.councilMaps}>
+        <InfoPanel title="Zoning selected-point summary" icon={MapPin} status={activeProfile.zoningSummary?.status} summary={activeProfile.zoningSummary?.summary} sourceUrl={activeProfile.zoningSummary?.sourceUrl || activeProfile.mapLinks?.taurangaZoning || activeProfile.mapLinks?.councilMaps}>
           {(zoningDetails.zone || zoningDetails.description || zoningDetails.ruleId) && (
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <DetailPill label="Zone" value={zoningDetails.zone} />
@@ -421,7 +433,7 @@ export default function PropertyIntelligenceTab({ project }) {
           </Field>
         </InfoPanel>
 
-        <InfoPanel title="Natural hazards / flooding" icon={Waves} status={activeProfile.hazardSummary?.status} summary={hazardSummary} sourceUrl={activeProfile.hazardSummary?.sourceUrl || activeProfile.mapLinks?.taurangaNaturalHazards}>
+        <InfoPanel title="Flooding / hazards selected-point summary" icon={Waves} status={activeProfile.hazardSummary?.status} summary={hazardSummary} sourceUrl={activeProfile.hazardSummary?.sourceUrl || activeProfile.mapLinks?.taurangaNaturalHazards}>
           <EvidenceList
             items={hazardItems}
             empty="No council flooding/hazard records returned at the selected point."
@@ -434,7 +446,7 @@ export default function PropertyIntelligenceTab({ project }) {
           />
         </InfoPanel>
 
-        <InfoPanel title="Services and utilities" icon={Zap} status={activeProfile.servicesSummary?.status} summary={activeProfile.servicesSummary?.summary} sourceUrl={activeProfile.servicesSummary?.sourceUrl || activeProfile.mapLinks?.taurangaUtilities}>
+        <InfoPanel title="Services nearby summary" icon={Zap} status={activeProfile.servicesSummary?.status} summary={activeProfile.servicesSummary?.summary} sourceUrl={activeProfile.servicesSummary?.sourceUrl || activeProfile.mapLinks?.taurangaUtilities}>
           <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-3">
             <UtilityGroup title="Water" items={serviceGroups.Water || []} />
             <UtilityGroup title="Stormwater" items={serviceGroups.Stormwater || []} />

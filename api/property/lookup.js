@@ -34,6 +34,81 @@ const UTILITY_LAYERS = [
   { system: 'Wastewater', assetType: 'Wastewater manhole', layerId: 56 },
 ]
 
+const GIS_LAYER_GROUPS = [
+  {
+    id: 'zoning',
+    label: 'Zoning',
+    shortLabel: 'Zoning',
+    description: 'Tauranga ePlan Planning Zones Operative',
+    serviceUrl: TAURANGA_SERVICES.zoning,
+    sourceUrl: TAURANGA_SERVICES.zoning,
+    layerIds: [0],
+    defaultVisible: true,
+    opacity: 0.48,
+    tone: 'green',
+  },
+  {
+    id: 'flooding',
+    label: 'Flooding / hazards',
+    shortLabel: 'Flooding',
+    description: 'Tauranga Flood Risk, with optional flood and coastal hazard overlays',
+    serviceUrl: TAURANGA_SERVICES.hazards,
+    sourceUrl: TAURANGA_SERVICES.hazards,
+    layerIds: [30],
+    secondaryLayerIds: [6, 31, 4, 5],
+    secondaryLabel: 'Flood hazard plan area, depth x velocity, coastal and harbour inundation',
+    defaultVisible: true,
+    opacity: 0.58,
+    tone: 'red',
+  },
+  {
+    id: 'water',
+    label: 'Water',
+    shortLabel: 'Water',
+    description: 'Water mains, service lines, meters and hydrants',
+    serviceUrl: TAURANGA_SERVICES.utilities,
+    sourceUrl: TAURANGA_SERVICES.utilities,
+    layerIds: [188, 190, 191, 192],
+    defaultVisible: false,
+    opacity: 0.88,
+    tone: 'blue',
+  },
+  {
+    id: 'stormwater',
+    label: 'Stormwater',
+    shortLabel: 'Stormwater',
+    description: 'Stormwater pipes, manholes and sumps',
+    serviceUrl: TAURANGA_SERVICES.utilities,
+    sourceUrl: TAURANGA_SERVICES.utilities,
+    layerIds: [193, 194, 195],
+    defaultVisible: false,
+    opacity: 0.88,
+    tone: 'cyan',
+  },
+  {
+    id: 'wastewater',
+    label: 'Wastewater',
+    shortLabel: 'Wastewater',
+    description: 'Wastewater pipes and manholes',
+    serviceUrl: TAURANGA_SERVICES.utilities,
+    sourceUrl: TAURANGA_SERVICES.utilities,
+    layerIds: [56, 58],
+    defaultVisible: false,
+    opacity: 0.88,
+    tone: 'purple',
+  },
+]
+
+const buildGisLayersConfig = inTaurangaBop => ({
+  supported: Boolean(inTaurangaBop),
+  provider: 'Tauranga City Council ArcGIS',
+  areaLabel: 'Tauranga / Bay of Plenty',
+  statusMessage: inTaurangaBop
+    ? 'Live Tauranga council layers are available for visual planning checks.'
+    : 'No live Tauranga council overlays for this address. Complete a manual council layer check.',
+  groups: inTaurangaBop ? GIS_LAYER_GROUPS : [],
+})
+
 const isTaurangaBop = details => {
   const text = [
     details?.address,
@@ -321,6 +396,7 @@ export default async function handler(req, res) {
     taurangaZoning: TAURANGA_SERVICES.zoning,
     taurangaUtilities: TAURANGA_SERVICES.utilities,
   }
+  const gisLayers = buildGisLayersConfig(inTaurangaBop)
 
   const profile = {
     projectId,
@@ -391,12 +467,13 @@ export default async function handler(req, res) {
       summary: 'Schools and demographics are placeholders for a later data source.',
     },
     mapLinks,
-    rawPayload: { placeDetails, hazard, zoning, services },
+    rawPayload: { placeDetails, hazard, zoning, services, gisLayers },
     lastRefreshedAt: new Date().toISOString(),
   }
 
   return res.status(200).json({
     profile,
+    gisLayers,
     sourceRuns: [
       { source: 'Google Maps', status: profile.sourceStatus.googleMaps, message: latitude && longitude ? 'Coordinates stored from address selection.' : 'Manual address without coordinates.' },
       { source: 'LINZ Data Service', status: 'linked', message: 'Open LINZ search link generated for cadastral/title evidence checks.' },

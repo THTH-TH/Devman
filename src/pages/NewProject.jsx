@@ -25,6 +25,7 @@ import { MILESTONE_TEMPLATE } from '../data/milestones'
 import { buildScheduleTasksFromTemplateItems } from '../data/scheduleTemplate'
 import AddressAutocomplete, { buildGoogleMapsUrl } from '../components/AddressAutocomplete'
 import PropertyMapEmbed from '../components/PropertyMapEmbed'
+import PlanningLayerMap from '../components/PlanningLayerMap'
 
 const STATUS_OPTIONS = ['Active', 'On Hold', 'Blocked', 'Complete']
 const STEPS = [
@@ -91,9 +92,9 @@ function PlanningPreview({ preview, loading, error }) {
       <div className="rounded-xl border border-ocean-100 bg-ocean-50 px-4 py-3 text-sm text-ocean-700">
         <div className="flex items-center gap-2 font-semibold">
           <Loader2 size={15} className="animate-spin" />
-          Pulling council planning layers...
+          Pulling selected-point council summaries...
         </div>
-        <p className="mt-1 text-xs text-ocean-600">Checking Tauranga zoning, flooding/hazards and services from council GIS.</p>
+        <p className="mt-1 text-xs text-ocean-600">Checking Tauranga zoning, flooding/hazards and nearby services from council GIS.</p>
       </div>
     )
   }
@@ -112,9 +113,9 @@ function PlanningPreview({ preview, loading, error }) {
         <div className="flex items-start gap-3">
           <LandPlot size={16} className="text-forest-600 mt-0.5 shrink-0" />
           <div>
-            <div className="text-xs font-semibold text-gray-700">Property intelligence preview</div>
+            <div className="text-xs font-semibold text-gray-700">Selected-point intelligence preview</div>
             <p className="text-xs text-gray-500 mt-1">
-              Select a mapped Tauranga/Papamoa address to preview zoning, flooding and services before saving the project.
+              Select a mapped Tauranga/Papamoa address to preview the supporting GIS summary before saving the project.
             </p>
           </div>
         </div>
@@ -129,8 +130,8 @@ function PlanningPreview({ preview, loading, error }) {
     <div className="rounded-xl border border-forest-100 bg-forest-50/50 p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold text-gray-900">Planning intelligence preview</div>
-          <p className="mt-0.5 text-[11px] text-gray-500">Live council GIS check before project creation.</p>
+          <div className="text-xs font-bold text-gray-900">Selected-point / nearby GIS summary</div>
+          <p className="mt-0.5 text-[11px] text-gray-500">Supporting identify results. Use the layer map above for visual inspection.</p>
         </div>
         <StatusBadge status={profile.sourceStatus?.council} />
       </div>
@@ -248,6 +249,7 @@ function StepBar({ current }) {
 
 function PropertySnapshot({ place, form, propertyPreview, propertyPreviewLoading, propertyPreviewError }) {
   const snapshot = useMemo(() => buildPropertySnapshot(place, form), [place, form])
+  const gisLayers = propertyPreview?.gisLayers || propertyPreview?.profile?.rawPayload?.gisLayers
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -270,6 +272,16 @@ function PropertySnapshot({ place, form, propertyPreview, propertyPreviewLoading
           title={snapshot.identity.address || 'Address pending'}
           subtitle="Project site"
           heightClass="h-[280px]"
+        />
+
+        <PlanningLayerMap
+          address={snapshot.identity.address}
+          latitude={snapshot.location.latitude}
+          longitude={snapshot.location.longitude}
+          gisLayers={gisLayers}
+          title="Planning layer map"
+          subtitle="Toggle council zoning, flood risk and services before saving."
+          heightClass="h-[340px]"
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -641,14 +653,24 @@ export default function NewProject() {
               </div>
             </div>
 
+            <PlanningLayerMap
+              address={placeDetails.formattedAddress}
+              latitude={placeDetails.lat}
+              longitude={placeDetails.lng}
+              gisLayers={propertyPreview?.gisLayers || propertyPreview?.profile?.rawPayload?.gisLayers}
+              title={placeDetails.formattedAddress}
+              subtitle="Confirm the site against Tauranga council layers."
+              heightClass="h-[440px]"
+            />
+
             <PropertyMapEmbed
               address={placeDetails.formattedAddress}
               latitude={placeDetails.lat}
               longitude={placeDetails.lng}
               mapLinks={{ googleMaps: buildGoogleMapsUrl(placeDetails) }}
               title={placeDetails.formattedAddress}
-              subtitle="Confirm project site"
-              heightClass="h-[360px]"
+              subtitle="Google map, satellite and street-view links"
+              heightClass="h-[220px]"
             />
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">

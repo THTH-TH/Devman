@@ -389,7 +389,7 @@ async function syncConnection(client, connectionId) {
       rangeA1: connection.range_a1,
       headerRow: mapping?.header_row || 1,
     })
-    const fieldMap = Object.keys(mapping?.field_map || {}).length ? mapping.field_map : autoMap(sheet.headers)
+    const fieldMap = { ...autoMap(sheet.headers), ...(mapping?.field_map || {}) }
     const defaults = mapping?.defaults || {}
     const { data: existingRows, error: existingError } = await client
       .from('sales_leads')

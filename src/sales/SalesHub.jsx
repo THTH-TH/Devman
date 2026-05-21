@@ -688,7 +688,7 @@ function ProjectSalesPage({ openLead }) {
           </div>
         )}
 
-        {tab === 'leads' && <LeadsTable openLead={openLead} projectName={project.name} />}
+        {tab === 'leads' && <ProjectLeadsTable leads={projectLeads} openLead={openLead} />}
 
         {tab === 'pipeline' && <ProjectStageList leads={projectLeads} openLead={openLead} detailed />}
 
@@ -744,6 +744,77 @@ function ProjectStageList({ leads, openLead, detailed = false }) {
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+function ProjectLeadsTable({ leads, openLead }) {
+  const { updateLead } = useSalesStore()
+  const [search, setSearch] = useState('')
+  const [stage, setStage] = useState('')
+  const [owner, setOwner] = useState('')
+  const [temperature, setTemperature] = useState('')
+  const q = search.toLowerCase()
+  const rows = sortLeads(leads.filter(lead => {
+    if (q && ![lead.fullName, lead.email, lead.phone, lead.notes].join(' ').toLowerCase().includes(q)) return false
+    if (stage && lead.pipelineStage !== stage) return false
+    if (owner && lead.assignedTo !== owner) return false
+    if (temperature && lead.temperature !== temperature) return false
+    return true
+  }), 'stale')
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-3">
+        <div className="relative min-w-72 flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={13} />
+          <input className="w-full rounded-md border border-gray-200 bg-white py-1.5 pl-8 pr-3 text-sm outline-none focus:border-forest-400 focus:ring-2 focus:ring-forest-100" placeholder="Search project leads" value={search} onChange={event => setSearch(event.target.value)} />
+        </div>
+        <div className="w-40"><Select value={stage} onChange={setStage} options={PIPELINE_STAGES} placeholder="Stage" /></div>
+        <div className="w-36"><Select value={owner} onChange={setOwner} options={ASSIGNEES} placeholder="Owner" /></div>
+        <div className="w-36"><Select value={temperature} onChange={setTemperature} options={TEMPERATURES} placeholder="Temp" /></div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1040px] text-[13px]">
+          <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-400">
+            <tr>
+              {['Name', 'Email', 'Phone', 'Owner', 'Stage', 'Temp', 'Last activity', 'Next action', 'Notes'].map(head => (
+                <th key={head} className="px-3 py-2 text-left font-semibold">{head}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {rows.map(lead => {
+              const initials = leadName(lead).split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase()
+              return (
+                <tr key={lead.id} onClick={() => openLead(lead.id)} className="cursor-pointer hover:bg-gray-50">
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ocean-50 text-[10px] font-bold text-ocean-700">{initials || '?'}</span>
+                      <span className="truncate font-semibold text-ocean-700">{leadName(lead)}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2"><div className="max-w-[210px] truncate font-medium text-ocean-700">{lead.email || '-'}</div></td>
+                  <td className="px-3 py-2 text-gray-600">{lead.phone || '-'}</td>
+                  <td className="px-3 py-2" onClick={event => event.stopPropagation()}>
+                    <select className="max-w-[150px] rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700" value={lead.assignedTo} onChange={event => updateLead(lead.id, { assignedTo: event.target.value })}>
+                      {ASSIGNEES.map(item => <option key={item}>{item}</option>)}
+                    </select>
+                  </td>
+                  <td className="px-3 py-2"><Badge className={STAGE_COLORS[lead.pipelineStage]}>{lead.pipelineStage}</Badge></td>
+                  <td className="px-3 py-2"><Badge className={TEMP_COLORS[lead.temperature]}>{lead.temperature}</Badge></td>
+                  <td className="px-3 py-2 text-gray-600">{formatShortDate(lead.lastContactedAt || lead.updatedAt || lead.createdAt)}</td>
+                  <td className={`px-3 py-2 ${isOverdue(lead.nextActionDate) ? 'font-semibold text-red-600' : 'text-gray-600'}`}>
+                    <div className="max-w-[190px] truncate">{suggestedNextAction(lead)}</div>
+                  </td>
+                  <td className="px-3 py-2 text-gray-500"><div className="max-w-[240px] truncate">{lead.notes || '-'}</div></td>
+                </tr>
+              )
+            })}
+            {rows.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-400">No project leads match these filters.</td></tr>}
+          </tbody>
+        </table>
       </div>
     </div>
   )

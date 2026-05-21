@@ -22,6 +22,7 @@ const FIELD_ALIASES = {
   createdAt: ['created', 'created at', 'date', 'timestamp', 'submitted at', 'submission date'],
   nextAction: ['next action', 'follow up', 'follow-up'],
   nextActionDate: ['next action date', 'follow up date', 'follow-up date'],
+  temperature: ['temperature', 'lead temperature', 'hot warm cold'],
 }
 
 const WORKFLOW_DEFAULTS = {
@@ -139,6 +140,28 @@ function asArray(value) {
   return String(value || '').split(/[,;\n]/).map(item => item.trim()).filter(Boolean)
 }
 
+function normaliseBuyerType(value) {
+  const text = normalise(value)
+  if (!text) return 'Unknown'
+  if (text.includes('fhb') || text.includes('first')) return 'First-home buyer'
+  if (text.includes('inv') || text.includes('invest')) return 'Investor'
+  if (text.includes('ds') || text.includes('down')) return 'Downsizer'
+  if (text.includes('agent')) return 'Agent'
+  if (text.includes('family')) return 'Family buyer'
+  if (text.includes('chp')) return 'CHP / organisation'
+  return value
+}
+
+function normaliseTemperature(value, fallback = 'Warm') {
+  const text = normalise(value)
+  if (!text) return fallback
+  if (text.includes('hot')) return 'Hot'
+  if (text.includes('warm')) return 'Warm'
+  if (text.includes('cold')) return 'Cold'
+  if (text.includes('not')) return 'Not Now'
+  return fallback
+}
+
 function parseDate(value) {
   if (!value) return ''
   const text = String(value).trim()
@@ -187,8 +210,9 @@ function buildLeadFromRow({ raw, fieldMap, defaults, connection, rowNumber }) {
     preferred_units: preferredUnits,
     next_action: getMapped(raw, fieldMap, 'nextAction') || '',
     next_action_date: getMapped(raw, fieldMap, 'nextActionDate') || '',
-    buyer_type: getMapped(raw, fieldMap, 'buyerType') || defaults.buyerType || WORKFLOW_DEFAULTS.buyerType,
+    buyer_type: normaliseBuyerType(getMapped(raw, fieldMap, 'buyerType') || defaults.buyerType || WORKFLOW_DEFAULTS.buyerType),
     finance_status: getMapped(raw, fieldMap, 'financeStatus') || defaults.financeStatus || WORKFLOW_DEFAULTS.financeStatus,
+    temperature: normaliseTemperature(getMapped(raw, fieldMap, 'temperature'), defaults.temperature || WORKFLOW_DEFAULTS.temperature),
   }
 
   return {
@@ -345,7 +369,6 @@ async function syncConnection(client, connectionId) {
           project_interest: parsed.inbound.project_interest,
           budget_range: parsed.inbound.budget_range,
           deposit_capacity: parsed.inbound.deposit_capacity,
-          preferred_units: parsed.inbound.preferred_units,
           ...metadata,
           updated_at: new Date().toISOString(),
         }
@@ -366,7 +389,7 @@ async function syncConnection(client, connectionId) {
         ...parsed.inbound,
         notes: parsed.message || '',
         assigned_to: defaults.assignedTo || WORKFLOW_DEFAULTS.assignedTo,
-        temperature: defaults.temperature || WORKFLOW_DEFAULTS.temperature,
+        temperature: parsed.inbound.temperature,
         pipeline_stage: WORKFLOW_DEFAULTS.pipelineStage,
         has_finance_approval: false,
         needs_broker_intro: parsed.inbound.finance_status === 'Needs broker',

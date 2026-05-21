@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.2",
+    "googleapis": "^172.0.0",
     "lucide-react": "^0.469.0",
     "papaparse": "^5.5.3",
     "react": "^18.3.1",

@@ -51,12 +51,11 @@ export const PIPELINE_STAGES = [
   'Info Sent',
   'Qualified',
   'Unit Selected',
-  'Finance / Broker',
-  'Offer / S&P Sent',
+  'S&P Sent',
   'Signed',
   'Deposit Paid',
   'Unconditional',
-  'Settled / Complete',
+  'Settled',
   'Lost / Not Now',
 ]
 
@@ -118,14 +117,10 @@ export const ACTIVITY_TYPES = [
 
 export const SALES_NAV = [
   { to: '/sales', label: 'Dashboard', end: true },
-  { to: '/sales/leads', label: 'Leads' },
   { to: '/sales/pipeline', label: 'Pipeline' },
-  { to: '/sales/projects', label: 'Projects' },
-  { to: '/sales/units', label: 'Units' },
-  { to: '/sales/tasks', label: 'Tasks' },
-  { to: '/sales/templates', label: 'Templates' },
-  { to: '/sales/reports', label: 'Reports' },
-  { to: '/sales/settings', label: 'Settings' },
+  { to: '/sales/leads', label: 'Leads' },
+  { to: '/sales/presales', label: 'Presales' },
+  { to: '/sales/sheets', label: 'Sheet Sync' },
 ]
 
 export const SOLD_UNIT_STATUSES = ['Deposit Paid', 'Unconditional', 'Settled']
@@ -144,12 +139,11 @@ export const STAGE_COLORS = {
   'Info Sent': 'bg-indigo-50 text-indigo-700',
   Qualified: 'bg-purple-50 text-purple-700',
   'Unit Selected': 'bg-amber-50 text-amber-700',
-  'Finance / Broker': 'bg-orange-50 text-orange-700',
-  'Offer / S&P Sent': 'bg-pink-50 text-pink-700',
+  'S&P Sent': 'bg-pink-50 text-pink-700',
   Signed: 'bg-teal-50 text-teal-700',
   'Deposit Paid': 'bg-green-50 text-green-700',
   Unconditional: 'bg-emerald-50 text-emerald-700',
-  'Settled / Complete': 'bg-forest-50 text-forest-700',
+  Settled: 'bg-forest-50 text-forest-700',
   'Lost / Not Now': 'bg-gray-100 text-gray-500',
 }
 
@@ -174,9 +168,6 @@ export const DEFAULT_SALES_SETTINGS = {
   gmailSearchUrl: 'https://mail.google.com/mail/u/0/#search/{email}',
   googleSheets: {
     leadsSheetUrl: '',
-    unitsSheetUrl: '',
-    salesSheetUrl: '',
-    invoicesSheetUrl: '',
     lastSyncedAt: '',
     syncStatus: 'Not connected yet',
   },

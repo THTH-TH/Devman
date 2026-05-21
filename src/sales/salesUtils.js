@@ -90,7 +90,7 @@ export function suggestedNextAction(lead) {
   if (lead.pipelineStage === 'Info Sent' && daysSince(lead.lastContactedAt) >= 3) return 'Send follow-up'
   if (lead.pipelineStage === 'Qualified') return 'Ask preferred unit'
   if (lead.pipelineStage === 'Unit Selected' && !lead.hasFinanceApproval) return 'Confirm finance or broker intro'
-  if (lead.pipelineStage === 'Offer / S&P Sent') return 'Follow up for signing'
+  if (lead.pipelineStage === 'S&P Sent') return 'Follow up for signing'
   if (lead.pipelineStage === 'Deposit Paid') return 'Confirm next unconditional steps'
   if (lead.financeStatus === 'Needs broker') return 'Send broker intro'
   return 'Check in'
@@ -102,7 +102,7 @@ export function calculatedTemperature(lead) {
     lead.financeStatus === 'Pre-approved',
     lead.financeStatus === 'Cash buyer',
     lead.pipelineStage === 'Unit Selected',
-    lead.pipelineStage === 'Offer / S&P Sent',
+    lead.pipelineStage === 'S&P Sent',
     lead.pipelineStage === 'Signed',
     (lead.preferredUnits || []).length > 1,
     Boolean(lead.phone),
@@ -121,11 +121,14 @@ export function buildTodayActions({ leads, units, tasks }) {
   const leadsToCall = activeLeads.filter(lead => isDueToday(lead.nextActionDate))
   const overdueFollowUps = activeLeads.filter(lead => isOverdue(lead.nextActionDate))
   const staleHotLeads = activeLeads.filter(lead => lead.temperature === 'Hot' && daysSince(lead.lastContactedAt) >= 2)
+  const closeStages = ['Unit Selected', 'S&P Sent', 'Signed', 'Deposit Paid', 'Unconditional']
+  const closeLeads = activeLeads.filter(lead => closeStages.includes(lead.pipelineStage))
   const reservationExpiry = units.filter(unit => unit.status === 'Reserved' && unit.reservationExpiryDate && unit.reservationExpiryDate <= addDaysISO(5))
   const spUnsigned = units.filter(unit => unit.status === 'S&P Out' || unit.spaStatus === 'Sent')
   const depositsPending = units.filter(unit => unit.depositStatus === 'Requested' || unit.depositStatus === 'Pending')
   const dueTasks = tasks.filter(task => task.status !== 'Complete' && task.dueDate && task.dueDate <= todayISO())
-  return { leadsToCall, overdueFollowUps, staleHotLeads, reservationExpiry, spUnsigned, depositsPending, dueTasks }
+  const newLeads = activeLeads.filter(lead => lead.pipelineStage === 'New Inquiry')
+  return { leadsToCall, overdueFollowUps, staleHotLeads, closeLeads, newLeads, reservationExpiry, spUnsigned, depositsPending, dueTasks }
 }
 
 export function addDaysISO(days) {

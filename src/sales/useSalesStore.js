@@ -5,6 +5,13 @@ import { leadName } from './salesUtils'
 
 const genId = () => crypto.randomUUID()
 
+const normaliseStage = stage => {
+  if (stage === 'Offer / S&P Sent') return 'S&P Sent'
+  if (stage === 'Settled / Complete') return 'Settled'
+  if (stage === 'Finance / Broker') return 'Qualified'
+  return PIPELINE_STAGES.includes(stage) ? stage : 'New Inquiry'
+}
+
 const mapProject = r => ({
   id: r.id,
   name: r.name || '',
@@ -17,15 +24,7 @@ const mapProject = r => ({
   soldUnits: r.sold_units ?? 0,
   presalesRequired: r.presales_required ?? 0,
   presalesAchieved: r.presales_achieved ?? 0,
-  targetLaunchDate: r.target_launch_date || '',
   status: r.status || 'Active',
-  defaultBrochureLink: r.default_brochure_link || '',
-  defaultPlansLink: r.default_plans_link || '',
-  defaultDriveFolderLink: r.default_drive_folder_link || '',
-  defaultPriceListLink: r.default_price_list_link || '',
-  defaultRentalAppraisalLink: r.default_rental_appraisal_link || '',
-  defaultValuationSummaryLink: r.default_valuation_summary_link || '',
-  defaultSpaInstructionsLink: r.default_spa_instructions_link || '',
   defaultAssignee: r.default_assignee || 'Tim',
   projectNotes: r.project_notes || '',
   createdAt: r.created_at,
@@ -45,7 +44,7 @@ const mapLead = r => ({
   financeStatus: r.finance_status || 'Unknown',
   assignedTo: r.assigned_to || 'Unassigned',
   temperature: r.temperature || 'Warm',
-  pipelineStage: r.pipeline_stage || 'New Inquiry',
+  pipelineStage: normaliseStage(r.pipeline_stage || 'New Inquiry'),
   notes: r.notes || '',
   preferredUnits: Array.isArray(r.preferred_units) ? r.preferred_units : [],
   budgetRange: r.budget_range || '',
@@ -62,6 +61,14 @@ const mapLead = r => ({
   probability: r.probability ?? 10,
   documentsSent: r.documents_sent || {},
   archived: Boolean(r.archived),
+  sheetConnectionId: r.sheet_connection_id || '',
+  sourceRowNumber: r.source_row_number ?? null,
+  sourceRowKey: r.source_row_key || '',
+  sourceRowHash: r.source_row_hash || '',
+  sourceSheetName: r.source_sheet_name || '',
+  lastSheetSyncAt: r.last_sheet_sync_at || '',
+  syncStatus: r.sync_status || '',
+  rawSheetRow: r.raw_sheet_row || {},
 })
 
 const mapUnit = r => ({
@@ -86,8 +93,6 @@ const mapUnit = r => ({
   settlementStatus: r.settlement_status || 'Not applicable',
   reservationExpiryDate: r.reservation_expiry_date || '',
   notes: r.notes || '',
-  planLink: r.plan_link || '',
-  brochureLink: r.brochure_link || '',
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 })
@@ -108,18 +113,6 @@ const mapTask = r => ({
   updatedAt: r.updated_at,
 })
 
-const mapTemplate = r => ({
-  id: r.id,
-  name: r.name || '',
-  project: r.project || '',
-  buyerType: r.buyer_type || '',
-  subject: r.subject || '',
-  body: r.body || '',
-  category: r.category || 'Follow-up',
-  createdAt: r.created_at,
-  updatedAt: r.updated_at,
-})
-
 const mapActivity = r => ({
   id: r.id,
   leadId: r.lead_id || '',
@@ -128,6 +121,46 @@ const mapActivity = r => ({
   description: r.description || '',
   createdBy: r.created_by || '',
   createdAt: r.created_at,
+})
+
+const mapSheetConnection = r => ({
+  id: r.id,
+  name: r.name || '',
+  spreadsheetId: r.spreadsheet_id || '',
+  spreadsheetUrl: r.spreadsheet_url || '',
+  sheetName: r.sheet_name || '',
+  rangeA1: r.range_a1 || '',
+  projectHint: r.project_hint || '',
+  sourceHint: r.source_hint || '',
+  active: r.active !== false,
+  lastSyncedAt: r.last_synced_at || '',
+  lastSyncStatus: r.last_sync_status || 'Not synced',
+  lastSyncMessage: r.last_sync_message || '',
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+})
+
+const mapSheetMapping = r => ({
+  id: r.id,
+  connectionId: r.connection_id,
+  headerRow: r.header_row || 1,
+  fieldMap: r.field_map || {},
+  defaults: r.defaults || {},
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+})
+
+const mapSyncRun = r => ({
+  id: r.id,
+  connectionId: r.connection_id || '',
+  status: r.status || '',
+  startedAt: r.started_at || '',
+  finishedAt: r.finished_at || '',
+  rowsRead: r.rows_read ?? 0,
+  rowsCreated: r.rows_created ?? 0,
+  rowsUpdated: r.rows_updated ?? 0,
+  rowsSkipped: r.rows_skipped ?? 0,
+  errors: Array.isArray(r.errors) ? r.errors : [],
 })
 
 const leadRow = data => {
@@ -164,42 +197,27 @@ const leadRow = data => {
   }
 }
 
+const partialRow = (row, source) => {
+  const result = { updated_at: new Date().toISOString() }
+  Object.entries(row).forEach(([key, value]) => {
+    const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
+    if (Object.prototype.hasOwnProperty.call(source, camelKey)) result[key] = value
+  })
+  return result
+}
+
 const projectRow = data => ({
-  name: data.name,
-  location: data.location,
-  description: data.description,
-  product: data.product,
   total_units: Number(data.totalUnits || 0),
   available_units: Number(data.availableUnits || 0),
   reserved_units: Number(data.reservedUnits || 0),
   sold_units: Number(data.soldUnits || 0),
   presales_required: Number(data.presalesRequired || 0),
   presales_achieved: Number(data.presalesAchieved || 0),
-  target_launch_date: data.targetLaunchDate || '',
-  status: data.status || 'Active',
-  default_brochure_link: data.defaultBrochureLink || '',
-  default_plans_link: data.defaultPlansLink || '',
-  default_drive_folder_link: data.defaultDriveFolderLink || '',
-  default_price_list_link: data.defaultPriceListLink || '',
-  default_rental_appraisal_link: data.defaultRentalAppraisalLink || '',
-  default_valuation_summary_link: data.defaultValuationSummaryLink || '',
-  default_spa_instructions_link: data.defaultSpaInstructionsLink || '',
   default_assignee: data.defaultAssignee || 'Tim',
   project_notes: data.projectNotes || '',
 })
 
 const unitRow = data => ({
-  project_id: data.projectId || '',
-  project_name: data.projectName || '',
-  unit_number: data.unitNumber || '',
-  typology: data.typology || '',
-  bedrooms: data.bedrooms === '' ? null : data.bedrooms,
-  bathrooms: data.bathrooms === '' ? null : data.bathrooms,
-  carparks: data.carparks === '' ? null : data.carparks,
-  floor_area: data.floorArea === '' ? null : data.floorArea,
-  price: data.price === '' ? null : data.price,
-  rental_appraisal: data.rentalAppraisal || '',
-  gross_yield: data.grossYield === '' ? null : data.grossYield,
   status: data.status || 'Available',
   assigned_lead_id: data.assignedLeadId || null,
   assigned_buyer_name: data.assignedBuyerName || '',
@@ -209,31 +227,23 @@ const unitRow = data => ({
   settlement_status: data.settlementStatus || 'Not applicable',
   reservation_expiry_date: data.reservationExpiryDate || '',
   notes: data.notes || '',
-  plan_link: data.planLink || '',
-  brochure_link: data.brochureLink || '',
 })
 
-const taskRow = data => ({
-  title: data.title || '',
-  description: data.description || '',
-  related_lead_id: data.relatedLeadId || null,
-  related_project_id: data.relatedProjectId || null,
-  related_unit_id: data.relatedUnitId || null,
-  assigned_to: data.assignedTo || 'Unassigned',
-  due_date: data.dueDate || '',
-  priority: data.priority || 'Medium',
-  status: data.status || 'Open',
-  completed_at: data.completedAt || null,
-})
-
-const templateRow = data => ({
-  name: data.name || '',
-  project: data.project || '',
-  buyer_type: data.buyerType || '',
-  subject: data.subject || '',
-  body: data.body || '',
-  category: data.category || 'Follow-up',
-})
+async function apiPost(body) {
+  const { data: sessionData } = await supabase.auth.getSession()
+  const token = sessionData.session?.access_token
+  const response = await fetch('/api/sales/sheets', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(data.error || 'Sales sheet request failed')
+  return data
+}
 
 const useSalesStore = create((set, get) => ({
   initialized: false,
@@ -243,39 +253,57 @@ const useSalesStore = create((set, get) => ({
   leads: [],
   units: [],
   tasks: [],
-  templates: [],
   activities: [],
   settings: DEFAULT_SALES_SETTINGS,
+  sheetConnections: [],
+  sheetMappings: [],
+  syncRuns: [],
+  sheetSyncReady: true,
+  sheetSyncError: '',
 
   async initialize() {
     if (get().initialized || get().loading) return
+    await get().refresh()
+  },
+
+  async refresh() {
     set({ loading: true, error: null })
     try {
-      const [projects, leads, units, tasks, templates, activities, settings] = await Promise.all([
+      const [projects, leads, units, tasks, activities, settings] = await Promise.all([
         supabase.from('sales_projects').select('*').order('name'),
         supabase.from('sales_leads').select('*').order('created_at', { ascending: false }),
         supabase.from('sales_units').select('*').order('project_name').order('unit_number'),
         supabase.from('sales_tasks').select('*').order('due_date', { ascending: true }),
-        supabase.from('sales_email_templates').select('*').order('name'),
         supabase.from('sales_activities').select('*').order('created_at', { ascending: false }).limit(500),
         supabase.from('sales_settings').select('*').eq('id', 'default').maybeSingle(),
       ])
-      const failures = [projects, leads, units, tasks, templates, activities, settings].filter(result => result.error)
+      const failures = [projects, leads, units, tasks, activities, settings].filter(result => result.error)
       if (failures.length) throw failures[0].error
+
+      const [connections, mappings, runs] = await Promise.all([
+        supabase.from('sales_sheet_connections').select('*').order('created_at', { ascending: false }),
+        supabase.from('sales_sheet_mappings').select('*').order('updated_at', { ascending: false }),
+        supabase.from('sales_sync_runs').select('*').order('started_at', { ascending: false }).limit(50),
+      ])
+      const sheetFailure = [connections, mappings, runs].find(result => result.error)
       set({
         projects: projects.data.map(mapProject),
         leads: leads.data.map(mapLead),
         units: units.data.map(mapUnit),
         tasks: tasks.data.map(mapTask),
-        templates: templates.data.map(mapTemplate),
         activities: activities.data.map(mapActivity),
         settings: { ...DEFAULT_SALES_SETTINGS, ...(settings.data?.payload || {}) },
+        sheetConnections: sheetFailure ? [] : connections.data.map(mapSheetConnection),
+        sheetMappings: sheetFailure ? [] : mappings.data.map(mapSheetMapping),
+        syncRuns: sheetFailure ? [] : runs.data.map(mapSyncRun),
+        sheetSyncReady: !sheetFailure,
+        sheetSyncError: sheetFailure?.error?.message || '',
         initialized: true,
         loading: false,
       })
     } catch (error) {
       console.error('Sales Hub init error:', error)
-      set({ error: error.message || 'Sales Hub tables are not ready. Run the Sales Hub Supabase migration.', loading: false })
+      set({ error: error.message || 'Sales Hub tables are not ready. Run the Sales Hub Supabase migrations.', loading: false })
     }
   },
 
@@ -303,16 +331,12 @@ const useSalesStore = create((set, get) => ({
     set(s => ({ leads: [lead, ...s.leads] }))
     const { error } = await supabase.from('sales_leads').insert(row)
     if (error) throw error
-    await get().addActivity({ leadId: id, type: 'Note', title: 'Lead created', description: `${leadName(lead)} added to Sales Hub`, createdBy: data.assignedTo || 'Sales Hub' })
+    await get().addActivity({ leadId: id, type: 'Note', title: 'Lead created', description: `${leadName(lead)} added manually`, createdBy: data.assignedTo || 'Sales Hub' })
     return lead
   },
 
   async updateLead(id, data) {
-    const updates = { ...leadRow(data), updated_at: new Date().toISOString() }
-    Object.keys(updates).forEach(key => {
-      const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
-      if (data[camelKey] === undefined && !['updated_at'].includes(key)) delete updates[key]
-    })
+    const updates = partialRow(leadRow(data), data)
     set(s => ({ leads: s.leads.map(lead => lead.id === id ? { ...lead, ...data, updatedAt: updates.updated_at } : lead) }))
     const { error } = await supabase.from('sales_leads').update(updates).eq('id', id)
     if (error) console.error('updateSalesLead error:', error)
@@ -323,7 +347,7 @@ const useSalesStore = create((set, get) => ({
   },
 
   async deleteLead(id) {
-    set(s => ({ leads: s.leads.filter(lead => lead.id !== id), tasks: s.tasks.filter(task => task.relatedLeadId !== id), activities: s.activities.filter(activity => activity.leadId !== id) }))
+    set(s => ({ leads: s.leads.filter(lead => lead.id !== id), activities: s.activities.filter(activity => activity.leadId !== id) }))
     const { error } = await supabase.from('sales_leads').delete().eq('id', id)
     if (error) console.error('deleteSalesLead error:', error)
   },
@@ -331,7 +355,12 @@ const useSalesStore = create((set, get) => ({
   async markContacted(id) {
     const lead = get().leads.find(item => item.id === id)
     if (!lead) return
-    await get().updateLead(id, { pipelineStage: lead.pipelineStage === 'New Inquiry' ? 'Contacted' : lead.pipelineStage, lastContactedAt: new Date().toISOString(), nextActionDate: '', nextAction: '' })
+    await get().updateLead(id, {
+      pipelineStage: lead.pipelineStage === 'New Inquiry' ? 'Contacted' : lead.pipelineStage,
+      lastContactedAt: new Date().toISOString(),
+      nextActionDate: '',
+      nextAction: '',
+    })
     await get().addActivity({ leadId: id, type: 'Call', title: 'Marked contacted', description: `${leadName(lead)} was contacted`, createdBy: lead.assignedTo })
   },
 
@@ -344,33 +373,45 @@ const useSalesStore = create((set, get) => ({
       documentsSent: { ...(lead.documentsSent || {}), brochure: true, plans: true, priceList: true },
       nextAction: 'Follow up after info sent',
     })
-    await get().addActivity({ leadId: id, type: 'Document Sent', title: 'Info pack sent', description: 'Brochure, plans and price information marked as sent.', createdBy: lead.assignedTo })
+    await get().addActivity({ leadId: id, type: 'Document Sent', title: 'Info marked sent', description: 'Brochure, plans and price information marked as sent.', createdBy: lead.assignedTo })
   },
 
   async moveLeadStage(id, nextStage, extra = {}) {
     const lead = get().leads.find(item => item.id === id)
     if (!lead || lead.pipelineStage === nextStage) return
-    await get().updateLead(id, { pipelineStage: nextStage, lostReason: nextStage === 'Lost / Not Now' ? (extra.lostReason || lead.lostReason) : lead.lostReason })
+    await get().updateLead(id, {
+      pipelineStage: nextStage,
+      lostReason: nextStage === 'Lost / Not Now' ? (extra.lostReason || lead.lostReason || 'Not now') : lead.lostReason,
+    })
     await get().addActivity({ leadId: id, type: 'Stage Changed', title: 'Stage changed', description: `${lead.pipelineStage} to ${nextStage}`, createdBy: lead.assignedTo })
-
     const assignedUnit = get().units.find(unit => unit.assignedLeadId === id)
     if (!assignedUnit) return
     const unitUpdatesByStage = {
-      'Offer / S&P Sent': { status: 'S&P Out', spaStatus: 'Sent' },
+      'S&P Sent': { status: 'S&P Out', spaStatus: 'Sent' },
       Signed: { status: 'Under Contract', spaStatus: 'Signed' },
       'Deposit Paid': { status: 'Deposit Paid', depositStatus: 'Paid' },
       Unconditional: { status: 'Unconditional', conditionsStatus: 'Satisfied' },
-      'Settled / Complete': { status: 'Settled', settlementStatus: 'Settled' },
+      Settled: { status: 'Settled', settlementStatus: 'Settled' },
     }
     if (unitUpdatesByStage[nextStage]) await get().updateUnit(assignedUnit.id, unitUpdatesByStage[nextStage])
+  },
+
+  async addLeadNote(id, note) {
+    const text = note.trim()
+    if (!text) return
+    const lead = get().leads.find(item => item.id === id)
+    if (!lead) return
+    const notes = [lead.notes, `[${new Date().toLocaleDateString('en-NZ')}] ${text}`].filter(Boolean).join('\n')
+    await get().updateLead(id, { notes })
+    await get().addActivity({ leadId: id, type: 'Note', title: 'Note added', description: text, createdBy: lead.assignedTo })
   },
 
   async assignUnitToLead(leadId, unitId) {
     const lead = get().leads.find(item => item.id === leadId)
     const unit = get().units.find(item => item.id === unitId)
     if (!lead || !unit) return
-    const preferredUnits = [...new Set([...(lead.preferredUnits || []), unit.unitNumber])]
-    await get().updateLead(leadId, { preferredUnits, pipelineStage: PIPELINE_STAGES.includes(lead.pipelineStage) && lead.pipelineStage === 'New Inquiry' ? 'Unit Selected' : lead.pipelineStage })
+    const preferredUnits = [...new Set([...(lead.preferredUnits || []), `${unit.projectName} ${unit.unitNumber}`])]
+    await get().updateLead(leadId, { preferredUnits, pipelineStage: lead.pipelineStage === 'New Inquiry' ? 'Unit Selected' : lead.pipelineStage })
     await get().updateUnit(unitId, {
       assignedLeadId: leadId,
       assignedBuyerName: leadName(lead),
@@ -379,74 +420,18 @@ const useSalesStore = create((set, get) => ({
     await get().addActivity({ leadId, type: 'Unit Assigned', title: 'Unit assigned', description: `${unit.projectName} ${unit.unitNumber} assigned to ${leadName(lead)}`, createdBy: lead.assignedTo })
   },
 
-  async addTask(data) {
-    const id = data.id || genId()
-    const now = new Date().toISOString()
-    const row = { id, ...taskRow(data), created_at: now, updated_at: now }
-    const task = mapTask(row)
-    set(s => ({ tasks: [task, ...s.tasks] }))
-    const { error } = await supabase.from('sales_tasks').insert(row)
-    if (error) throw error
-    if (data.relatedLeadId) await get().addActivity({ leadId: data.relatedLeadId, type: 'Task Created', title: 'Task created', description: task.title, createdBy: task.assignedTo })
-    return task
-  },
-
-  async updateTask(id, data) {
-    const updates = { ...taskRow(data), updated_at: new Date().toISOString() }
-    Object.keys(updates).forEach(key => {
-      const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
-      if (data[camelKey] === undefined && !['updated_at'].includes(key)) delete updates[key]
-    })
-    set(s => ({ tasks: s.tasks.map(task => task.id === id ? { ...task, ...data, updatedAt: updates.updated_at } : task) }))
-    const { error } = await supabase.from('sales_tasks').update(updates).eq('id', id)
-    if (error) console.error('updateSalesTask error:', error)
-  },
-
-  async completeTask(id) {
-    const task = get().tasks.find(item => item.id === id)
-    if (!task) return
-    const completedAt = new Date().toISOString()
-    await get().updateTask(id, { status: 'Complete', completedAt })
-    if (task.relatedLeadId) await get().addActivity({ leadId: task.relatedLeadId, type: 'Task Completed', title: 'Task completed', description: task.title, createdBy: task.assignedTo })
-  },
-
-  async deleteTask(id) {
-    set(s => ({ tasks: s.tasks.filter(task => task.id !== id) }))
-    const { error } = await supabase.from('sales_tasks').delete().eq('id', id)
-    if (error) console.error('deleteSalesTask error:', error)
-  },
-
   async updateUnit(id, data) {
-    const updates = { ...unitRow(data), updated_at: new Date().toISOString() }
-    Object.keys(updates).forEach(key => {
-      const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
-      if (data[camelKey] === undefined && !['updated_at'].includes(key)) delete updates[key]
-    })
+    const updates = partialRow(unitRow(data), data)
     set(s => ({ units: s.units.map(unit => unit.id === id ? { ...unit, ...data, updatedAt: updates.updated_at } : unit) }))
     const { error } = await supabase.from('sales_units').update(updates).eq('id', id)
     if (error) console.error('updateSalesUnit error:', error)
   },
 
   async updateProject(id, data) {
-    const updates = { ...projectRow(data), updated_at: new Date().toISOString() }
-    Object.keys(updates).forEach(key => {
-      const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
-      if (data[camelKey] === undefined && !['updated_at'].includes(key)) delete updates[key]
-    })
+    const updates = partialRow(projectRow(data), data)
     set(s => ({ projects: s.projects.map(project => project.id === id ? { ...project, ...data, updatedAt: updates.updated_at } : project) }))
     const { error } = await supabase.from('sales_projects').update(updates).eq('id', id)
     if (error) console.error('updateSalesProject error:', error)
-  },
-
-  async updateTemplate(id, data) {
-    const updates = { ...templateRow(data), updated_at: new Date().toISOString() }
-    Object.keys(updates).forEach(key => {
-      const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
-      if (data[camelKey] === undefined && !['updated_at'].includes(key)) delete updates[key]
-    })
-    set(s => ({ templates: s.templates.map(template => template.id === id ? { ...template, ...data, updatedAt: updates.updated_at } : template) }))
-    const { error } = await supabase.from('sales_email_templates').update(updates).eq('id', id)
-    if (error) console.error('updateSalesTemplate error:', error)
   },
 
   async updateSettings(data) {
@@ -454,6 +439,89 @@ const useSalesStore = create((set, get) => ({
     set({ settings: payload })
     const { error } = await supabase.from('sales_settings').upsert({ id: 'default', payload, updated_at: new Date().toISOString() })
     if (error) console.error('updateSalesSettings error:', error)
+  },
+
+  async addSheetConnection(data) {
+    const id = data.id || genId()
+    const row = {
+      id,
+      name: data.name || 'Lead sheet',
+      spreadsheet_id: data.spreadsheetId || '',
+      spreadsheet_url: data.spreadsheetUrl || '',
+      sheet_name: data.sheetName || '',
+      range_a1: data.rangeA1 || '',
+      project_hint: data.projectHint || '',
+      source_hint: data.sourceHint || '',
+      active: data.active !== false,
+    }
+    const { data: saved, error } = await supabase.from('sales_sheet_connections').insert(row).select('*').single()
+    if (error) throw error
+    const connection = mapSheetConnection(saved)
+    set(s => ({ sheetConnections: [connection, ...s.sheetConnections] }))
+    return connection
+  },
+
+  async updateSheetConnection(id, data) {
+    const row = {
+      name: data.name,
+      spreadsheet_id: data.spreadsheetId,
+      spreadsheet_url: data.spreadsheetUrl,
+      sheet_name: data.sheetName,
+      range_a1: data.rangeA1,
+      project_hint: data.projectHint,
+      source_hint: data.sourceHint,
+      active: data.active,
+      updated_at: new Date().toISOString(),
+    }
+    Object.keys(row).forEach(key => row[key] === undefined && delete row[key])
+    const { data: saved, error } = await supabase.from('sales_sheet_connections').update(row).eq('id', id).select('*').single()
+    if (error) throw error
+    const connection = mapSheetConnection(saved)
+    set(s => ({ sheetConnections: s.sheetConnections.map(item => item.id === id ? connection : item) }))
+    return connection
+  },
+
+  async deleteSheetConnection(id) {
+    set(s => ({
+      sheetConnections: s.sheetConnections.filter(item => item.id !== id),
+      sheetMappings: s.sheetMappings.filter(item => item.connectionId !== id),
+      syncRuns: s.syncRuns.filter(item => item.connectionId !== id),
+    }))
+    const { error } = await supabase.from('sales_sheet_connections').delete().eq('id', id)
+    if (error) console.error('deleteSheetConnection error:', error)
+  },
+
+  async saveSheetMapping(connectionId, data) {
+    const existing = get().sheetMappings.find(item => item.connectionId === connectionId)
+    const row = {
+      id: existing?.id || genId(),
+      connection_id: connectionId,
+      header_row: Number(data.headerRow || 1),
+      field_map: data.fieldMap || {},
+      defaults: data.defaults || {},
+      updated_at: new Date().toISOString(),
+    }
+    const { data: saved, error } = await supabase.from('sales_sheet_mappings').upsert(row).select('*').single()
+    if (error) throw error
+    const mapping = mapSheetMapping(saved)
+    set(s => ({ sheetMappings: [mapping, ...s.sheetMappings.filter(item => item.connectionId !== connectionId)] }))
+    return mapping
+  },
+
+  async previewSheetConnection(payload) {
+    return apiPost({ action: 'preview', ...payload })
+  },
+
+  async syncSheetConnection(connectionId) {
+    const result = await apiPost({ action: 'syncConnection', connectionId })
+    await get().refresh()
+    return result
+  },
+
+  async syncAllSheets() {
+    const result = await apiPost({ action: 'syncAll' })
+    await get().refresh()
+    return result
   },
 }))
 

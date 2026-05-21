@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -9,10 +9,14 @@ import {
   FileText,
   FolderOpen,
   LandPlot,
+  Loader2,
+  Map,
   MapPin,
   Plus,
   Search,
+  Waves,
   X,
+  Zap,
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import { STAGES } from '../data/stages'
@@ -51,6 +55,106 @@ function Detail({ label, value }) {
     <div>
       <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</div>
       <div className="mt-0.5 text-sm font-medium text-gray-800 break-words">{value}</div>
+    </div>
+  )
+}
+
+function StatusBadge({ status }) {
+  const cls = status === 'live'
+    ? 'bg-emerald-50 text-emerald-700'
+    : status === 'linked'
+      ? 'bg-ocean-50 text-ocean-700'
+      : status === 'manual'
+        ? 'bg-amber-50 text-amber-700'
+        : 'bg-gray-100 text-gray-500'
+  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}>{status || 'pending'}</span>
+}
+
+function PlanningCard({ title, icon: Icon, status, children }) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+          <Icon size={13} className="text-forest-600" />
+          {title}
+        </div>
+        <StatusBadge status={status} />
+      </div>
+      <div className="text-xs font-semibold leading-5 text-gray-800">{children}</div>
+    </div>
+  )
+}
+
+function PlanningPreview({ preview, loading, error }) {
+  if (loading) {
+    return (
+      <div className="rounded-xl border border-ocean-100 bg-ocean-50 px-4 py-3 text-sm text-ocean-700">
+        <div className="flex items-center gap-2 font-semibold">
+          <Loader2 size={15} className="animate-spin" />
+          Pulling council planning layers...
+        </div>
+        <p className="mt-1 text-xs text-ocean-600">Checking Tauranga zoning, flooding/hazards and services from council GIS.</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+        {error}
+      </div>
+    )
+  }
+
+  if (!preview?.profile) {
+    return (
+      <div className="rounded-xl border border-dashed border-gray-200 bg-offwhite/60 p-4">
+        <div className="flex items-start gap-3">
+          <LandPlot size={16} className="text-forest-600 mt-0.5 shrink-0" />
+          <div>
+            <div className="text-xs font-semibold text-gray-700">Property intelligence preview</div>
+            <p className="text-xs text-gray-500 mt-1">
+              Select a mapped Tauranga/Papamoa address to preview zoning, flooding and services before saving the project.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const profile = preview.profile
+  const services = profile.servicesSummary?.groups || {}
+
+  return (
+    <div className="rounded-xl border border-forest-100 bg-forest-50/50 p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold text-gray-900">Planning intelligence preview</div>
+          <p className="mt-0.5 text-[11px] text-gray-500">Live council GIS check before project creation.</p>
+        </div>
+        <StatusBadge status={profile.sourceStatus?.council} />
+      </div>
+      <div className="grid grid-cols-1 gap-3">
+        <PlanningCard title="Zoning" icon={Map} status={profile.zoningSummary?.status}>
+          {profile.zoningSummary?.summary || 'No zoning returned yet.'}
+        </PlanningCard>
+        <PlanningCard title="Flooding / hazards" icon={Waves} status={profile.hazardSummary?.status}>
+          {profile.hazardSummary?.summary || 'No hazard data returned yet.'}
+        </PlanningCard>
+        <PlanningCard title="Services" icon={Zap} status={profile.servicesSummary?.status}>
+          {profile.servicesSummary?.summary || 'No services returned yet.'}
+        </PlanningCard>
+      </div>
+      {(services.Water || services.Stormwater || services.Wastewater) && (
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+          {['Water', 'Stormwater', 'Wastewater'].map(key => (
+            <div key={key} className="rounded-lg bg-white px-2 py-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{key}</div>
+              <div className="mt-0.5 text-sm font-bold text-gray-900">{services[key]?.length || 0}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -142,7 +246,7 @@ function StepBar({ current }) {
   )
 }
 
-function PropertySnapshot({ place, form }) {
+function PropertySnapshot({ place, form, propertyPreview, propertyPreviewLoading, propertyPreviewError }) {
   const snapshot = useMemo(() => buildPropertySnapshot(place, form), [place, form])
 
   return (
@@ -185,6 +289,8 @@ function PropertySnapshot({ place, form }) {
           </div>
         </div>
 
+        <PlanningPreview preview={propertyPreview} loading={propertyPreviewLoading} error={propertyPreviewError} />
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Detail label="Legal description" value={snapshot.identity.legalDescription || 'Not captured yet'} />
           <Detail label="Consent / BC" value={snapshot.identity.bcNumber || 'Not captured yet'} />
@@ -217,6 +323,9 @@ export default function NewProject() {
   const [teamMembers, setTeamMembers] = useState([])
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
+  const [propertyPreview, setPropertyPreview] = useState(null)
+  const [propertyPreviewLoading, setPropertyPreviewLoading] = useState(false)
+  const [propertyPreviewError, setPropertyPreviewError] = useState('')
   const [form, setForm] = useState({
     name: '',
     address: '',
@@ -248,8 +357,58 @@ export default function NewProject() {
 
   const set = (key, val) => setForm(current => ({ ...current, [key]: val }))
 
+  const fetchPropertyPreview = async (place, currentForm = form) => {
+    if (!place?.formattedAddress && !currentForm.address) return
+    setPropertyPreviewLoading(true)
+    setPropertyPreviewError('')
+    setPropertyPreview(null)
+    try {
+      const response = await fetch('/api/property/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: 'preview',
+          address: place?.formattedAddress || currentForm.address,
+          project: {
+            ...currentForm,
+            address: place?.formattedAddress || currentForm.address,
+            placeId: place?.placeId || currentForm.placeId,
+            latitude: place?.lat ?? currentForm.latitude,
+            longitude: place?.lng ?? currentForm.longitude,
+            suburb: place?.suburb || currentForm.suburb,
+            city: place?.city || currentForm.city,
+            region: place?.region || currentForm.region,
+            postalCode: place?.postalCode || currentForm.postalCode,
+            country: place?.country || currentForm.country,
+          },
+          placeDetails: place,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Property intelligence preview failed')
+      setPropertyPreview(data)
+    } catch (error) {
+      setPropertyPreviewError(error.message || 'Property intelligence preview failed')
+    } finally {
+      setPropertyPreviewLoading(false)
+    }
+  }
+
   const applyPlace = details => {
     setPlaceDetails(details)
+    const nextForm = {
+      ...form,
+      address: details.formattedAddress,
+      name: form.name || suggestedNameFromPlace(details),
+      placeId: details.placeId || '',
+      latitude: details.lat ?? null,
+      longitude: details.lng ?? null,
+      suburb: details.suburb || '',
+      city: details.city || '',
+      region: details.region || '',
+      postalCode: details.postalCode || '',
+      country: details.country || 'New Zealand',
+    }
     setForm(current => ({
       ...current,
       address: details.formattedAddress,
@@ -264,7 +423,13 @@ export default function NewProject() {
       country: details.country || 'New Zealand',
     }))
     setStep('confirm')
+    fetchPropertyPreview(details, nextForm)
   }
+
+  useEffect(() => {
+    if (!placeDetails || propertyPreview || propertyPreviewLoading) return
+    fetchPropertyPreview(placeDetails)
+  }, [placeDetails?.formattedAddress])
 
   const confirmManualAddress = () => {
     if (!form.address.trim()) {
@@ -505,6 +670,8 @@ export default function NewProject() {
               </div>
             </div>
 
+            <PlanningPreview preview={propertyPreview} loading={propertyPreviewLoading} error={propertyPreviewError} />
+
             <div className="flex justify-between pt-2">
               <button
                 type="button"
@@ -531,7 +698,13 @@ export default function NewProject() {
         {step === 'setup' && (
           <form onSubmit={handleSubmit} noValidate>
             <div className="grid grid-cols-1 xl:grid-cols-[0.9fr_1.1fr] gap-5">
-              <PropertySnapshot place={placeDetails || makeManualPlace(form.address)} form={form} />
+              <PropertySnapshot
+                place={placeDetails || makeManualPlace(form.address)}
+                form={form}
+                propertyPreview={propertyPreview}
+                propertyPreviewLoading={propertyPreviewLoading}
+                propertyPreviewError={propertyPreviewError}
+              />
 
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 space-y-5">
                 <div>

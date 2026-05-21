@@ -1,15 +1,23 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
-import { DEFAULT_SALES_SETTINGS, PIPELINE_STAGES } from './salesConstants'
+import {
+  DEFAULT_SALES_SETTINGS,
+  PIPELINE_CLOSED_STAGE,
+  PIPELINE_CONTRACT_STAGE,
+  PIPELINE_NEW_STAGE,
+  PIPELINE_OFFER_STAGE,
+  PIPELINE_QUALIFIED_STAGE,
+  PIPELINE_STAGE_COMPATIBILITY,
+  PIPELINE_STAGES,
+  PIPELINE_WON_STAGE,
+} from './salesConstants'
 import { leadName } from './salesUtils'
 
 const genId = () => crypto.randomUUID()
 
 const normaliseStage = stage => {
-  if (stage === 'Offer / S&P Sent') return 'S&P Sent'
-  if (stage === 'Settled / Complete') return 'Settled'
-  if (stage === 'Finance / Broker') return 'Qualified'
-  return PIPELINE_STAGES.includes(stage) ? stage : 'New Inquiry'
+  if (PIPELINE_STAGES.includes(stage)) return stage
+  return PIPELINE_STAGE_COMPATIBILITY[stage] || PIPELINE_NEW_STAGE
 }
 
 const mapProject = r => ({
@@ -44,7 +52,7 @@ const mapLead = r => ({
   financeStatus: r.finance_status || 'Unknown',
   assignedTo: r.assigned_to || 'Unassigned',
   temperature: r.temperature || 'Warm',
-  pipelineStage: normaliseStage(r.pipeline_stage || 'New Inquiry'),
+  pipelineStage: normaliseStage(r.pipeline_stage || PIPELINE_NEW_STAGE),
   notes: r.notes || '',
   preferredUnits: Array.isArray(r.preferred_units) ? r.preferred_units : [],
   budgetRange: r.budget_range || '',
@@ -179,7 +187,7 @@ const leadRow = data => {
     finance_status: data.financeStatus ?? 'Unknown',
     assigned_to: data.assignedTo ?? 'Unassigned',
     temperature: data.temperature ?? 'Warm',
-    pipeline_stage: data.pipelineStage ?? 'New Inquiry',
+    pipeline_stage: normaliseStage(data.pipelineStage ?? PIPELINE_NEW_STAGE),
     notes: data.notes ?? '',
     preferred_units: data.preferredUnits ?? [],
     budget_range: data.budgetRange ?? '',
@@ -356,7 +364,7 @@ const useSalesStore = create((set, get) => ({
     const lead = get().leads.find(item => item.id === id)
     if (!lead) return
     await get().updateLead(id, {
-      pipelineStage: lead.pipelineStage === 'New Inquiry' ? 'Contacted' : lead.pipelineStage,
+      pipelineStage: lead.pipelineStage === PIPELINE_NEW_STAGE ? PIPELINE_QUALIFIED_STAGE : lead.pipelineStage,
       lastContactedAt: new Date().toISOString(),
       nextActionDate: '',
       nextAction: '',
@@ -368,7 +376,7 @@ const useSalesStore = create((set, get) => ({
     const lead = get().leads.find(item => item.id === id)
     if (!lead) return
     await get().updateLead(id, {
-      pipelineStage: 'Info Sent',
+      pipelineStage: lead.pipelineStage === PIPELINE_NEW_STAGE ? PIPELINE_QUALIFIED_STAGE : lead.pipelineStage,
       lastContactedAt: new Date().toISOString(),
       documentsSent: { ...(lead.documentsSent || {}), brochure: true, plans: true, priceList: true },
       nextAction: 'Follow up after info sent',
@@ -378,22 +386,21 @@ const useSalesStore = create((set, get) => ({
 
   async moveLeadStage(id, nextStage, extra = {}) {
     const lead = get().leads.find(item => item.id === id)
-    if (!lead || lead.pipelineStage === nextStage) return
+    const normalisedNextStage = normaliseStage(nextStage)
+    if (!lead || lead.pipelineStage === normalisedNextStage) return
     await get().updateLead(id, {
-      pipelineStage: nextStage,
-      lostReason: nextStage === 'Lost / Not Now' ? (extra.lostReason || lead.lostReason || 'Not now') : lead.lostReason,
+      pipelineStage: normalisedNextStage,
+      lostReason: normalisedNextStage === PIPELINE_CLOSED_STAGE ? (extra.lostReason || lead.lostReason || 'Not now') : lead.lostReason,
     })
-    await get().addActivity({ leadId: id, type: 'Stage Changed', title: 'Stage changed', description: `${lead.pipelineStage} to ${nextStage}`, createdBy: lead.assignedTo })
+    await get().addActivity({ leadId: id, type: 'Stage Changed', title: 'Stage changed', description: `${lead.pipelineStage} to ${normalisedNextStage}`, createdBy: lead.assignedTo })
     const assignedUnit = get().units.find(unit => unit.assignedLeadId === id)
     if (!assignedUnit) return
     const unitUpdatesByStage = {
-      'S&P Sent': { status: 'S&P Out', spaStatus: 'Sent' },
-      Signed: { status: 'Under Contract', spaStatus: 'Signed' },
-      'Deposit Paid': { status: 'Deposit Paid', depositStatus: 'Paid' },
-      Unconditional: { status: 'Unconditional', conditionsStatus: 'Satisfied' },
-      Settled: { status: 'Settled', settlementStatus: 'Settled' },
+      [PIPELINE_OFFER_STAGE]: { status: 'S&P Out', spaStatus: 'Sent' },
+      [PIPELINE_CONTRACT_STAGE]: { status: 'Under Contract', spaStatus: 'Signed' },
+      [PIPELINE_WON_STAGE]: { status: 'Unconditional', conditionsStatus: 'Satisfied' },
     }
-    if (unitUpdatesByStage[nextStage]) await get().updateUnit(assignedUnit.id, unitUpdatesByStage[nextStage])
+    if (unitUpdatesByStage[normalisedNextStage]) await get().updateUnit(assignedUnit.id, unitUpdatesByStage[normalisedNextStage])
   },
 
   async addLeadNote(id, note) {
@@ -411,7 +418,7 @@ const useSalesStore = create((set, get) => ({
     const unit = get().units.find(item => item.id === unitId)
     if (!lead || !unit) return
     const preferredUnits = [...new Set([...(lead.preferredUnits || []), `${unit.projectName} ${unit.unitNumber}`])]
-    await get().updateLead(leadId, { preferredUnits, pipelineStage: lead.pipelineStage === 'New Inquiry' ? 'Unit Selected' : lead.pipelineStage })
+    await get().updateLead(leadId, { preferredUnits, pipelineStage: [PIPELINE_NEW_STAGE, PIPELINE_QUALIFIED_STAGE].includes(lead.pipelineStage) ? PIPELINE_OFFER_STAGE : lead.pipelineStage })
     await get().updateUnit(unitId, {
       assignedLeadId: leadId,
       assignedBuyerName: leadName(lead),

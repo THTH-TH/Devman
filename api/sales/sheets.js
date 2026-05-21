@@ -30,7 +30,7 @@ const WORKFLOW_DEFAULTS = {
   financeStatus: 'Unknown',
   assignedTo: 'Unassigned',
   temperature: 'Warm',
-  pipelineStage: 'New Inquiry',
+  pipelineStage: 'New Enquiry',
 }
 
 function supabaseAdmin() {

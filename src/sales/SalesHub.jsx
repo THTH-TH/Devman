@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   ChevronRight,
   ExternalLink,
-  Flame,
   LayoutDashboard,
   Mail,
   Phone,
@@ -13,7 +12,6 @@ import {
   RefreshCw,
   Search,
   Table2,
-  Target,
   Trash2,
   X,
 } from 'lucide-react'
@@ -23,7 +21,11 @@ import {
   BUYER_TYPES,
   FINANCE_STATUSES,
   LEAD_SOURCES,
+  PIPELINE_CLOSED_STAGE,
+  PIPELINE_CLOSE_STAGES,
+  PIPELINE_NEW_STAGE,
   PIPELINE_STAGES,
+  PIPELINE_WON_STAGE,
   SALES_NAV,
   STAGE_COLORS,
   TEMP_COLORS,
@@ -37,7 +39,6 @@ import {
   daysSince,
   formatDate,
   formatShortDate,
-  groupCounts,
   isOverdue,
   leadName,
   money,
@@ -173,8 +174,8 @@ function SalesShell() {
         <Routes>
           <Route index element={<SalesDashboard openLead={openLead} />} />
           <Route path="projects" element={<ProjectsPage openLead={openLead} />} />
-          <Route path="projects/:projectId" element={<ProjectSalesPage openLead={openLead} />} />
-          <Route path="pipeline" element={<PipelinePage openLead={openLead} />} />
+          <Route path="projects/:projectId" element={<ProjectSalesPage openLead={openLead} onAddLead={() => setShowAddLead(true)} />} />
+          <Route path="pipeline" element={<PipelinePage openLead={openLead} onAddLead={() => setShowAddLead(true)} />} />
           <Route path="leads" element={<LeadsPage openLead={openLead} />} />
           <Route path="leads/:leadId" element={<LeadDeepLink openLead={openLead} />} />
           <Route path="presales" element={<PresalesPage openLead={openLead} />} />
@@ -204,13 +205,12 @@ function LeadDeepLink({ openLead }) {
 
 function SalesDashboard({ openLead }) {
   const { projects, leads, units, tasks, sheetConnections, syncRuns } = useSalesStore()
-  const activeLeads = leads.filter(lead => !lead.archived && lead.pipelineStage !== 'Lost / Not Now')
+  const activeLeads = leads.filter(lead => !lead.archived && lead.pipelineStage !== PIPELINE_CLOSED_STAGE)
   const actions = buildTodayActions({ leads, units, tasks })
   const newThisWeek = activeLeads.filter(lead => new Date(lead.createdAt) >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)).length
   const latestSync = syncRuns[0]
   const beachwaters = projects.find(project => project.id === 'beachwaters')
   const beachMetrics = beachwaters ? projectMetrics(beachwaters, activeLeads, units) : null
-  const closeStages = ['Unit Selected', 'S&P Sent', 'Signed', 'Deposit Paid', 'Unconditional']
 
   return (
     <>
@@ -218,12 +218,14 @@ function SalesDashboard({ openLead }) {
       <div className="mx-auto max-w-7xl space-y-6 p-6">
         <div className="grid grid-cols-2 gap-4 xl:grid-cols-6">
           <MetricCard label="Active leads" value={activeLeads.length} />
-          <MetricCard label="New enquiries" value={activeLeads.filter(lead => lead.pipelineStage === 'New Inquiry').length} hint={`${newThisWeek} this week`} />
+          <MetricCard label="New enquiries" value={activeLeads.filter(lead => lead.pipelineStage === PIPELINE_NEW_STAGE).length} hint={`${newThisWeek} this week`} />
           <MetricCard label="Hot leads" value={activeLeads.filter(lead => lead.temperature === 'Hot').length} tone="bg-red-50" />
           <MetricCard label="Calls today" value={actions.leadsToCall.length} />
           <MetricCard label="Overdue" value={actions.overdueFollowUps.length} tone={actions.overdueFollowUps.length ? 'bg-amber-50' : 'bg-white'} />
-          <MetricCard label="Close to sale" value={activeLeads.filter(lead => closeStages.includes(lead.pipelineStage)).length} />
+          <MetricCard label="Close to sale" value={activeLeads.filter(lead => PIPELINE_CLOSE_STAGES.includes(lead.pipelineStage)).length} />
         </div>
+
+        <IntegrationStrip sheetConnections={sheetConnections} />
 
         <div className="grid gap-6 xl:grid-cols-[1.4fr_0.9fr]">
           <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -276,7 +278,7 @@ function SalesDashboard({ openLead }) {
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-          <RecentLeads title="New leads" leads={activeLeads.filter(lead => lead.pipelineStage === 'New Inquiry').slice(0, 8)} openLead={openLead} />
+          <RecentLeads title="New leads" leads={activeLeads.filter(lead => lead.pipelineStage === PIPELINE_NEW_STAGE).slice(0, 8)} openLead={openLead} />
           <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
             <h2 className="font-bold text-gray-900">Sheet Sync</h2>
             <p className="mt-1 text-sm text-gray-500">
@@ -345,81 +347,236 @@ function MiniStat({ label, value }) {
   return <div className="rounded-lg bg-gray-50 p-3 text-center"><div className="text-xl font-bold text-gray-900">{value}</div><div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{label}</div></div>
 }
 
-function PipelinePage({ openLead }) {
-  const { leads, moveLeadStage } = useSalesStore()
-  const activeLeads = leads.filter(lead => !lead.archived)
-  const [dragLeadId, setDragLeadId] = useState(null)
+function IntegrationStrip({ sheetConnections }) {
+  const tiles = [
+    ['Google Sheets', sheetConnections.length ? `${sheetConnections.length} lead sheet${sheetConnections.length === 1 ? '' : 's'} linked` : 'Lead intake ready to connect', 'Connected intake', Table2],
+    ['Gmail contacts', 'OAuth contact import next', 'Not connected yet', Mail],
+    ['Facebook / Meta', 'Lead form source mapping', 'Coming soon', LayoutDashboard],
+  ]
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-bold text-gray-900">Integrations</h2>
+          <p className="mt-0.5 text-sm text-gray-500">Keep Sheets as the intake. Gmail contacts will be a separate connect step when we add contact OAuth.</p>
+        </div>
+        <NavLink to="/sales/sheets" className="text-sm font-semibold text-forest-700">Manage sync</NavLink>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {tiles.map(([name, detail, status, Icon]) => (
+          <div key={name} className="flex min-w-[220px] flex-1 items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-ocean-700 shadow-sm"><Icon size={17} /></span>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-bold text-gray-900">{name}</div>
+              <div className="truncate text-xs text-gray-500">{detail}</div>
+            </div>
+            <Badge className={status === 'Connected intake' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}>{status}</Badge>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
-  const move = async (leadId, stage) => {
-    if (!leadId) return
-    const extra = {}
-    if (stage === 'Lost / Not Now') {
-      extra.lostReason = window.prompt('Lost / not now reason?', 'Not now') || 'Not now'
-    }
-    await moveLeadStage(leadId, stage, extra)
-  }
+function PipelinePage({ openLead, onAddLead }) {
+  const { leads } = useSalesStore()
+  const activeLeads = leads.filter(lead => !lead.archived)
 
   return (
     <>
-      <PageHeader title="Sales Pipeline" subtitle="Drag leads through the simple property sales journey." />
+      <PageHeader title="Sales Pipeline" subtitle="Kanban is the default working view. Switch to table when you need a denser Monday-style list." />
       <div className="p-6">
-        <div className="flex min-h-[calc(100vh-210px)] gap-3 overflow-x-auto pb-4">
-          {PIPELINE_STAGES.map(stage => {
-            const stageLeads = activeLeads.filter(lead => lead.pipelineStage === stage)
-            return (
-              <div
-                key={stage}
-                onDragOver={event => event.preventDefault()}
-                onDrop={() => move(dragLeadId, stage)}
-                className="flex w-[270px] shrink-0 flex-col rounded-xl border border-gray-100 bg-white shadow-sm"
-              >
-                <div className="sticky top-0 z-10 border-b border-gray-100 bg-white p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="truncate text-sm font-bold text-gray-900">{stage}</div>
-                    <Badge>{stageLeads.length}</Badge>
-                  </div>
-                </div>
-                <div className="flex-1 space-y-2 overflow-y-auto bg-gray-50/60 p-2">
-                  {stageLeads.map(lead => (
-                    <PipelineCard key={lead.id} lead={lead} openLead={openLead} onDragStart={() => setDragLeadId(lead.id)} />
-                  ))}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        <PipelineBoardSection leads={activeLeads} openLead={openLead} onAddLead={onAddLead} />
       </div>
     </>
   )
 }
 
+function PipelineBoardSection({ leads, openLead, onAddLead, title = 'Pipeline' }) {
+  const { moveLeadStage } = useSalesStore()
+  const [dragLeadId, setDragLeadId] = useState(null)
+  const [view, setView] = useState('kanban')
+  const [search, setSearch] = useState('')
+  const [owner, setOwner] = useState('')
+  const q = search.toLowerCase()
+  const visibleLeads = leads.filter(lead => {
+    if (q && ![lead.fullName, lead.email, lead.phone, lead.projectInterest, lead.source].join(' ').toLowerCase().includes(q)) return false
+    if (owner && lead.assignedTo !== owner) return false
+    return true
+  })
+
+  const move = async (leadId, stage) => {
+    if (!leadId) return
+    const extra = {}
+    if (stage === PIPELINE_CLOSED_STAGE) {
+      extra.lostReason = window.prompt('Closed lost / not proceeding reason?', 'Not now') || 'Not now'
+    }
+    await moveLeadStage(leadId, stage, extra)
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+      <div className="border-b border-gray-100 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-gray-900">{title}</h2>
+            <p className="mt-0.5 text-sm text-gray-500">HubSpot stages, Monday-style controls, DevMan-owned workflow.</p>
+          </div>
+          <ViewToggle value={view} onChange={setView} />
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button onClick={onAddLead} className="bg-ocean-600 text-white hover:bg-ocean-700"><Plus size={14} /> New lead</Button>
+          <div className="relative min-w-72 flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+            <input className={`${inputCls} py-2 pl-8`} placeholder="Search board" value={search} onChange={event => setSearch(event.target.value)} />
+          </div>
+          <div className="w-40"><Select value={owner} onChange={setOwner} options={ASSIGNEES} placeholder="Person" /></div>
+          <Button>Filter</Button>
+          <Button>Group by stage</Button>
+        </div>
+      </div>
+
+      {view === 'kanban' ? (
+        <div className="flex min-h-[calc(100vh-250px)] gap-3 overflow-x-auto bg-[#f5f8fb] p-3 pb-4">
+          {PIPELINE_STAGES.map(stage => {
+            const stageLeads = visibleLeads.filter(lead => lead.pipelineStage === stage)
+            return (
+              <div
+                key={stage}
+                onDragOver={event => event.preventDefault()}
+                onDrop={() => move(dragLeadId, stage)}
+                className="flex w-[292px] shrink-0 flex-col rounded-lg border border-[#d9e2ec] bg-[#eaf1f7]"
+              >
+                <div className="sticky top-0 z-10 border-b border-[#d9e2ec] bg-[#f7fbff] px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-bold uppercase tracking-wide text-gray-700">{stage}</div>
+                    </div>
+                    <span className="rounded border border-[#d9e2ec] bg-white px-1.5 py-0.5 text-xs font-bold text-gray-500">{stageLeads.length}</span>
+                  </div>
+                </div>
+                <div className="flex-1 space-y-2 overflow-y-auto p-2">
+                  {stageLeads.map(lead => (
+                    <PipelineCard key={lead.id} lead={lead} openLead={openLead} onDragStart={() => setDragLeadId(lead.id)} />
+                  ))}
+                  {!stageLeads.length && <div className="rounded-md border border-dashed border-[#d9e2ec] bg-white/50 px-3 py-4 text-center text-xs text-gray-400">No leads</div>}
+                </div>
+                <div className="border-t border-[#d9e2ec] bg-white px-3 py-2 text-xs font-semibold text-gray-500">
+                  {stageLeads.length} lead{stageLeads.length === 1 ? '' : 's'}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <PipelineTable leads={visibleLeads} openLead={openLead} />
+      )}
+    </div>
+  )
+}
+
 function PipelineCard({ lead, openLead, onDragStart }) {
   const stale = lead.temperature === 'Hot' && daysSince(lead.lastContactedAt) >= 2
+  const value = lead.budgetRange || (lead.preferredUnits?.[0] || '')
   return (
     <button
       draggable
       onDragStart={onDragStart}
       onClick={() => openLead(lead.id)}
-      className="w-full rounded-lg border border-gray-100 bg-white p-3 text-left shadow-sm hover:border-gray-200 hover:shadow"
+      className="w-full rounded-md border border-[#d9e2ec] bg-white p-3 text-left shadow-sm hover:border-ocean-200 hover:shadow"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="truncate font-semibold text-gray-900">{leadName(lead)}</div>
-          <div className="mt-0.5 truncate text-xs text-gray-500">{lead.projectInterest || 'No project'} - {lead.source}</div>
+          <div className="truncate font-bold text-ocean-700">{leadName(lead)}</div>
+          <div className="mt-1 truncate text-xs text-gray-500">{lead.projectInterest || 'No project'} - {lead.source}</div>
         </div>
         <Badge className={TEMP_COLORS[lead.temperature]}>{lead.temperature}</Badge>
       </div>
       <div className="mt-3 space-y-1 text-xs text-gray-500">
+        {value && <div>Amount: <b className="text-gray-700">{value}</b></div>}
         <div>Owner: <b className="text-gray-700">{lead.assignedTo}</b></div>
+        <div>Created: {formatShortDate(lead.createdAt)}</div>
         <div className="line-clamp-2">Next: {suggestedNextAction(lead)}</div>
-        {lead.preferredUnits?.length > 0 && <div>Unit: {lead.preferredUnits.join(', ')}</div>}
       </div>
+      <ActivityDots lead={lead} />
       {(stale || isOverdue(lead.nextActionDate)) && (
         <div className="mt-3 inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">
           <AlertCircle size={12} /> {isOverdue(lead.nextActionDate) ? 'Overdue' : 'Stale hot lead'}
         </div>
       )}
     </button>
+  )
+}
+
+function ViewToggle({ value, onChange }) {
+  return (
+    <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+      {[
+        ['kanban', LayoutDashboard, 'Kanban'],
+        ['table', Table2, 'Table'],
+      ].map(([id, Icon, label]) => (
+        <button key={id} onClick={() => onChange(id)} className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-sm font-semibold ${value === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}>
+          <Icon size={14} /> {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function ActivityDots({ lead }) {
+  const active = [
+    Boolean(lead.lastContactedAt),
+    Boolean(lead.documentsSent?.brochure || lead.documentsSent?.plans),
+    Boolean(lead.preferredUnits?.length),
+    PIPELINE_CLOSE_STAGES.includes(lead.pipelineStage),
+  ]
+  return (
+    <div className="mt-3 flex items-center gap-1 border-t border-gray-100 pt-2">
+      {Array.from({ length: 10 }).map((_, index) => (
+        <span key={index} className={`h-5 w-1.5 rounded-full ${active[index % active.length] ? (index % 2 ? 'bg-ocean-300' : 'bg-pink-300') : 'bg-gray-100'}`} />
+      ))}
+      <span className="ml-auto text-xs font-semibold text-ocean-600">+</span>
+    </div>
+  )
+}
+
+function PipelineTable({ leads, openLead }) {
+  return (
+    <div className="overflow-x-auto bg-white">
+      {PIPELINE_STAGES.map(stage => {
+        const rows = leads.filter(lead => lead.pipelineStage === stage)
+        return (
+          <div key={stage} className="border-b border-gray-100">
+            <div className="flex items-center gap-2 px-4 py-3">
+              <span className={`h-5 w-1 rounded-full ${stage === PIPELINE_WON_STAGE ? 'bg-green-400' : stage === PIPELINE_CLOSED_STAGE ? 'bg-gray-400' : 'bg-blue-400'}`} />
+              <button className="font-bold text-ocean-700">{stage}</button>
+              <Badge>{rows.length}</Badge>
+            </div>
+            <table className="w-full min-w-[1080px] text-sm">
+              <thead className="border-y border-gray-100 bg-gray-50 text-xs uppercase tracking-wide text-gray-400">
+                <tr>{['Lead', 'Stage', 'Owner', 'Project', 'Source', 'Value / Unit', 'Contact', 'Next action', 'Temp'].map(head => <th key={head} className="px-3 py-2 text-left font-semibold">{head}</th>)}</tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {rows.map(lead => (
+                  <tr key={lead.id} onClick={() => openLead(lead.id)} className="cursor-pointer hover:bg-gray-50">
+                    <td className="px-3 py-2 font-semibold text-ocean-700">{leadName(lead)}</td>
+                    <td className="px-3 py-2"><Badge className={STAGE_COLORS[lead.pipelineStage]}>{lead.pipelineStage}</Badge></td>
+                    <td className="px-3 py-2 text-gray-600">{lead.assignedTo}</td>
+                    <td className="px-3 py-2 text-gray-600">{lead.projectInterest || '-'}</td>
+                    <td className="px-3 py-2 text-gray-600">{lead.source}</td>
+                    <td className="px-3 py-2 text-gray-600">{lead.budgetRange || lead.preferredUnits?.join(', ') || '-'}</td>
+                    <td className="px-3 py-2 text-gray-600">{lead.phone || lead.email || '-'}</td>
+                    <td className={`px-3 py-2 ${isOverdue(lead.nextActionDate) ? 'font-semibold text-red-600' : 'text-gray-600'}`}>{suggestedNextAction(lead)}</td>
+                    <td className="px-3 py-2"><Badge className={TEMP_COLORS[lead.temperature]}>{lead.temperature}</Badge></td>
+                  </tr>
+                ))}
+                {!rows.length && <tr><td colSpan={9} className="px-4 py-3 text-sm text-gray-400">No leads in this group.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -463,8 +620,8 @@ function LeadsTable({ openLead, projectName = '' }) {
 
   const setFilter = (key, value) => setFilters(current => ({ ...current, [key]: value }))
   const markLost = lead => {
-    const lostReason = window.prompt('Lost / not now reason?', lead.lostReason || 'Not now')
-    if (lostReason !== null) moveLeadStage(lead.id, 'Lost / Not Now', { lostReason })
+    const lostReason = window.prompt('Closed lost / not proceeding reason?', lead.lostReason || 'Not now')
+    if (lostReason !== null) moveLeadStage(lead.id, PIPELINE_CLOSED_STAGE, { lostReason })
   }
 
   return (
@@ -551,7 +708,7 @@ function SmallButton(props) {
 
 function ProjectsPage({ openLead }) {
   const { projects, leads, units } = useSalesStore()
-  const activeLeads = leads.filter(lead => !lead.archived && lead.pipelineStage !== 'Lost / Not Now')
+  const activeLeads = leads.filter(lead => !lead.archived && lead.pipelineStage !== PIPELINE_CLOSED_STAGE)
 
   return (
     <>
@@ -561,7 +718,7 @@ function ProjectsPage({ openLead }) {
           {projects.map(project => {
             const metrics = projectMetrics(project, activeLeads, units)
             const projectLeads = activeLeads.filter(lead => lead.projectInterest?.includes(project.name))
-            const closeLeads = projectLeads.filter(lead => ['Unit Selected', 'S&P Sent', 'Signed', 'Deposit Paid', 'Unconditional'].includes(lead.pipelineStage))
+            const closeLeads = projectLeads.filter(lead => PIPELINE_CLOSE_STAGES.includes(lead.pipelineStage))
             return (
               <Link key={project.id} to={`/sales/projects/${project.id}`} className={`rounded-xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${project.id === 'beachwaters' ? 'border-forest-200 ring-2 ring-forest-50' : 'border-gray-100'}`}>
                 <div className="flex items-start justify-between gap-3">
@@ -614,18 +771,18 @@ function ProjectsPage({ openLead }) {
   )
 }
 
-function ProjectSalesPage({ openLead }) {
+function ProjectSalesPage({ openLead, onAddLead }) {
   const { projectId } = useParams()
   const { projects, leads, units, updateProject, updateUnit } = useSalesStore()
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useState('pipeline')
   const project = projects.find(item => item.id === projectId)
   if (!project) return <Navigate to="/sales/projects" replace />
 
-  const activeLeads = leads.filter(lead => !lead.archived && lead.pipelineStage !== 'Lost / Not Now')
+  const activeLeads = leads.filter(lead => !lead.archived && lead.pipelineStage !== PIPELINE_CLOSED_STAGE)
   const projectLeads = activeLeads.filter(lead => lead.projectInterest?.includes(project.name))
   const projectUnits = units.filter(unit => unit.projectId === project.id)
   const metrics = projectMetrics(project, activeLeads, units)
-  const closeLeads = projectLeads.filter(lead => ['Unit Selected', 'S&P Sent', 'Signed', 'Deposit Paid', 'Unconditional'].includes(lead.pipelineStage))
+  const closeLeads = projectLeads.filter(lead => PIPELINE_CLOSE_STAGES.includes(lead.pipelineStage))
   const hotLeads = projectLeads.filter(lead => lead.temperature === 'Hot')
 
   return (
@@ -679,7 +836,7 @@ function ProjectSalesPage({ openLead }) {
                 <MetricCard label="Close leads" value={closeLeads.length} />
                 <MetricCard label="Likely presales" value={metrics.likelyPresales} />
               </div>
-              <ProjectStageList leads={projectLeads} openLead={openLead} />
+              <PipelineBoardSection leads={projectLeads} openLead={openLead} onAddLead={onAddLead} title="Project pipeline" />
             </div>
             <div className="space-y-6">
               <RecentLeads title="Hot leads" leads={hotLeads.slice(0, 6)} openLead={openLead} />
@@ -690,7 +847,7 @@ function ProjectSalesPage({ openLead }) {
 
         {tab === 'leads' && <ProjectLeadsTable leads={projectLeads} openLead={openLead} />}
 
-        {tab === 'pipeline' && <ProjectStageList leads={projectLeads} openLead={openLead} detailed />}
+        {tab === 'pipeline' && <PipelineBoardSection leads={projectLeads} openLead={openLead} onAddLead={onAddLead} title={`${project.name} pipeline`} />}
 
         {tab === 'units' && <ProjectUnitTable units={projectUnits} leads={leads} openLead={openLead} updateUnit={updateUnit} />}
 
@@ -716,7 +873,7 @@ function ProjectStageList({ leads, openLead, detailed = false }) {
     <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
       <h2 className="font-bold text-gray-900">Project pipeline</h2>
       <div className="mt-4 space-y-3">
-        {PIPELINE_STAGES.filter(stage => stage !== 'Lost / Not Now').map(stage => {
+        {PIPELINE_STAGES.filter(stage => stage !== PIPELINE_CLOSED_STAGE).map(stage => {
           const stageLeads = leads.filter(lead => lead.pipelineStage === stage)
           return (
             <div key={stage} className="rounded-lg border border-gray-100">
@@ -886,8 +1043,8 @@ function LeadDrawer({ lead, onClose }) {
     setUnitId('')
   }
   const markLost = () => {
-    const lostReason = window.prompt('Lost / not now reason?', form.lostReason || 'Not now')
-    if (lostReason !== null) moveLeadStage(lead.id, 'Lost / Not Now', { lostReason })
+    const lostReason = window.prompt('Closed lost / not proceeding reason?', form.lostReason || 'Not now')
+    if (lostReason !== null) moveLeadStage(lead.id, PIPELINE_CLOSED_STAGE, { lostReason })
   }
 
   return (
@@ -993,7 +1150,7 @@ function LeadDrawer({ lead, onClose }) {
 
 function PresalesPage({ openLead }) {
   const { projects, leads, units, updateProject } = useSalesStore()
-  const activeLeads = leads.filter(lead => !lead.archived && lead.pipelineStage !== 'Lost / Not Now')
+  const activeLeads = leads.filter(lead => !lead.archived && lead.pipelineStage !== PIPELINE_CLOSED_STAGE)
   return (
     <>
       <PageHeader title="Presales" subtitle="Light project/unit view focused on presale targets." />
@@ -1001,7 +1158,7 @@ function PresalesPage({ openLead }) {
         <div className="grid gap-4 xl:grid-cols-3">
           {projects.map(project => {
             const metrics = projectMetrics(project, activeLeads, units)
-            const likelyLeads = activeLeads.filter(lead => lead.projectInterest?.includes(project.name) && ['Hot', 'Warm'].includes(lead.temperature) && ['Unit Selected', 'S&P Sent', 'Signed', 'Deposit Paid', 'Unconditional'].includes(lead.pipelineStage))
+            const likelyLeads = activeLeads.filter(lead => lead.projectInterest?.includes(project.name) && ['Hot', 'Warm'].includes(lead.temperature) && PIPELINE_CLOSE_STAGES.includes(lead.pipelineStage))
             return (
               <div key={project.id} className={`rounded-xl border bg-white p-5 shadow-sm ${project.id === 'beachwaters' ? 'border-forest-200 ring-2 ring-forest-50' : 'border-gray-100'}`}>
                 <div className="flex items-start justify-between gap-3">
@@ -1168,6 +1325,7 @@ function SheetSyncPage() {
     ['projectInterest', 'Project interest'],
     ['buyerType', 'Buyer type'],
     ['financeStatus', 'Finance status'],
+    ['temperature', 'Lead temperature'],
     ['budgetRange', 'Budget'],
     ['depositCapacity', 'Deposit capacity'],
     ['preferredUnits', 'Preferred units'],
@@ -1311,7 +1469,7 @@ function LeadModal({ onClose }) {
     financeStatus: 'Unknown',
     assignedTo: 'Tim',
     temperature: 'Warm',
-    pipelineStage: 'New Inquiry',
+    pipelineStage: PIPELINE_NEW_STAGE,
     notes: '',
   })
   const set = (key, value) => setForm(current => ({ ...current, [key]: value }))

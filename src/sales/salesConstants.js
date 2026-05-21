@@ -45,19 +45,46 @@ export const ASSIGNEES = ['Tim', 'Dave', 'Agent', 'Unassigned']
 
 export const TEMPERATURES = ['Hot', 'Warm', 'Cold', 'Not Now']
 
+export const PIPELINE_NEW_STAGE = 'New Enquiry'
+export const PIPELINE_QUALIFIED_STAGE = 'Qualified / Needs Assessed'
+export const PIPELINE_MEETING_STAGE = 'Sales Meeting Booked'
+export const PIPELINE_OFFER_STAGE = 'Negotiations & Offer'
+export const PIPELINE_CONTRACT_STAGE = 'Under Contract - Conditional'
+export const PIPELINE_WON_STAGE = 'Sold - Unconditional'
+export const PIPELINE_CLOSED_STAGE = 'Closed Lost / Not Proceeding'
+
 export const PIPELINE_STAGES = [
-  'New Inquiry',
-  'Contacted',
-  'Info Sent',
-  'Qualified',
-  'Unit Selected',
-  'S&P Sent',
-  'Signed',
-  'Deposit Paid',
-  'Unconditional',
-  'Settled',
-  'Lost / Not Now',
+  PIPELINE_NEW_STAGE,
+  PIPELINE_QUALIFIED_STAGE,
+  PIPELINE_MEETING_STAGE,
+  PIPELINE_OFFER_STAGE,
+  PIPELINE_CONTRACT_STAGE,
+  PIPELINE_WON_STAGE,
+  PIPELINE_CLOSED_STAGE,
 ]
+
+export const PIPELINE_CLOSE_STAGES = [
+  PIPELINE_OFFER_STAGE,
+  PIPELINE_CONTRACT_STAGE,
+  PIPELINE_WON_STAGE,
+]
+
+export const PIPELINE_STAGE_COMPATIBILITY = {
+  'New Inquiry': PIPELINE_NEW_STAGE,
+  Contacted: PIPELINE_QUALIFIED_STAGE,
+  'Info Sent': PIPELINE_QUALIFIED_STAGE,
+  Qualified: PIPELINE_QUALIFIED_STAGE,
+  'Unit Selected': PIPELINE_OFFER_STAGE,
+  'S&P Sent': PIPELINE_OFFER_STAGE,
+  'Offer / S&P Sent': PIPELINE_OFFER_STAGE,
+  Signed: PIPELINE_CONTRACT_STAGE,
+  'Deposit Paid': PIPELINE_CONTRACT_STAGE,
+  'Finance / Broker': PIPELINE_QUALIFIED_STAGE,
+  Unconditional: PIPELINE_WON_STAGE,
+  Settled: PIPELINE_WON_STAGE,
+  'Settled / Complete': PIPELINE_WON_STAGE,
+  'Lost / Not Now': PIPELINE_CLOSED_STAGE,
+}
 
 export const UNIT_STATUSES = [
   'Available',
@@ -135,17 +162,13 @@ export const TEMP_COLORS = {
 }
 
 export const STAGE_COLORS = {
-  'New Inquiry': 'bg-sky-50 text-sky-700',
-  Contacted: 'bg-ocean-50 text-ocean-700',
-  'Info Sent': 'bg-indigo-50 text-indigo-700',
-  Qualified: 'bg-purple-50 text-purple-700',
-  'Unit Selected': 'bg-amber-50 text-amber-700',
-  'S&P Sent': 'bg-pink-50 text-pink-700',
-  Signed: 'bg-teal-50 text-teal-700',
-  'Deposit Paid': 'bg-green-50 text-green-700',
-  Unconditional: 'bg-emerald-50 text-emerald-700',
-  Settled: 'bg-forest-50 text-forest-700',
-  'Lost / Not Now': 'bg-gray-100 text-gray-500',
+  [PIPELINE_NEW_STAGE]: 'bg-blue-50 text-blue-700',
+  [PIPELINE_QUALIFIED_STAGE]: 'bg-sky-50 text-sky-700',
+  [PIPELINE_MEETING_STAGE]: 'bg-indigo-50 text-indigo-700',
+  [PIPELINE_OFFER_STAGE]: 'bg-amber-50 text-amber-700',
+  [PIPELINE_CONTRACT_STAGE]: 'bg-purple-50 text-purple-700',
+  [PIPELINE_WON_STAGE]: 'bg-green-50 text-green-700',
+  [PIPELINE_CLOSED_STAGE]: 'bg-gray-100 text-gray-500',
 }
 
 export const UNIT_STATUS_COLORS = {

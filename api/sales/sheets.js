@@ -147,6 +147,14 @@ function splitName(fullName) {
   return { firstName: parts.slice(0, -1).join(' '), lastName: parts.at(-1) }
 }
 
+function cleanName(value) {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  if (text.includes('@')) return ''
+  if (/^sheet row\b/i.test(text)) return ''
+  return text
+}
+
 function asArray(value) {
   if (Array.isArray(value)) return value
   return String(value || '').split(/[,;\n]/).map(item => item.trim()).filter(Boolean)
@@ -195,11 +203,11 @@ function parseBoolean(value) {
 }
 
 function buildLeadFromRow({ raw, fieldMap, defaults, connection, rowNumber }) {
-  const explicitFullName = getMapped(raw, fieldMap, 'fullName')
+  const explicitFullName = cleanName(getMapped(raw, fieldMap, 'fullName'))
   const firstName = getMapped(raw, fieldMap, 'firstName')
   const lastName = getMapped(raw, fieldMap, 'lastName')
   const split = splitName(explicitFullName)
-  const fullName = explicitFullName || [firstName, lastName].filter(Boolean).join(' ')
+  const fullName = cleanName(explicitFullName || [firstName, lastName].filter(Boolean).join(' '))
   const email = String(getMapped(raw, fieldMap, 'email')).trim()
   const phone = String(getMapped(raw, fieldMap, 'phone')).trim()
   const message = getMapped(raw, fieldMap, 'message')
@@ -221,7 +229,7 @@ function buildLeadFromRow({ raw, fieldMap, defaults, connection, rowNumber }) {
   const inbound = {
     first_name: firstName || split.firstName,
     last_name: lastName || split.lastName,
-    full_name: fullName || [firstName || split.firstName, lastName || split.lastName].filter(Boolean).join(' ') || email || phone || `Sheet row ${rowNumber}`,
+    full_name: cleanName(fullName || [firstName || split.firstName, lastName || split.lastName].filter(Boolean).join(' ')),
     email,
     phone,
     source,

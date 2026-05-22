@@ -67,6 +67,19 @@ const SHEET_CORE_FIELDS = [
   ['phone', 'Phone'],
   ['emailSent', 'Email sent'],
 ]
+const NEXT_ACTION_OPTIONS = [
+  'Call lead',
+  'Send first response',
+  'Send info pack',
+  'Follow up after info sent',
+  'Confirm finance',
+  'Send broker intro',
+  'Ask preferred unit',
+  'Send S&P next steps',
+  'Follow up signing',
+  'Follow up deposit',
+  'Nurture later',
+]
 
 function Badge({ children, className = 'bg-gray-100 text-gray-600' }) {
   return <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${className}`}>{children}</span>
@@ -94,6 +107,20 @@ function LoadingStrip({ label = 'Loading' }) {
         <div className="h-full w-1/2 animate-pulse rounded-r-full bg-ocean-500" />
       </div>
     </div>
+  )
+}
+
+function CellSelect({ value, options, onChange, className = 'bg-white text-gray-700', ariaLabel }) {
+  const selectOptions = value && !options.includes(value) ? [value, ...options] : options
+  return (
+    <select
+      aria-label={ariaLabel}
+      value={value || ''}
+      onChange={event => onChange(event.target.value)}
+      className={`h-9 w-full appearance-none rounded-md px-2 text-center text-xs font-semibold outline-none ${className}`}
+    >
+      {selectOptions.map(option => <option key={option} value={option} className="bg-white text-gray-900">{option}</option>)}
+    </select>
   )
 }
 
@@ -243,6 +270,11 @@ function SalesDashboard({ openLead }) {
   const latestSync = syncRuns[0]
   const beachwaters = projects.find(project => project.id === 'beachwaters')
   const beachMetrics = beachwaters ? projectMetrics(beachwaters, activeLeads, units) : null
+  const priorityLeads = useMemo(() => [...activeLeads].sort((a, b) => {
+    const aRank = (isOverdue(a.nextActionDate) ? 0 : 20) + (a.temperature === 'Hot' ? 0 : 5) + (a.pipelineStage === PIPELINE_NEW_STAGE ? 2 : 8)
+    const bRank = (isOverdue(b.nextActionDate) ? 0 : 20) + (b.temperature === 'Hot' ? 0 : 5) + (b.pipelineStage === PIPELINE_NEW_STAGE ? 2 : 8)
+    return aRank - bRank || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
+  }).slice(0, 10), [activeLeads])
 
   return (
     <>
@@ -258,6 +290,8 @@ function SalesDashboard({ openLead }) {
         </div>
 
         <IntegrationStrip sheetConnections={sheetConnections} />
+
+        <DashboardLeadQueue leads={priorityLeads} projects={projects} openLead={openLead} />
 
         <div className="grid gap-6 xl:grid-cols-[1.4fr_0.9fr]">
           <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -332,6 +366,64 @@ function SalesDashboard({ openLead }) {
         </div>
       </div>
     </>
+  )
+}
+
+function DashboardLeadQueue({ leads, projects, openLead }) {
+  const { updateLead, moveLeadStage } = useSalesStore()
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-bold text-gray-900">Active Lead Queue</h2>
+          <p className="mt-1 text-sm text-gray-500">Quick-edit the leads that need attention first.</p>
+        </div>
+        <NavLink to="/sales/leads" className="text-sm font-semibold text-forest-700">Open leads table</NavLink>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[900px] border-separate border-spacing-0 text-xs">
+          <thead className="text-gray-600">
+            <tr>
+              {['Lead', 'Status', 'Action', 'Project', 'Buyer type', 'Owner'].map(label => (
+                <th key={label} className="border-b border-gray-200 bg-gray-50 px-2 py-2 text-left font-semibold first:rounded-l-lg last:rounded-r-lg">{label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {leads.length === 0 ? (
+              <tr><td colSpan={6} className="px-3 py-4 text-gray-400">No active leads.</td></tr>
+            ) : leads.map(lead => (
+              <tr key={lead.id} className="hover:bg-gray-50">
+                <td className="border-b border-gray-100 px-2 py-1.5">
+                  <button onClick={() => openLead(lead.id)} className="text-left">
+                    <div className="font-semibold text-gray-900">{leadName(lead)}</div>
+                    <div className="flex items-center gap-2 text-[11px] text-gray-500">
+                      <Badge className={TEMP_COLORS[lead.temperature]}>{lead.temperature}</Badge>
+                      {isOverdue(lead.nextActionDate) && <span className="font-semibold text-red-600">Overdue</span>}
+                    </div>
+                  </button>
+                </td>
+                <td className="border-b border-gray-100 px-2 py-1.5" onClick={event => event.stopPropagation()}>
+                  <CellSelect value={lead.pipelineStage} options={PIPELINE_STAGES} onChange={value => moveLeadStage(lead.id, value)} className={stageCellClass(lead.pipelineStage)} ariaLabel={`Dashboard status for ${leadName(lead)}`} />
+                </td>
+                <td className="border-b border-gray-100 px-2 py-1.5" onClick={event => event.stopPropagation()}>
+                  <CellSelect value={lead.nextAction || suggestedNextAction(lead)} options={NEXT_ACTION_OPTIONS} onChange={value => updateLead(lead.id, { nextAction: value })} className="bg-green-700 text-white" ariaLabel={`Dashboard action for ${leadName(lead)}`} />
+                </td>
+                <td className="border-b border-gray-100 px-2 py-1.5" onClick={event => event.stopPropagation()}>
+                  <CellSelect value={lead.projectInterest || 'Unsure'} options={[...projects.map(project => project.name), 'Drift and Beachwaters', 'Unsure']} onChange={value => updateLead(lead.id, { projectInterest: value === 'Unsure' ? '' : value })} className="bg-gray-50 text-gray-700" ariaLabel={`Dashboard project for ${leadName(lead)}`} />
+                </td>
+                <td className="border-b border-gray-100 px-2 py-1.5" onClick={event => event.stopPropagation()}>
+                  <CellSelect value={lead.buyerType || 'Unknown'} options={BUYER_TYPES} onChange={value => updateLead(lead.id, { buyerType: value })} className="bg-gray-50 text-gray-700" ariaLabel={`Dashboard buyer type for ${leadName(lead)}`} />
+                </td>
+                <td className="border-b border-gray-100 px-2 py-1.5" onClick={event => event.stopPropagation()}>
+                  <CellSelect value={lead.assignedTo || 'Unassigned'} options={ASSIGNEES} onChange={value => updateLead(lead.id, { assignedTo: value })} className="bg-gray-50 text-gray-700" ariaLabel={`Dashboard owner for ${leadName(lead)}`} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }
 
@@ -779,26 +871,25 @@ function MondayLeadGroup({ group, openLead, onAddLead, markContacted, markInfoSe
       </div>
       <div className="overflow-hidden rounded-md border border-[#d7dde8] bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1420px] border-separate border-spacing-0 text-[13px]">
+          <table className="w-full min-w-[1260px] border-separate border-spacing-0 text-[12px]">
             <thead>
               <tr className="text-gray-700">
-                <th className={`sticky left-0 z-10 w-8 border-r border-b border-[#d7dde8] px-2 py-2 text-left ${group.accentClass}`} />
-                <th className="w-10 border-r border-b border-[#d7dde8] bg-white px-2 py-2 text-center">
+                <th className={`sticky left-0 z-10 w-7 border-r border-b border-[#d7dde8] px-2 py-1.5 text-left ${group.accentClass}`} />
+                <th className="w-9 border-r border-b border-[#d7dde8] bg-white px-2 py-1.5 text-center">
                   <input type="checkbox" className="h-4 w-4 rounded border-gray-300" aria-label="Select group" />
                 </th>
-                <th className="w-[230px] border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Lead</th>
-                <th className="w-11 border-r border-b border-[#d7dde8] bg-white px-2 py-2 text-center" />
-                <th className="w-36 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Status</th>
-                <th className="w-32 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Action</th>
-                <th className="w-40 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Project</th>
-                <th className="w-36 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Buyer type</th>
-                <th className="w-60 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Email</th>
-                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Phone</th>
-                <th className="w-28 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Email sent</th>
-                <th className="w-36 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Lead Source</th>
-                <th className="w-36 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Date received</th>
-                <th className="w-32 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Owner</th>
-                <th className="w-64 border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Next action</th>
+                <th className="w-[190px] border-r border-b border-[#d7dde8] bg-white px-2 py-1.5 text-center font-medium">Lead</th>
+                <th className="w-10 border-r border-b border-[#d7dde8] bg-white px-1.5 py-1.5 text-center" />
+                <th className="w-32 border-r border-b border-[#d7dde8] bg-white px-1.5 py-1.5 text-center font-medium">Status</th>
+                <th className="w-36 border-r border-b border-[#d7dde8] bg-white px-1.5 py-1.5 text-center font-medium">Action</th>
+                <th className="w-36 border-r border-b border-[#d7dde8] bg-white px-1.5 py-1.5 text-center font-medium">Project</th>
+                <th className="w-32 border-r border-b border-[#d7dde8] bg-white px-1.5 py-1.5 text-center font-medium">Buyer type</th>
+                <th className="w-52 border-r border-b border-[#d7dde8] bg-white px-2 py-1.5 text-center font-medium">Email</th>
+                <th className="w-32 border-r border-b border-[#d7dde8] bg-white px-2 py-1.5 text-center font-medium">Phone</th>
+                <th className="w-24 border-r border-b border-[#d7dde8] bg-white px-1.5 py-1.5 text-center font-medium">Email sent</th>
+                <th className="w-32 border-r border-b border-[#d7dde8] bg-white px-1.5 py-1.5 text-center font-medium">Lead Source</th>
+                <th className="w-28 border-r border-b border-[#d7dde8] bg-white px-1.5 py-1.5 text-center font-medium">Date</th>
+                <th className="w-28 border-b border-[#d7dde8] bg-white px-1.5 py-1.5 text-center font-medium">Owner</th>
               </tr>
             </thead>
             <tbody>
@@ -819,13 +910,13 @@ function MondayLeadGroup({ group, openLead, onAddLead, markContacted, markInfoSe
               {!group.rows.length && (
                 <tr>
                   <td className={`border-r border-[#d7dde8] ${group.accentClass}`} />
-                  <td colSpan={14} className="border-b border-[#d7dde8] px-4 py-5 text-gray-400">No leads in this group.</td>
+                  <td colSpan={13} className="border-b border-[#d7dde8] px-4 py-5 text-gray-400">No leads in this group.</td>
                 </tr>
               )}
               <tr>
                 <td className={`border-r border-[#d7dde8] ${group.accentClass}`} />
                 <td className="border-r border-[#d7dde8] px-2 py-2 text-center"><input type="checkbox" className="h-4 w-4 rounded border-gray-200 opacity-50" aria-label="Add row placeholder" /></td>
-                <td colSpan={13} className="border-b border-[#d7dde8] px-3 py-2 text-gray-500">
+                <td colSpan={12} className="border-b border-[#d7dde8] px-3 py-2 text-gray-500">
                   <button onClick={onAddLead} className="hover:text-gray-900">+ Add lead</button>
                 </td>
               </tr>
@@ -854,8 +945,8 @@ function MondayLeadRow({ lead, accentClass, openLead, markContacted, markInfoSen
   return (
     <tr onClick={() => openLead(lead.id)} className="cursor-pointer bg-white hover:bg-[#f7f9fb]">
       <td className={`border-r border-b border-[#d7dde8] ${accentClass}`} />
-      <td className="border-r border-b border-[#d7dde8] px-2 py-1.5 text-center"><input type="checkbox" className="h-4 w-4 rounded border-gray-300" aria-label={`Select ${leadName(lead)}`} onClick={event => event.stopPropagation()} /></td>
-      <td className="border-r border-b border-[#d7dde8] px-3 py-1.5">
+      <td className="border-r border-b border-[#d7dde8] px-2 py-1 text-center"><input type="checkbox" className="h-4 w-4 rounded border-gray-300" aria-label={`Select ${leadName(lead)}`} onClick={event => event.stopPropagation()} /></td>
+      <td className="border-r border-b border-[#d7dde8] px-2.5 py-1">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="truncate font-medium text-gray-800">{leadName(lead)}</div>
@@ -866,31 +957,53 @@ function MondayLeadRow({ lead, accentClass, openLead, markContacted, markInfoSen
           </div>
         </div>
       </td>
-      <td className="border-r border-b border-[#d7dde8] px-2 py-1.5 text-center">
+      <td className="border-r border-b border-[#d7dde8] px-1.5 py-1 text-center">
         <button onClick={event => { event.stopPropagation(); openLead(lead.id) }} className="inline-flex h-7 w-7 items-center justify-center rounded border border-gray-300 text-gray-500 hover:bg-gray-50" aria-label="Open lead notes">
           <PanelTop size={15} />
         </button>
       </td>
       <td className={`border-r border-b border-[#d7dde8] px-0 py-0 text-center ${stageCellClass(lead.pipelineStage)}`} onClick={event => event.stopPropagation()}>
-        <select value={lead.pipelineStage} onChange={handleStage} className="h-10 w-full appearance-none bg-transparent px-1.5 text-center text-xs font-semibold text-inherit outline-none">
+        <select value={lead.pipelineStage} onChange={handleStage} className="h-9 w-full appearance-none bg-transparent px-1 text-center text-xs font-semibold text-inherit outline-none">
           {PIPELINE_STAGES.map(stage => <option key={stage} value={stage} className="bg-white text-gray-900">{stage}</option>)}
         </select>
       </td>
-      <td className="border-r border-b border-[#d7dde8] px-2 py-1.5 text-center">
-        <button onClick={event => { event.stopPropagation(); openLead(lead.id) }} className="rounded-md bg-green-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-green-800">Open lead</button>
+      <td className="border-r border-b border-[#d7dde8] px-1.5 py-1 text-center" onClick={event => event.stopPropagation()}>
+        <CellSelect
+          ariaLabel={`Next action for ${leadName(lead)}`}
+          value={lead.nextAction || suggestedNextAction(lead)}
+          options={NEXT_ACTION_OPTIONS}
+          onChange={value => updateLead(lead.id, { nextAction: value })}
+          className={overdue ? 'bg-red-50 text-red-700' : 'bg-green-700 text-white'}
+        />
       </td>
-      <td className="border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center text-gray-700">{lead.projectInterest || '-'}</td>
-      <td className="border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center text-gray-700">{lead.buyerType || 'Unknown'}</td>
-      <td className="border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center">
+      <td className="border-r border-b border-[#d7dde8] px-1.5 py-1 text-center" onClick={event => event.stopPropagation()}>
+        <CellSelect
+          ariaLabel={`Project for ${leadName(lead)}`}
+          value={lead.projectInterest || 'Unsure'}
+          options={['Beachwaters', 'Drift', 'Longstead', 'Drift and Beachwaters', 'Unsure']}
+          onChange={value => updateLead(lead.id, { projectInterest: value === 'Unsure' ? '' : value })}
+          className="bg-gray-50 text-gray-700"
+        />
+      </td>
+      <td className="border-r border-b border-[#d7dde8] px-1.5 py-1 text-center" onClick={event => event.stopPropagation()}>
+        <CellSelect
+          ariaLabel={`Buyer type for ${leadName(lead)}`}
+          value={lead.buyerType || 'Unknown'}
+          options={BUYER_TYPES}
+          onChange={value => updateLead(lead.id, { buyerType: value })}
+          className="bg-gray-50 text-gray-700"
+        />
+      </td>
+      <td className="border-r border-b border-[#d7dde8] px-2 py-1 text-center">
         {lead.email ? <a onClick={event => event.stopPropagation()} href={`mailto:${lead.email}`} className="font-medium text-[#2176d2] hover:underline">{lead.email}</a> : <span className="text-gray-400">-</span>}
       </td>
-      <td className="border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center">
-        {lead.phone ? <span className="inline-flex items-center gap-2 text-[#2176d2]"><span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-bold text-gray-500">NZ</span>{lead.phone}</span> : <span className="text-gray-400">-</span>}
+      <td className="border-r border-b border-[#d7dde8] px-2 py-1 text-center">
+        {lead.phone ? <span className="text-[#2176d2]">{lead.phone}</span> : <span className="text-gray-400">-</span>}
       </td>
-      <td className={`border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center text-xs font-semibold ${emailWasSent ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{emailWasSent ? 'Sent' : 'Not sent'}</td>
-      <td className={`border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center text-xs font-semibold ${sourceCellClass(source)}`}>{source}</td>
-      <td className="border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center text-gray-600">{formatShortDate(lead.createdAt)}</td>
-      <td className="border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center" onClick={event => event.stopPropagation()}>
+      <td className={`border-r border-b border-[#d7dde8] px-1.5 py-1 text-center text-xs font-semibold ${emailWasSent ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{emailWasSent ? 'Sent' : 'Not sent'}</td>
+      <td className={`border-r border-b border-[#d7dde8] px-1.5 py-1 text-center text-xs font-semibold ${sourceCellClass(source)}`}>{source}</td>
+      <td className="border-r border-b border-[#d7dde8] px-1.5 py-1 text-center text-gray-600">{formatShortDate(lead.createdAt)}</td>
+      <td className="border-b border-[#d7dde8] px-1.5 py-1 text-center" onClick={event => event.stopPropagation()}>
         <div className="inline-flex items-center gap-2">
           <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-[11px] font-bold text-gray-500">{ownerInitials(lead.assignedTo)}</span>
           <select
@@ -900,13 +1013,6 @@ function MondayLeadRow({ lead, accentClass, openLead, markContacted, markInfoSen
           >
             {ASSIGNEES.map(item => <option key={item}>{item}</option>)}
           </select>
-        </div>
-      </td>
-      <td className="border-b border-[#d7dde8] px-2.5 py-1.5">
-        <div className="flex items-center gap-2">
-          <button onClick={event => { event.stopPropagation(); markInfoSent(lead.id) }} className="rounded border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50">Info</button>
-          <button onClick={event => { event.stopPropagation(); archiveLead(lead.id) }} className="rounded border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50">Archive</button>
-          <span className={`min-w-0 truncate ${overdue ? 'font-semibold text-red-600' : 'text-gray-600'}`}>{suggestedNextAction(lead)}</span>
         </div>
       </td>
     </tr>

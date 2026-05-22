@@ -32,7 +32,22 @@ export const formatShortDate = value => {
   return new Date(value).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })
 }
 
-export const leadName = lead => lead?.fullName || [lead?.firstName, lead?.lastName].filter(Boolean).join(' ') || 'Unnamed lead'
+const cleanDisplayName = value => {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  if (text.includes('@')) return ''
+  if (/^sheet row\b/i.test(text)) return ''
+  return text
+}
+
+export const leadName = lead => cleanDisplayName(lead?.fullName) || cleanDisplayName([lead?.firstName, lead?.lastName].filter(Boolean).join(' ')) || 'No name captured'
+
+export const isSeedOrBlankLead = lead => {
+  const id = String(lead?.id || '')
+  const email = String(lead?.email || '').toLowerCase()
+  const hasContact = Boolean(cleanDisplayName(lead?.fullName) || cleanDisplayName([lead?.firstName, lead?.lastName].filter(Boolean).join(' ')) || lead?.email || lead?.phone)
+  return !hasContact || id.startsWith('lead-') || email.endsWith('@example.com')
+}
 
 export const isOverdue = value => Boolean(value && value < todayISO())
 export const isDueToday = value => value === todayISO()

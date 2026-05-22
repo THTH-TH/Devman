@@ -11,7 +11,7 @@ import {
   PIPELINE_STAGES,
   PIPELINE_WON_STAGE,
 } from './salesConstants'
-import { leadName } from './salesUtils'
+import { isSeedOrBlankLead, leadName } from './salesUtils'
 
 const genId = () => crypto.randomUUID()
 
@@ -296,7 +296,7 @@ const useSalesStore = create((set, get) => ({
       const sheetFailure = [connections, mappings, runs].find(result => result.error)
       set({
         projects: projects.data.map(mapProject),
-        leads: leads.data.map(mapLead),
+        leads: leads.data.map(mapLead).filter(lead => !isSeedOrBlankLead(lead)),
         units: units.data.map(mapUnit),
         tasks: tasks.data.map(mapTask),
         activities: activities.data.map(mapActivity),

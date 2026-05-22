@@ -1,22 +1,23 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
 import AuthGate from './components/AuthGate'
 import Dashboard from './pages/Dashboard'
-import AllProjects from './pages/AllProjects'
-import NewProject from './pages/NewProject'
-import ProjectWorkspace from './pages/ProjectWorkspace'
-import Workflow from './pages/Workflow'
-import ChecklistPage from './pages/ChecklistPage'
-import Tasks from './pages/Tasks'
-import Calendar from './pages/Calendar'
-import Documents from './pages/Documents'
-import Team from './pages/Team'
-import Settings from './pages/Settings'
-import SharePage from './pages/SharePage'
-import SalesHub from './sales/SalesHub'
 import useStore from './store/useStore'
 import { supabase } from './lib/supabase'
+
+const AllProjects = lazy(() => import('./pages/AllProjects'))
+const NewProject = lazy(() => import('./pages/NewProject'))
+const ProjectWorkspace = lazy(() => import('./pages/ProjectWorkspace'))
+const Workflow = lazy(() => import('./pages/Workflow'))
+const ChecklistPage = lazy(() => import('./pages/ChecklistPage'))
+const Tasks = lazy(() => import('./pages/Tasks'))
+const Calendar = lazy(() => import('./pages/Calendar'))
+const Documents = lazy(() => import('./pages/Documents'))
+const Team = lazy(() => import('./pages/Team'))
+const Settings = lazy(() => import('./pages/Settings'))
+const SharePage = lazy(() => import('./pages/SharePage'))
+const SalesHub = lazy(() => import('./sales/SalesHub'))
 
 function LoadingScreen() {
   return (
@@ -63,23 +64,25 @@ function ProtectedApp({ authLoading, session, loading, error }) {
   if (error) return <ErrorScreen message={error} />
 
   return (
-    <Routes>
-      <Route path="/" element={<Layout />}>
-        <Route index element={<Dashboard />} />
-        <Route path="projects" element={<AllProjects />} />
-        <Route path="projects/new" element={<NewProject />} />
-        <Route path="projects/:projectId" element={<ProjectWorkspace />} />
-        <Route path="workflow" element={<Workflow />} />
-        <Route path="checklist/:projectId" element={<ChecklistPage />} />
-        <Route path="tasks" element={<Tasks />} />
-        <Route path="calendar" element={<Calendar />} />
-        <Route path="schedule" element={<Navigate to="/calendar" replace />} />
-        <Route path="documents" element={<Documents />} />
-        <Route path="team" element={<Team />} />
-        <Route path="settings" element={<Settings />} />
-        <Route path="sales/*" element={<SalesHub />} />
-      </Route>
-    </Routes>
+    <Suspense fallback={<LoadingScreen />}>
+      <Routes>
+        <Route path="/" element={<Layout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="projects" element={<AllProjects />} />
+          <Route path="projects/new" element={<NewProject />} />
+          <Route path="projects/:projectId" element={<ProjectWorkspace />} />
+          <Route path="workflow" element={<Workflow />} />
+          <Route path="checklist/:projectId" element={<ChecklistPage />} />
+          <Route path="tasks" element={<Tasks />} />
+          <Route path="calendar" element={<Calendar />} />
+          <Route path="schedule" element={<Navigate to="/calendar" replace />} />
+          <Route path="documents" element={<Documents />} />
+          <Route path="team" element={<Team />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="sales/*" element={<SalesHub />} />
+        </Route>
+      </Routes>
+    </Suspense>
   )
 }
 
@@ -114,10 +117,12 @@ export default function App() {
 
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <Routes>
-        <Route path="/share/:token" element={<SharePage />} />
-        <Route path="/*" element={<ProtectedApp authLoading={authLoading} session={session} loading={loading} error={error} />} />
-      </Routes>
+      <Suspense fallback={<LoadingScreen />}>
+        <Routes>
+          <Route path="/share/:token" element={<SharePage />} />
+          <Route path="/*" element={<ProtectedApp authLoading={authLoading} session={session} loading={loading} error={error} />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

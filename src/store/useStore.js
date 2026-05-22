@@ -519,35 +519,31 @@ const useStore = create((set, get) => ({
     try {
       if (user) await get().ensureProfile(user)
 
-      const [p, c, m, a, d, t] = await Promise.all([
+      const [p, c, m, t] = await Promise.all([
         supabase.from('projects').select('*').order('created_at', { ascending: false }),
         supabase.from('checklist_items').select('*'),
         supabase.from('milestones').select('*'),
-        supabase.from('activity_log').select('*').order('occurred_at', { ascending: false }).limit(500),
-        supabase.from('documents').select('*').order('created_at', { ascending: false }),
         supabase.from('team_members').select('*').order('name'),
       ])
 
       if (p.error) throw p.error
       if (c.error) throw c.error
       if (m.error) throw m.error
-      if (a.error) throw a.error
-      if (d.error) throw d.error
       if (t.error) throw t.error
 
       set({
         projects: p.data.map(mapProject),
         checklistItems: c.data.map(mapItem),
         milestones: m.data.map(mapMilestone),
-        activityLog: a.data.map(mapActivity),
-        documents: d.data.map(mapDocument),
         teamMembers: t.data.map(mapTeamMember),
         loading: false,
       })
 
-      // New tables — load gracefully (tables may not exist yet)
+      // Secondary tables load after the shell opens so first paint is not blocked by large registers/logs.
       try {
-        const [tr, sr, ev, co, ct, pc, dl, st, sti, pp, pl, psr, ds, aid] = await Promise.all([
+        const [a, d, tr, sr, ev, co, ct, pc, dl, st, sti, pp, pl, psr, ds, aid] = await Promise.all([
+          supabase.from('activity_log').select('*').order('occurred_at', { ascending: false }).limit(500),
+          supabase.from('documents').select('*').order('created_at', { ascending: false }),
           supabase.from('tasks').select('*').order('created_at', { ascending: false }),
           supabase.from('schedule_tasks').select('*').order('sort_order'),
           supabase.from('calendar_events').select('*').order('event_date'),
@@ -563,6 +559,8 @@ const useStore = create((set, get) => ({
           supabase.from('document_shares').select('*').order('created_at', { ascending: false }),
           supabase.from('ai_action_drafts').select('*').order('created_at', { ascending: false }),
         ])
+        if (!a.error) set({ activityLog: a.data.map(mapActivity) })
+        if (!d.error) set({ documents: d.data.map(mapDocument) })
         if (!tr.error) set({ tasks: tr.data.map(mapTask) })
         if (!sr.error) set({ scheduleTasks: sr.data.map(mapScheduleTask) })
         if (!ev.error) set({ calendarEvents: ev.data.map(mapCalendarEvent) })

@@ -63,8 +63,10 @@ const inputCls = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 te
 const SHEET_CORE_FIELDS = [
   ['createdAt', 'Date received'],
   ['fullName', 'Name'],
+  ['projectInterest', 'Project'],
   ['email', 'Email'],
   ['phone', 'Phone'],
+  ['source', 'Lead source'],
   ['emailSent', 'Email sent'],
 ]
 const NEXT_ACTION_OPTIONS = [
@@ -106,6 +108,24 @@ function LoadingStrip({ label = 'Loading' }) {
       <div className="h-1 w-full bg-ocean-100">
         <div className="h-full w-1/2 animate-pulse rounded-r-full bg-ocean-500" />
       </div>
+    </div>
+  )
+}
+
+function MappingDiagnostics({ diagnostics = [] }) {
+  if (!diagnostics.length) return null
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {diagnostics.map(item => (
+        <span
+          key={item.field}
+          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${item.header ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}
+          title={item.header ? `${item.label} detected from ${item.header}` : `${item.label} was not detected`}
+        >
+          {item.header ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+          {item.label}: {item.header || 'not found'}
+        </span>
+      ))}
     </div>
   )
 }
@@ -1298,6 +1318,8 @@ function ProjectLeadSheetConnector({ project }) {
   }
   const previewValue = (row, field) => {
     const header = fieldMap[field]
+    if (field === 'projectInterest' && !header) return project.name
+    if (field === 'source' && !header) return form.sourceHint || '-'
     if (field === 'fullName' && !header) {
       const first = fieldMap.firstName ? row.values?.[fieldMap.firstName] : ''
       const last = fieldMap.lastName ? row.values?.[fieldMap.lastName] : ''
@@ -1392,7 +1414,7 @@ function ProjectLeadSheetConnector({ project }) {
               {projectConnections.length ? 'Connected' : 'Not connected'}
             </Badge>
           </div>
-          <p className="mt-1 text-sm text-gray-500">Paste the {project.name} lead sheet link here. DevMan pulls date received, name, email, phone, and email sent into this project.</p>
+          <p className="mt-1 text-sm text-gray-500">Paste the {project.name} lead sheet link here. DevMan scans the sheet to find name, project, email, phone, lead source, enquiry date, and email sent.</p>
         </div>
         {projectConnections.length > 0 && (
           <div className="text-right text-xs text-gray-500">
@@ -1440,6 +1462,7 @@ function ProjectLeadSheetConnector({ project }) {
               <h3 className="font-bold text-gray-900">{preview.spreadsheetTitle || 'Google Sheet'}</h3>
               <p className="mt-1 text-sm text-gray-500">Tab: {preview.sheetName}. Found {preview.headers.length} columns. Previewing the first rows before import.</p>
               {preview.serviceAccountEmail && <p className="mt-1 text-xs font-semibold text-forest-700">If private, share the sheet with {preview.serviceAccountEmail}</p>}
+              <MappingDiagnostics diagnostics={preview.mappingDiagnostics} />
             </div>
           </div>
           <div className="mt-3 overflow-x-auto">
@@ -1884,12 +1907,16 @@ function SheetSyncPage() {
   const coreFields = [
     ['createdAt', 'Date received'],
     ['fullName', 'Name'],
+    ['projectInterest', 'Project'],
     ['email', 'Email'],
     ['phone', 'Phone'],
+    ['source', 'Lead source'],
     ['emailSent', 'Email sent'],
   ]
   const previewValue = (row, field) => {
     const header = fieldMap[field]
+    if (field === 'projectInterest' && !header) return form.projectHint || '-'
+    if (field === 'source' && !header) return form.sourceHint || '-'
     if (field === 'fullName' && !header) {
       const first = fieldMap.firstName ? row.values?.[fieldMap.firstName] : ''
       const last = fieldMap.lastName ? row.values?.[fieldMap.lastName] : ''
@@ -1916,7 +1943,7 @@ function SheetSyncPage() {
           <div className="flex items-start gap-3 rounded-lg bg-forest-50 p-3 text-sm text-forest-800">
             <AlertCircle className="mt-0.5 shrink-0" size={16} />
             <div>
-              Paste a Google Sheet link, choose the project, then connect and sync. If the sheet is set to anyone-with-link viewer, DevMan can read it directly; otherwise share it with the service account shown after preview.
+              Paste a Google Sheet link, choose the project, then connect and sync. DevMan scans the headers and sample rows to detect lead name, project, email, phone, source and enquiry date. If the sheet is private, share it with the service account shown after preview.
               {preview?.serviceAccountEmail && <div className="mt-1 font-semibold">Share the sheet with: {preview.serviceAccountEmail}</div>}
             </div>
           </div>
@@ -1940,6 +1967,7 @@ function SheetSyncPage() {
                 <div>
                   <h2 className="font-bold text-gray-900">{preview.spreadsheetTitle}</h2>
                   <p className="mt-1 text-sm text-gray-500">Tab: {preview.sheetName}. DevMan found {preview.headers.length} columns. Access: {preview.accessMode === 'public-link' ? 'viewable link' : 'service account'}.</p>
+                  <MappingDiagnostics diagnostics={preview.mappingDiagnostics} />
                 </div>
                 <Button onClick={saveConnection} disabled={busy || !sheetSyncReady}>Save without syncing</Button>
               </div>

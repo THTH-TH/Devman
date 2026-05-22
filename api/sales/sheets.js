@@ -6,26 +6,39 @@ import { createClient } from '@supabase/supabase-js'
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 
 const FIELD_ALIASES = {
-  leadId: ['lead id', 'id', 'submission id', 'response id'],
-  fullName: ['name', 'full name', 'lead name', 'contact name', 'buyer name', 'customer name'],
-  firstName: ['first name', 'firstname', 'first'],
-  lastName: ['last name', 'lastname', 'surname'],
-  email: ['email', 'email address', 'e-mail'],
-  phone: ['phone', 'phone number', 'mobile', 'mobile number', 'contact number'],
-  source: ['source', 'lead source', 'enquiry source', 'channel'],
-  projectInterest: ['project', 'project interest', 'development', 'property', 'listing'],
+  leadId: ['lead id', 'lead_id', 'id', 'submission id', 'response id', 'entry id', 'form id'],
+  fullName: ['name', 'full name', 'lead name', 'contact name', 'buyer name', 'customer name', 'client name', 'your name', 'enquirer name', 'enquiry name'],
+  firstName: ['first name', 'firstname', 'first', 'given name'],
+  lastName: ['last name', 'lastname', 'surname', 'family name'],
+  email: ['email', 'email address', 'e-mail', 'e mail', 'your email', 'contact email'],
+  phone: ['phone', 'phone number', 'mobile', 'mobile number', 'contact number', 'telephone', 'tel', 'cell', 'cellphone', 'best phone'],
+  source: ['source', 'lead source', 'enquiry source', 'inquiry source', 'channel', 'platform', 'origin', 'record source', 'utm source', 'how did you hear', 'where did you hear'],
+  projectInterest: ['project', 'project interest', 'development', 'property', 'listing', 'listing name', 'property interest', 'interested project', 'which project', 'project name'],
   buyerType: ['buyer type', 'type', 'buyer profile'],
   financeStatus: ['finance', 'finance status', 'pre approval', 'pre-approval'],
-  budgetRange: ['budget', 'budget range', 'price range'],
+  budgetRange: ['budget', 'budget range', 'price range', 'max budget', 'purchase budget'],
   depositCapacity: ['deposit', 'deposit capacity'],
   preferredUnits: ['preferred unit', 'preferred units', 'unit', 'unit interest'],
-  message: ['message', 'notes', 'enquiry', 'comments', 'question'],
-  createdAt: ['created', 'created at', 'date', 'date received', 'received', 'received at', 'timestamp', 'submitted at', 'submission date'],
+  message: ['message', 'notes', 'enquiry', 'inquiry', 'comments', 'question', 'description', 'body', 'lead message', 'form message'],
+  createdAt: ['created', 'created at', 'created date', 'date', 'date received', 'date recieved', 'received', 'received at', 'timestamp', 'submitted', 'submitted at', 'submitted on', 'submission date', 'enquiry date', 'inquiry date', 'enquiry received', 'time submitted', 'date time', 'datetime'],
   nextAction: ['next action', 'follow up', 'follow-up'],
   nextActionDate: ['next action date', 'follow up date', 'follow-up date'],
   temperature: ['temperature', 'lead temperature', 'hot warm cold'],
-  emailSent: ['email sent', 'sent email', 'info sent', 'auto email sent', 'brochure sent', 'pack sent'],
+  emailSent: ['email sent', 'sent email', 'info sent', 'auto email sent', 'automatic email sent', 'brochure sent', 'pack sent', 'response sent', 'reply sent', 'information sent'],
 }
+
+const CORE_MAPPING_LABELS = {
+  fullName: 'Name',
+  projectInterest: 'Project',
+  email: 'Email',
+  phone: 'Phone',
+  source: 'Lead source',
+  createdAt: 'Enquiry date',
+  emailSent: 'Email sent',
+}
+
+const SOURCE_WORDS = ['meta', 'facebook', 'instagram', 'website', 'web', 'trade me', 'trademe', 'email', 'phone', 'agent', 'referral', 'walk in', 'walk-in', 'hubspot', 'google']
+const PROJECT_WORDS = ['beachwaters', 'drift', 'longstead', 'toorea', 'dickson']
 
 const WORKFLOW_DEFAULTS = {
   buyerType: 'Unknown',
@@ -105,7 +118,14 @@ function parseSheetGid(value = '') {
 }
 
 function normalise(value = '') {
-  return String(value).trim().toLowerCase().replace(/\s+/g, ' ')
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[_\-:/\\()[\]{}?.,]+/g, ' ')
+    .replace(/[^a-z0-9+@ ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function cleanPhone(value = '') {
@@ -116,14 +136,189 @@ function hash(value) {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex')
 }
 
-function autoMap(headers) {
-  const normalised = headers.map(header => normalise(header))
+function includesPhrase(text, phrase) {
+  const cleanText = ` ${normalise(text)} `
+  const cleanPhrase = ` ${normalise(phrase)} `
+  return cleanText.includes(cleanPhrase)
+}
+
+function sampleValues(rows = [], header) {
+  return rows
+    .slice(0, 40)
+    .map(row => String(row.values?.[header] || '').trim())
+    .filter(Boolean)
+}
+
+function ratio(values, predicate) {
+  if (!values.length) return 0
+  return values.filter(predicate).length / values.length
+}
+
+function looksLikeEmail(value) {
+  return /[^\s@]+@[^\s@]+\.[^\s@]+/.test(String(value || '').trim())
+}
+
+function looksLikePhone(value) {
+  const text = String(value || '').trim()
+  const digits = text.replace(/\D/g, '')
+  if (digits.length < 7 || digits.length > 16) return false
+  if (looksLikeEmail(text)) return false
+  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/.test(text)) return false
+  return /(^\+?\d|0\d)/.test(text.replace(/\s+/g, ''))
+}
+
+function looksLikeName(value) {
+  const text = String(value || '').trim()
+  if (!text || looksLikeEmail(text) || looksLikePhone(text)) return false
+  if (/\d/.test(text)) return false
+  const parts = text.split(/\s+/).filter(Boolean)
+  return parts.length >= 1 && parts.length <= 5 && /[a-zA-Z]/.test(text)
+}
+
+function looksLikeDate(value) {
+  const text = String(value || '').trim()
+  if (!text || looksLikePhone(text)) return false
+  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(\s+\d{1,2}:\d{2})?/.test(text)) return true
+  if (/^\d{4}[/-]\d{1,2}[/-]\d{1,2}/.test(text)) return true
+  if (/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(text) && /\d{1,2}/.test(text)) return true
+  if (/\d{1,2}:\d{2}/.test(text) && /\d{4}/.test(text)) return true
+  return false
+}
+
+function looksLikeBooleanSent(value) {
+  const text = normalise(value)
+  return ['yes', 'y', 'true', 'sent', 'done', '1', 'no', 'n', 'false', 'not sent', 'unsent', '0'].includes(text) || looksLikeDate(value)
+}
+
+function containsKnownValue(value, knownValues) {
+  const text = normalise(value)
+  return knownValues.some(known => includesPhrase(text, known))
+}
+
+function headerScore(header, field) {
+  const text = normalise(header)
+  const aliases = FIELD_ALIASES[field] || []
+  const normalisedAliases = aliases.map(alias => normalise(alias))
+  let score = normalisedAliases.includes(text) ? 100 : 0
+  if (!score && aliases.some(alias => includesPhrase(text, alias))) score = 72
+  if (!score && aliases.some(alias => normalise(alias).split(' ').every(token => token && text.includes(token)))) score = 58
+
+  if (field === 'fullName' && /\b(email|mail|phone|mobile|number|source|date|created|sent|message|comment|unit|project|budget|finance)\b/.test(text)) score -= 80
+  if (field === 'phone' && /\b(email|mail|date|created|sent|source)\b/.test(text)) score -= 60
+  if (field === 'email' && /\b(sent|date|source|phone|mobile)\b/.test(text)) score -= 60
+  if (field === 'createdAt' && /\b(phone|mobile|email sent|sent email|source)\b/.test(text)) score -= 55
+  if (field === 'source' && /\b(utm medium|campaign|name|email|phone)\b/.test(text)) score -= 25
+  return score
+}
+
+function valueScore(values, field) {
+  if (!values.length) return 0
+  if (field === 'email') return ratio(values, looksLikeEmail) * 95
+  if (field === 'phone') return ratio(values, looksLikePhone) * 90
+  if (field === 'createdAt') return ratio(values, looksLikeDate) * 80
+  if (field === 'fullName') return ratio(values, looksLikeName) * 45
+  if (field === 'source') return ratio(values, value => containsKnownValue(value, SOURCE_WORDS)) * 75
+  if (field === 'projectInterest') return ratio(values, value => containsKnownValue(value, PROJECT_WORDS)) * 80
+  if (field === 'emailSent') return ratio(values, looksLikeBooleanSent) * 60
+  if (field === 'message') return ratio(values, value => String(value || '').trim().length > 20) * 45
+  return 0
+}
+
+function fieldScore(header, field, values) {
+  return headerScore(header, field) + valueScore(values, field)
+}
+
+function autoMap(headers, rows = []) {
   const map = {}
-  Object.entries(FIELD_ALIASES).forEach(([field, aliases]) => {
-    const index = normalised.findIndex(header => aliases.includes(header))
-    if (index !== -1) map[field] = headers[index]
+  const usedHeaders = new Set()
+  const fieldOrder = [
+    'leadId',
+    'email',
+    'phone',
+    'createdAt',
+    'emailSent',
+    'source',
+    'projectInterest',
+    'firstName',
+    'lastName',
+    'fullName',
+    'buyerType',
+    'financeStatus',
+    'budgetRange',
+    'depositCapacity',
+    'preferredUnits',
+    'message',
+    'temperature',
+    'nextAction',
+    'nextActionDate',
+  ]
+  const thresholds = {
+    leadId: 82,
+    email: 55,
+    phone: 50,
+    createdAt: 52,
+    fullName: 45,
+    firstName: 65,
+    lastName: 65,
+    source: 50,
+    projectInterest: 50,
+    emailSent: 54,
+  }
+
+  fieldOrder.forEach(field => {
+    let best = null
+    headers.forEach(header => {
+      if (!header || usedHeaders.has(header)) return
+      const values = sampleValues(rows, header)
+      const score = fieldScore(header, field, values)
+      if (!best || score > best.score) best = { header, score }
+    })
+    const threshold = thresholds[field] ?? 58
+    if (best && best.score >= threshold) {
+      map[field] = best.header
+      usedHeaders.add(best.header)
+    }
   })
+
+  if (!map.fullName && map.firstName && map.lastName) return map
+  if (map.fullName) {
+    delete map.firstName
+    delete map.lastName
+  }
   return map
+}
+
+function mappingDiagnostics(headers, rows, fieldMap) {
+  return Object.entries(CORE_MAPPING_LABELS).map(([field, label]) => {
+    const header = fieldMap[field] || ''
+    const values = header ? sampleValues(rows, header) : []
+    const confidence = header ? Math.min(100, Math.round(fieldScore(header, field, values))) : 0
+    return {
+      field,
+      label,
+      header,
+      confidence,
+      status: header ? 'detected' : 'missing',
+    }
+  })
+}
+
+function validatedStoredMap(storedMap = {}, headers = [], rows = []) {
+  const headerSet = new Set(headers)
+  const minimumScores = {
+    fullName: 20,
+    projectInterest: 20,
+    email: 38,
+    phone: 34,
+    source: 20,
+    createdAt: 34,
+    emailSent: 24,
+  }
+  return Object.fromEntries(Object.entries(storedMap).filter(([field, header]) => {
+    if (!headerSet.has(header)) return false
+    if (!Object.prototype.hasOwnProperty.call(minimumScores, field)) return true
+    return fieldScore(header, field, sampleValues(rows, header)) >= minimumScores[field]
+  }))
 }
 
 function rowsToObjects(values, headerRow = 1) {
@@ -341,10 +536,12 @@ async function preview(body) {
     rangeA1: body.rangeA1,
     headerRow: body.headerRow || 1,
   })
+  const suggestedFieldMap = autoMap(data.headers, data.rows)
   return {
     ...data,
     spreadsheetId,
-    suggestedFieldMap: autoMap(data.headers),
+    suggestedFieldMap,
+    mappingDiagnostics: mappingDiagnostics(data.headers, data.rows, suggestedFieldMap),
     rows: data.rows.slice(0, 12),
   }
 }
@@ -397,7 +594,10 @@ async function syncConnection(client, connectionId) {
       rangeA1: connection.range_a1,
       headerRow: mapping?.header_row || 1,
     })
-    const fieldMap = { ...autoMap(sheet.headers), ...(mapping?.field_map || {}) }
+    const fieldMap = {
+      ...autoMap(sheet.headers, sheet.rows),
+      ...validatedStoredMap(mapping?.field_map || {}, sheet.headers, sheet.rows),
+    }
     const defaults = mapping?.defaults || {}
     const { data: existingRows, error: existingError } = await client
       .from('sales_leads')

@@ -377,6 +377,16 @@ function normaliseTemperature(value, fallback = 'Warm') {
   return fallback
 }
 
+function normaliseProjectInterest(value, fallback = '') {
+  const text = normalise(value)
+  if (!text) return fallback
+  const matched = []
+  if (text.includes('beachwaters')) matched.push('Beachwaters')
+  if (text.includes('drift') || text.includes('dickson')) matched.push('Drift')
+  if (text.includes('longstead')) matched.push('Longstead')
+  return matched.length ? [...new Set(matched)].join(' and ') : String(value || fallback).trim()
+}
+
 function parseDate(value) {
   if (!value) return ''
   const text = String(value).trim()
@@ -406,7 +416,7 @@ function buildLeadFromRow({ raw, fieldMap, defaults, connection, rowNumber }) {
   const email = String(getMapped(raw, fieldMap, 'email')).trim()
   const phone = String(getMapped(raw, fieldMap, 'phone')).trim()
   const message = getMapped(raw, fieldMap, 'message')
-  const projectInterest = getMapped(raw, fieldMap, 'projectInterest') || defaults.projectInterest || connection.project_hint || ''
+  const projectInterest = normaliseProjectInterest(getMapped(raw, fieldMap, 'projectInterest'), defaults.projectInterest || connection.project_hint || '')
   const source = getMapped(raw, fieldMap, 'source') || defaults.source || connection.source_hint || 'Other'
   const leadId = getMapped(raw, fieldMap, 'leadId')
   const createdAt = getMapped(raw, fieldMap, 'createdAt')

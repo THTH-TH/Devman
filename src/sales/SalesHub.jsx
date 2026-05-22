@@ -51,6 +51,7 @@ import {
   formatDate,
   formatShortDate,
   isOverdue,
+  leadMatchesProject,
   leadName,
   money,
   projectMetrics,
@@ -767,7 +768,7 @@ function LeadsTable({ openLead, projectName = '', onAddLead }) {
     const q = search.toLowerCase()
     const base = leads.filter(lead => !lead.archived).filter(lead => {
       if (q && ![lead.fullName, lead.email, lead.phone].join(' ').toLowerCase().includes(q)) return false
-      if (filters.project && !lead.projectInterest?.includes(filters.project)) return false
+      if (filters.project && !leadMatchesProject(lead, filters.project)) return false
       if (filters.source && lead.source !== filters.source) return false
       if (filters.stage && lead.pipelineStage !== filters.stage) return false
       if (filters.assignedTo && lead.assignedTo !== filters.assignedTo) return false
@@ -1086,7 +1087,7 @@ function ProjectsPage({ openLead }) {
         <div className="grid gap-4 xl:grid-cols-3">
           {projects.map(project => {
             const metrics = projectMetrics(project, activeLeads, units)
-            const projectLeads = activeLeads.filter(lead => lead.projectInterest?.includes(project.name))
+            const projectLeads = activeLeads.filter(lead => leadMatchesProject(lead, project.name))
             const closeLeads = projectLeads.filter(lead => PIPELINE_CLOSE_STAGES.includes(lead.pipelineStage))
             return (
               <Link key={project.id} to={`/sales/projects/${project.id}`} className={`rounded-xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${project.id === 'beachwaters' ? 'border-forest-200 ring-2 ring-forest-50' : 'border-gray-100'}`}>
@@ -1148,7 +1149,7 @@ function ProjectSalesPage({ openLead, onAddLead }) {
   if (!project) return <Navigate to="/sales/projects" replace />
 
   const activeLeads = leads.filter(lead => !lead.archived && lead.pipelineStage !== PIPELINE_CLOSED_STAGE)
-  const projectLeads = activeLeads.filter(lead => lead.projectInterest?.includes(project.name))
+  const projectLeads = activeLeads.filter(lead => leadMatchesProject(lead, project.name))
   const projectUnits = units.filter(unit => unit.projectId === project.id)
   const metrics = projectMetrics(project, activeLeads, units)
   const closeLeads = projectLeads.filter(lead => PIPELINE_CLOSE_STAGES.includes(lead.pipelineStage))
@@ -1561,7 +1562,7 @@ function LeadDrawer({ lead, onClose }) {
   const [note, setNote] = useState('')
   const [unitId, setUnitId] = useState('')
   const projectOptions = projects.map(project => project.name)
-  const matchingUnits = units.filter(unit => !form.projectInterest || unit.projectName === form.projectInterest || form.projectInterest.includes(unit.projectName))
+  const matchingUnits = units.filter(unit => !form.projectInterest || leadMatchesProject(form, unit.projectName))
   const gmailUrl = lead.email ? `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(lead.email)}` : ''
 
   useEffect(() => setForm(lead), [lead])
@@ -1689,7 +1690,7 @@ function PresalesPage({ openLead }) {
         <div className="grid gap-4 xl:grid-cols-3">
           {projects.map(project => {
             const metrics = projectMetrics(project, activeLeads, units)
-            const likelyLeads = activeLeads.filter(lead => lead.projectInterest?.includes(project.name) && ['Hot', 'Warm'].includes(lead.temperature) && PIPELINE_CLOSE_STAGES.includes(lead.pipelineStage))
+            const likelyLeads = activeLeads.filter(lead => leadMatchesProject(lead, project.name) && ['Hot', 'Warm'].includes(lead.temperature) && PIPELINE_CLOSE_STAGES.includes(lead.pipelineStage))
             return (
               <div key={project.id} className={`rounded-xl border bg-white p-5 shadow-sm ${project.id === 'beachwaters' ? 'border-forest-200 ring-2 ring-forest-50' : 'border-gray-100'}`}>
                 <div className="flex items-start justify-between gap-3">

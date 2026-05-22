@@ -49,6 +49,15 @@ export const isSeedOrBlankLead = lead => {
   return !hasContact || id.startsWith('lead-') || email.endsWith('@example.com')
 }
 
+export const normaliseProjectText = value => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+
+export const leadMatchesProject = (lead, projectName) => {
+  if (!projectName) return true
+  const leadProject = normaliseProjectText(lead?.projectInterest)
+  const project = normaliseProjectText(projectName)
+  return Boolean(leadProject && project && (leadProject.includes(project) || project.includes(leadProject)))
+}
+
 export const isOverdue = value => Boolean(value && value < todayISO())
 export const isDueToday = value => value === todayISO()
 
@@ -76,7 +85,7 @@ export function groupCounts(items, keyFn) {
 
 export function projectMetrics(project, leads, units) {
   const projectUnits = units.filter(unit => unit.projectId === project.id)
-  const projectLeads = leads.filter(lead => !lead.archived && lead.projectInterest?.includes(project.name))
+  const projectLeads = leads.filter(lead => !lead.archived && leadMatchesProject(lead, project.name))
   const totalUnits = project.totalUnits || projectUnits.length
   const availableUnits = projectUnits.filter(unit => unit.status === 'Available').length
   const reservedUnits = projectUnits.filter(unit => unit.status === 'Reserved').length
@@ -176,7 +185,7 @@ export function suggestedUnitsForLead(lead, units) {
   const budgetMax = parseBudgetMax(lead.budgetRange)
   return units
     .filter(unit => unit.status === 'Available' || unit.status === 'Enquiry')
-    .filter(unit => !lead.projectInterest || lead.projectInterest.includes(unit.projectName))
+    .filter(unit => !lead.projectInterest || leadMatchesProject(lead, unit.projectName))
     .filter(unit => !budgetMax || !unit.price || Number(unit.price) <= budgetMax)
     .sort((a, b) => Number(a.price || 0) - Number(b.price || 0))
     .slice(0, 5)

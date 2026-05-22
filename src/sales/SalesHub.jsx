@@ -60,6 +60,13 @@ import {
 } from './salesUtils'
 
 const inputCls = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-forest-400 focus:ring-2 focus:ring-forest-100'
+const SHEET_CORE_FIELDS = [
+  ['createdAt', 'Date received'],
+  ['fullName', 'Name'],
+  ['email', 'Email'],
+  ['phone', 'Phone'],
+  ['emailSent', 'Email sent'],
+]
 
 function Badge({ children, className = 'bg-gray-100 text-gray-600' }) {
   return <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${className}`}>{children}</span>
@@ -73,6 +80,20 @@ function Button({ children, className = '', ...props }) {
     >
       {children}
     </button>
+  )
+}
+
+function LoadingStrip({ label = 'Loading' }) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-ocean-100 bg-ocean-50">
+      <div className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-ocean-800">
+        <RefreshCw size={15} className="animate-spin" />
+        {label}
+      </div>
+      <div className="h-1 w-full bg-ocean-100">
+        <div className="h-full w-1/2 animate-pulse rounded-r-full bg-ocean-500" />
+      </div>
+    </div>
   )
 }
 
@@ -658,18 +679,18 @@ function LeadsTable({ openLead, projectName = '', onAddLead }) {
   }
   const groups = [
     {
-      id: 'new',
-      title: 'New Leads',
-      titleClass: 'text-[#579bfc]',
-      accentClass: 'bg-[#579bfc]',
-      rows: filtered.filter(lead => lead.pipelineStage === PIPELINE_NEW_STAGE),
-    },
-    {
       id: 'active',
       title: 'Active Leads',
       titleClass: 'text-[#1f8b4c]',
       accentClass: 'bg-[#00a25b]',
       rows: filtered.filter(lead => lead.pipelineStage !== PIPELINE_NEW_STAGE && lead.pipelineStage !== PIPELINE_CLOSED_STAGE),
+    },
+    {
+      id: 'new',
+      title: 'New Leads',
+      titleClass: 'text-[#579bfc]',
+      accentClass: 'bg-[#579bfc]',
+      rows: filtered.filter(lead => lead.pipelineStage === PIPELINE_NEW_STAGE),
     },
     {
       id: 'closed',
@@ -681,16 +702,16 @@ function LeadsTable({ openLead, projectName = '', onAddLead }) {
   ].filter((group, index) => index === 0 || group.rows.length)
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <button onClick={onAddLead} className="inline-flex overflow-hidden rounded-md bg-ocean-600 text-sm font-semibold text-white shadow-sm hover:bg-ocean-700">
-          <span className="px-4 py-2.5">New lead</span>
+          <span className="px-3 py-2">New lead</span>
           <span className="inline-flex items-center border-l border-white/20 px-2"><ChevronDown size={16} /></span>
         </button>
         <div className="relative min-w-64">
-          <Search className="absolute left-0 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+          <Search className="absolute left-0 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
           <input
-            className="w-full border-0 bg-transparent py-2 pl-8 pr-3 text-base text-gray-900 outline-none placeholder:text-gray-500 focus:ring-0"
+            className="w-full border-0 bg-transparent py-2 pl-8 pr-3 text-sm text-gray-900 outline-none placeholder:text-gray-500 focus:ring-0"
             placeholder="Search"
             value={search}
             onChange={event => setSearch(event.target.value)}
@@ -703,7 +724,7 @@ function LeadsTable({ openLead, projectName = '', onAddLead }) {
         <BoardSelect icon={MoreHorizontal} value={sort} onChange={setSort} options={[['stale', 'Stale first'], ['newest', 'Newest'], ['nextAction', 'Next action'], ['hottest', 'Hottest'], ['lastContacted', 'Last contacted']]} label="Sort" />
       </div>
 
-      <div className="space-y-10">
+      <div className="space-y-8">
         {groups.map(group => (
           <MondayLeadGroup
             key={group.id}
@@ -720,8 +741,8 @@ function LeadsTable({ openLead, projectName = '', onAddLead }) {
         ))}
       </div>
 
-      <button type="button" className="inline-flex items-center gap-3 rounded-md border border-gray-200 bg-white px-4 py-3 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50">
-        <Plus size={20} /> Add new group
+      <button type="button" className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 shadow-sm hover:bg-gray-50">
+        <Plus size={16} /> Add lead group
       </button>
     </div>
   )
@@ -734,7 +755,7 @@ function BoardSelect({ icon: Icon, value, onChange, options, label, wide = false
       <select
         value={value || ''}
         onChange={event => onChange(event.target.value)}
-        className="h-10 w-full appearance-none rounded-md border border-transparent bg-white pl-9 pr-8 text-base font-medium text-gray-700 outline-none hover:bg-gray-50 focus:border-ocean-200 focus:ring-2 focus:ring-ocean-100"
+        className="h-9 w-full appearance-none rounded-md border border-transparent bg-white pl-9 pr-8 text-sm font-medium text-gray-700 outline-none hover:bg-gray-50 focus:border-ocean-200 focus:ring-2 focus:ring-ocean-100"
       >
         <option value="">{label}</option>
         {options.map(option => {
@@ -751,33 +772,33 @@ function BoardSelect({ icon: Icon, value, onChange, options, label, wide = false
 function MondayLeadGroup({ group, openLead, onAddLead, markContacted, markInfoSent, markLost, moveLeadStage, updateLead, archiveLead }) {
   return (
     <section>
-      <div className="mb-3 flex items-center gap-3">
-        <ChevronDown size={22} className={group.titleClass} />
-        <h2 className={`text-2xl font-semibold ${group.titleClass}`}>{group.title}</h2>
+      <div className="mb-2 flex items-center gap-2">
+        <ChevronDown size={18} className={group.titleClass} />
+        <h2 className={`text-xl font-semibold ${group.titleClass}`}>{group.title}</h2>
         <span className="text-sm text-gray-400">{group.rows.length} Lead{group.rows.length === 1 ? '' : 's'}</span>
       </div>
       <div className="overflow-hidden rounded-md border border-[#d7dde8] bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1500px] border-separate border-spacing-0 text-[15px]">
+          <table className="w-full min-w-[1420px] border-separate border-spacing-0 text-[13px]">
             <thead>
               <tr className="text-gray-700">
-                <th className={`sticky left-0 z-10 w-11 border-r border-b border-[#d7dde8] px-3 py-3 text-left ${group.accentClass}`} />
-                <th className="w-12 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center">
-                  <input type="checkbox" className="h-5 w-5 rounded border-gray-300" aria-label="Select group" />
+                <th className={`sticky left-0 z-10 w-8 border-r border-b border-[#d7dde8] px-2 py-2 text-left ${group.accentClass}`} />
+                <th className="w-10 border-r border-b border-[#d7dde8] bg-white px-2 py-2 text-center">
+                  <input type="checkbox" className="h-4 w-4 rounded border-gray-300" aria-label="Select group" />
                 </th>
-                <th className="w-[260px] border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Lead</th>
-                <th className="w-14 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center" />
-                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Status</th>
-                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Action</th>
-                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Project</th>
-                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Buyer type</th>
-                <th className="w-64 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Email</th>
-                <th className="w-52 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Phone</th>
-                <th className="w-36 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Email sent</th>
-                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Lead Source</th>
-                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Date received</th>
-                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Owner</th>
-                <th className="w-72 border-b border-[#d7dde8] bg-white px-3 py-3 text-center font-medium">Next action</th>
+                <th className="w-[230px] border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Lead</th>
+                <th className="w-11 border-r border-b border-[#d7dde8] bg-white px-2 py-2 text-center" />
+                <th className="w-36 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Status</th>
+                <th className="w-32 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Action</th>
+                <th className="w-40 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Project</th>
+                <th className="w-36 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Buyer type</th>
+                <th className="w-60 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Email</th>
+                <th className="w-44 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Phone</th>
+                <th className="w-28 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Email sent</th>
+                <th className="w-36 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Lead Source</th>
+                <th className="w-36 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Date received</th>
+                <th className="w-32 border-r border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Owner</th>
+                <th className="w-64 border-b border-[#d7dde8] bg-white px-2.5 py-2 text-center font-medium">Next action</th>
               </tr>
             </thead>
             <tbody>
@@ -803,8 +824,8 @@ function MondayLeadGroup({ group, openLead, onAddLead, markContacted, markInfoSe
               )}
               <tr>
                 <td className={`border-r border-[#d7dde8] ${group.accentClass}`} />
-                <td className="border-r border-[#d7dde8] px-3 py-3 text-center"><input type="checkbox" className="h-5 w-5 rounded border-gray-200 opacity-50" aria-label="Add row placeholder" /></td>
-                <td colSpan={13} className="border-b border-[#d7dde8] px-4 py-3 text-gray-500">
+                <td className="border-r border-[#d7dde8] px-2 py-2 text-center"><input type="checkbox" className="h-4 w-4 rounded border-gray-200 opacity-50" aria-label="Add row placeholder" /></td>
+                <td colSpan={13} className="border-b border-[#d7dde8] px-3 py-2 text-gray-500">
                   <button onClick={onAddLead} className="hover:text-gray-900">+ Add lead</button>
                 </td>
               </tr>
@@ -833,8 +854,8 @@ function MondayLeadRow({ lead, accentClass, openLead, markContacted, markInfoSen
   return (
     <tr onClick={() => openLead(lead.id)} className="cursor-pointer bg-white hover:bg-[#f7f9fb]">
       <td className={`border-r border-b border-[#d7dde8] ${accentClass}`} />
-      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center"><input type="checkbox" className="h-5 w-5 rounded border-gray-300" aria-label={`Select ${leadName(lead)}`} onClick={event => event.stopPropagation()} /></td>
-      <td className="border-r border-b border-[#d7dde8] px-4 py-2">
+      <td className="border-r border-b border-[#d7dde8] px-2 py-1.5 text-center"><input type="checkbox" className="h-4 w-4 rounded border-gray-300" aria-label={`Select ${leadName(lead)}`} onClick={event => event.stopPropagation()} /></td>
+      <td className="border-r border-b border-[#d7dde8] px-3 py-1.5">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="truncate font-medium text-gray-800">{leadName(lead)}</div>
@@ -845,35 +866,35 @@ function MondayLeadRow({ lead, accentClass, openLead, markContacted, markInfoSen
           </div>
         </div>
       </td>
-      <td className="border-r border-b border-[#d7dde8] px-2 py-2 text-center">
+      <td className="border-r border-b border-[#d7dde8] px-2 py-1.5 text-center">
         <button onClick={event => { event.stopPropagation(); openLead(lead.id) }} className="inline-flex h-7 w-7 items-center justify-center rounded border border-gray-300 text-gray-500 hover:bg-gray-50" aria-label="Open lead notes">
-          <PanelTop size={16} />
+          <PanelTop size={15} />
         </button>
       </td>
       <td className={`border-r border-b border-[#d7dde8] px-0 py-0 text-center ${stageCellClass(lead.pipelineStage)}`} onClick={event => event.stopPropagation()}>
-        <select value={lead.pipelineStage} onChange={handleStage} className="h-12 w-full appearance-none bg-transparent px-2 text-center text-sm font-semibold text-inherit outline-none">
+        <select value={lead.pipelineStage} onChange={handleStage} className="h-10 w-full appearance-none bg-transparent px-1.5 text-center text-xs font-semibold text-inherit outline-none">
           {PIPELINE_STAGES.map(stage => <option key={stage} value={stage} className="bg-white text-gray-900">{stage}</option>)}
         </select>
       </td>
-      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center">
-        <button onClick={event => { event.stopPropagation(); openLead(lead.id) }} className="rounded-md bg-green-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-800">Open lead</button>
+      <td className="border-r border-b border-[#d7dde8] px-2 py-1.5 text-center">
+        <button onClick={event => { event.stopPropagation(); openLead(lead.id) }} className="rounded-md bg-green-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-green-800">Open lead</button>
       </td>
-      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center text-gray-700">{lead.projectInterest || '-'}</td>
-      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center text-gray-700">{lead.buyerType || 'Unknown'}</td>
-      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center">
+      <td className="border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center text-gray-700">{lead.projectInterest || '-'}</td>
+      <td className="border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center text-gray-700">{lead.buyerType || 'Unknown'}</td>
+      <td className="border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center">
         {lead.email ? <a onClick={event => event.stopPropagation()} href={`mailto:${lead.email}`} className="font-medium text-[#2176d2] hover:underline">{lead.email}</a> : <span className="text-gray-400">-</span>}
       </td>
-      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center">
+      <td className="border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center">
         {lead.phone ? <span className="inline-flex items-center gap-2 text-[#2176d2]"><span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-bold text-gray-500">NZ</span>{lead.phone}</span> : <span className="text-gray-400">-</span>}
       </td>
-      <td className={`border-r border-b border-[#d7dde8] px-3 py-2 text-center text-sm font-semibold ${emailWasSent ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{emailWasSent ? 'Sent' : 'Not sent'}</td>
-      <td className={`border-r border-b border-[#d7dde8] px-3 py-2 text-center text-sm font-semibold ${sourceCellClass(source)}`}>{source}</td>
-      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center text-gray-600">{formatShortDate(lead.createdAt)}</td>
-      <td className="border-r border-b border-[#d7dde8] px-3 py-2 text-center" onClick={event => event.stopPropagation()}>
+      <td className={`border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center text-xs font-semibold ${emailWasSent ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{emailWasSent ? 'Sent' : 'Not sent'}</td>
+      <td className={`border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center text-xs font-semibold ${sourceCellClass(source)}`}>{source}</td>
+      <td className="border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center text-gray-600">{formatShortDate(lead.createdAt)}</td>
+      <td className="border-r border-b border-[#d7dde8] px-2.5 py-1.5 text-center" onClick={event => event.stopPropagation()}>
         <div className="inline-flex items-center gap-2">
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-500">{ownerInitials(lead.assignedTo)}</span>
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-[11px] font-bold text-gray-500">{ownerInitials(lead.assignedTo)}</span>
           <select
-            className="max-w-28 appearance-none bg-transparent text-sm font-medium text-gray-700 outline-none"
+            className="max-w-24 appearance-none bg-transparent text-xs font-medium text-gray-700 outline-none"
             value={lead.assignedTo}
             onChange={event => updateLead(lead.id, { assignedTo: event.target.value })}
           >
@@ -881,7 +902,7 @@ function MondayLeadRow({ lead, accentClass, openLead, markContacted, markInfoSen
           </select>
         </div>
       </td>
-      <td className="border-b border-[#d7dde8] px-3 py-2">
+      <td className="border-b border-[#d7dde8] px-2.5 py-1.5">
         <div className="flex items-center gap-2">
           <button onClick={event => { event.stopPropagation(); markInfoSent(lead.id) }} className="rounded border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50">Info</button>
           <button onClick={event => { event.stopPropagation(); archiveLead(lead.id) }} className="rounded border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50">Archive</button>
@@ -1067,7 +1088,7 @@ function ProjectSalesPage({ openLead, onAddLead }) {
           </div>
         )}
 
-        {tab === 'leads' && <ProjectLeadsTable projectName={project.name} openLead={openLead} onAddLead={onAddLead} />}
+        {tab === 'leads' && <ProjectLeadsTable project={project} openLead={openLead} onAddLead={onAddLead} />}
 
         {tab === 'pipeline' && <PipelineBoardSection leads={projectLeads} openLead={openLead} onAddLead={onAddLead} title={`${project.name} pipeline`} />}
 
@@ -1128,8 +1149,244 @@ function ProjectStageList({ leads, openLead, detailed = false }) {
   )
 }
 
-function ProjectLeadsTable({ projectName, openLead, onAddLead }) {
-  return <LeadsTable openLead={openLead} projectName={projectName} onAddLead={onAddLead} />
+function ProjectLeadSheetConnector({ project }) {
+  const {
+    sheetConnections,
+    sheetMappings,
+    syncRuns,
+    sheetSyncReady,
+    sheetSyncError,
+    addSheetConnection,
+    deleteSheetConnection,
+    saveSheetMapping,
+    previewSheetConnection,
+    syncSheetConnection,
+  } = useSalesStore()
+  const [form, setForm] = useState({ name: `${project.name} leads`, spreadsheetUrl: '', spreadsheetId: '', sheetName: '', rangeA1: '', projectHint: project.name, sourceHint: '', headerRow: 1 })
+  const [preview, setPreview] = useState(null)
+  const [fieldMap, setFieldMap] = useState({})
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState('')
+
+  useEffect(() => {
+    setForm(current => ({ ...current, name: `${project.name} leads`, projectHint: project.name }))
+  }, [project.name])
+
+  const projectConnections = useMemo(
+    () => sheetConnections.filter(connection => {
+      const hint = (connection.projectHint || '').toLowerCase()
+      const name = project.name.toLowerCase()
+      return hint === name || hint.includes(name) || (hint && name.includes(hint))
+    }),
+    [sheetConnections, project.name],
+  )
+  const connectionIds = new Set(projectConnections.map(connection => connection.id))
+  const latestRun = syncRuns.find(run => connectionIds.has(run.connectionId))
+
+  const set = (key, value) => setForm(current => ({ ...current, [key]: value }))
+  const setSheetUrl = value => {
+    setPreview(null)
+    setFieldMap({})
+    setMessage('')
+    setForm(current => ({ ...current, spreadsheetUrl: value, spreadsheetId: '' }))
+  }
+  const previewValue = (row, field) => {
+    const header = fieldMap[field]
+    if (field === 'fullName' && !header) {
+      const first = fieldMap.firstName ? row.values?.[fieldMap.firstName] : ''
+      const last = fieldMap.lastName ? row.values?.[fieldMap.lastName] : ''
+      return [first, last].filter(Boolean).join(' ') || '-'
+    }
+    return header ? row.values?.[header] || '-' : '-'
+  }
+  const defaults = {
+    assignedTo: project.defaultAssignee || 'Unassigned',
+    buyerType: 'Unknown',
+    financeStatus: 'Unknown',
+    temperature: 'Warm',
+    projectInterest: project.name,
+  }
+
+  const runPreview = async () => {
+    if (!form.spreadsheetUrl && !form.spreadsheetId) {
+      setMessage('Paste the Google Sheet link first.')
+      return
+    }
+    setBusy('preview')
+    setMessage('')
+    try {
+      const result = await previewSheetConnection({ ...form, projectHint: project.name })
+      const nextFieldMap = result.suggestedFieldMap || {}
+      setPreview(result)
+      setFieldMap(nextFieldMap)
+      setForm(current => ({
+        ...current,
+        spreadsheetId: result.spreadsheetId,
+        sheetName: current.sheetName || result.sheetName || '',
+        rangeA1: current.rangeA1 || (result.accessMode === 'service-account' ? result.range : ''),
+      }))
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const connectAndSync = async () => {
+    if (!form.spreadsheetUrl && !form.spreadsheetId) {
+      setMessage('Paste the Google Sheet link first.')
+      return
+    }
+    setBusy('connect')
+    setMessage('')
+    try {
+      const result = preview || await previewSheetConnection({ ...form, projectHint: project.name })
+      const nextFieldMap = Object.keys(fieldMap).length ? fieldMap : (result.suggestedFieldMap || {})
+      const connection = await addSheetConnection({
+        ...form,
+        spreadsheetId: form.spreadsheetId || result.spreadsheetId,
+        sheetName: form.sheetName || result.sheetName,
+        rangeA1: form.rangeA1 || (result.accessMode === 'service-account' ? result.range : ''),
+        projectHint: project.name,
+        name: form.name || `${project.name} leads`,
+      })
+      await saveSheetMapping(connection.id, { headerRow: form.headerRow, fieldMap: nextFieldMap, defaults })
+      const sync = await syncSheetConnection(connection.id)
+      setMessage(`Connected and synced: ${sync.rowsCreated} created, ${sync.rowsUpdated} updated, ${sync.rowsSkipped} skipped.`)
+      setPreview(null)
+      setFieldMap({})
+      setForm({ name: `${project.name} leads`, spreadsheetUrl: '', spreadsheetId: '', sheetName: '', rangeA1: '', projectHint: project.name, sourceHint: '', headerRow: 1 })
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const syncConnection = async id => {
+    setBusy(`sync-${id}`)
+    setMessage('')
+    try {
+      const result = await syncSheetConnection(id)
+      setMessage(`Sync complete: ${result.rowsCreated} created, ${result.rowsUpdated} updated, ${result.rowsSkipped} skipped.`)
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="font-bold text-gray-900">Google Sheet intake</h2>
+            <Badge className={projectConnections.length ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}>
+              {projectConnections.length ? 'Connected' : 'Not connected'}
+            </Badge>
+          </div>
+          <p className="mt-1 text-sm text-gray-500">Paste the {project.name} lead sheet link here. DevMan pulls date received, name, email, phone, and email sent into this project.</p>
+        </div>
+        {projectConnections.length > 0 && (
+          <div className="text-right text-xs text-gray-500">
+            <div className="font-semibold text-gray-700">{projectConnections.length} sheet{projectConnections.length === 1 ? '' : 's'} linked</div>
+            <div>{latestRun ? `Last run ${formatDate(latestRun.startedAt)}` : 'No sync run yet'}</div>
+          </div>
+        )}
+      </div>
+
+      {!sheetSyncReady && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <b>Sheet Sync migration required.</b> Run the Sales Hub sheet migration, then refresh. {sheetSyncError}
+        </div>
+      )}
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_180px_160px]">
+        <Field label="Google Sheet URL">
+          <input className={inputCls} value={form.spreadsheetUrl} onChange={event => setSheetUrl(event.target.value)} placeholder="Paste the Google Sheet link for this project" />
+        </Field>
+        <Field label="Source">
+          <Select value={form.sourceHint} onChange={value => set('sourceHint', value)} options={LEAD_SOURCES} placeholder="Auto / source" />
+        </Field>
+        <Field label="Header row">
+          <input className={inputCls} type="number" min="1" value={form.headerRow} onChange={event => set('headerRow', event.target.value)} />
+        </Field>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Button onClick={runPreview} disabled={Boolean(busy) || !sheetSyncReady}><Table2 size={15} /> Preview</Button>
+        <Button onClick={connectAndSync} disabled={Boolean(busy) || !sheetSyncReady} className="bg-forest-600 text-white hover:bg-forest-700"><RefreshCw size={15} /> Connect and sync</Button>
+        {projectConnections.map(connection => (
+          <Button key={connection.id} onClick={() => syncConnection(connection.id)} disabled={Boolean(busy) || !sheetSyncReady}>
+            <RefreshCw size={14} className={busy === `sync-${connection.id}` ? 'animate-spin' : ''} /> Sync {connection.sourceHint || 'sheet'}
+          </Button>
+        ))}
+      </div>
+
+      {busy && <div className="mt-4"><LoadingStrip label={busy === 'preview' ? 'Reading sheet preview' : busy === 'connect' ? 'Connecting sheet and importing leads' : 'Syncing latest leads'} /></div>}
+      {message && <div className={`mt-4 rounded-lg px-3 py-2 text-sm ${/fail|error|required|configured|share|could not/i.test(message) ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{message}</div>}
+
+      {preview && (
+        <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-gray-900">{preview.spreadsheetTitle || 'Google Sheet'}</h3>
+              <p className="mt-1 text-sm text-gray-500">Tab: {preview.sheetName}. Found {preview.headers.length} columns. Previewing the first rows before import.</p>
+              {preview.serviceAccountEmail && <p className="mt-1 text-xs font-semibold text-forest-700">If private, share the sheet with {preview.serviceAccountEmail}</p>}
+            </div>
+          </div>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[720px] border-separate border-spacing-0 text-sm">
+              <thead>
+                <tr className="text-gray-600">
+                  {SHEET_CORE_FIELDS.map(([, label]) => <th key={label} className="border-b border-gray-200 bg-white px-3 py-2 text-left font-semibold">{label}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {preview.rows.slice(0, 5).map(row => (
+                  <tr key={row.rowNumber} className="bg-white">
+                    {SHEET_CORE_FIELDS.map(([field]) => <td key={field} className="border-b border-gray-100 px-3 py-2 text-gray-700">{previewValue(row, field)}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {projectConnections.length > 0 && (
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {projectConnections.map(connection => {
+            const mapping = sheetMappings.find(item => item.connectionId === connection.id)
+            return (
+              <div key={connection.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold text-gray-900">{connection.name}</div>
+                    <div className="mt-1 text-xs text-gray-500">{connection.sheetName || 'First tab'} - {connection.sourceHint || 'Source from sheet'} - {Object.keys(mapping?.fieldMap || {}).length || 0} mapped fields</div>
+                  </div>
+                  <Button onClick={() => deleteSheetConnection(connection.id)} disabled={Boolean(busy)}><Trash2 size={14} /></Button>
+                </div>
+                <div className="mt-2 rounded-md bg-white px-2 py-1.5 text-xs text-gray-600">
+                  Status: <b>{connection.lastSyncStatus}</b>{connection.lastSyncMessage ? ` - ${connection.lastSyncMessage}` : ''}{connection.lastSyncedAt ? ` - ${formatDate(connection.lastSyncedAt)}` : ''}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ProjectLeadsTable({ project, openLead, onAddLead }) {
+  return (
+    <div className="space-y-5">
+      <ProjectLeadSheetConnector project={project} />
+      <LeadsTable openLead={openLead} projectName={project.name} onAddLead={onAddLead} />
+    </div>
+  )
 }
 
 function ProjectUnitTable({ units, leads, openLead, updateUnit }) {

@@ -29,6 +29,7 @@ import ProjectDailyLogTab from '../components/ProjectDailyLogTab'
 import PropertyIntelligenceTab from '../components/PropertyIntelligenceTab'
 import AiDraftActionsPanel from '../components/AiDraftActionsPanel'
 import ShareDocumentsModal from '../components/ShareDocumentsModal'
+import DocumentHub from '../components/DocumentHub'
 
 const TABS = ['Overview', 'Property', 'Schedule', 'Checklist', 'Tasks', 'Documents', 'Directory', 'Daily Log']
 
@@ -719,68 +720,37 @@ function DocForm({ doc, projectId, onClose, onSave }) {
 }
 
 function DocumentsTab({ project }) {
-  const { documents, addDocument, updateDocument, deleteDocument, updateProject } = useStore()
-  const [showForm, setShowForm] = useState(false)
-  const [editDoc, setEditDoc] = useState(null)
-  const [confirmDelete, setConfirmDelete] = useState(null)
+  const {
+    projects,
+    documents,
+    profile,
+    currentUser,
+    addDocument,
+    updateDocument,
+    deleteDocument,
+    updateBatchDocuments,
+    deleteBatchDocuments,
+    updateProject,
+  } = useStore()
   const [editingDriveFolder, setEditingDriveFolder] = useState(false)
   const [driveFolderUrl, setDriveFolderUrl] = useState(project.driveFolderUrl || '')
-  const [openError, setOpenError] = useState('')
-  const [selectedDocs, setSelectedDocs] = useState(new Set())
-  const [shareDocs, setShareDocs] = useState(null)
-
-  const projectDocs = documents.filter(d => d.projectId === project.id)
-  const selectedProjectDocs = projectDocs.filter(doc => selectedDocs.has(doc.id))
-
-  const handleAdd = async (data) => {
-    await addDocument({ ...data, projectId: project.id, addedBy: '' })
-    setShowForm(false)
-  }
-
-  const handleEdit = async (data) => {
-    await updateDocument(editDoc.id, data)
-    setEditDoc(null)
-  }
 
   const saveDriveFolder = async () => {
     await updateProject(project.id, { driveFolderUrl: driveFolderUrl.trim() })
     setEditingDriveFolder(false)
   }
 
-  const openDocument = async doc => {
-    setOpenError('')
-    if (doc.storagePath) {
-      const { data, error } = await supabase.storage.from('documents').createSignedUrl(doc.storagePath, 60 * 10)
-      if (error || !data?.signedUrl) {
-        setOpenError(error?.message || 'Could not open this uploaded file.')
-        return
-      }
-      window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
-      return
-    }
-    if (doc.url) window.open(doc.url, '_blank', 'noopener,noreferrer')
-  }
-
-  const toggleDoc = id => {
-    setSelectedDocs(current => {
-      const next = new Set(current)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
   return (
-    <div>
-      <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 flex flex-col lg:flex-row lg:items-center gap-3">
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-forest-50 text-forest-700 flex items-center justify-center shrink-0">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-4 shadow-sm lg:flex-row lg:items-center">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-forest-50 text-forest-700">
             <FolderOpen size={16} />
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold text-gray-900">Project Drive folder</div>
             {project.driveFolderUrl ? (
-              <a href={project.driveFolderUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-ocean-600 hover:underline truncate block">
+              <a href={project.driveFolderUrl} target="_blank" rel="noopener noreferrer" className="block truncate text-xs text-ocean-600 hover:underline">
                 {project.driveFolderUrl}
               </a>
             ) : (
@@ -789,123 +759,46 @@ function DocumentsTab({ project }) {
           </div>
         </div>
         {editingDriveFolder ? (
-          <div className="flex flex-col sm:flex-row gap-2 lg:w-[520px]">
+          <div className="flex flex-col gap-2 sm:flex-row lg:w-[520px]">
             <input
               className={inputCls}
               value={driveFolderUrl}
-              onChange={e => setDriveFolderUrl(e.target.value)}
+              onChange={event => setDriveFolderUrl(event.target.value)}
               placeholder="https://drive.google.com/drive/folders/..."
             />
-            <button onClick={saveDriveFolder} className="px-3 py-2 text-sm font-medium bg-forest-600 text-white rounded-lg hover:bg-forest-700">Save</button>
+            <button onClick={saveDriveFolder} className="rounded-lg bg-forest-600 px-3 py-2 text-sm font-medium text-white hover:bg-forest-700">Save</button>
             <button onClick={() => { setDriveFolderUrl(project.driveFolderUrl || ''); setEditingDriveFolder(false) }} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
           </div>
         ) : (
-          <div className="flex gap-2 shrink-0">
+          <div className="flex shrink-0 gap-2">
             {project.driveFolderUrl && (
-              <a href={project.driveFolderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50">
+              <a href={project.driveFolderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium hover:bg-gray-50">
                 Open Drive
                 <ExternalLink size={12} />
               </a>
             )}
-            <button onClick={() => setEditingDriveFolder(true)} className="px-3 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50">
+            <button onClick={() => setEditingDriveFolder(true)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium hover:bg-gray-50">
               {project.driveFolderUrl ? 'Edit folder' : 'Link folder'}
             </button>
           </div>
         )}
       </div>
 
-      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-gray-500">{projectDocs.length} document{projectDocs.length !== 1 ? 's' : ''}</p>
-        <div className="flex flex-wrap gap-2">
-          {selectedProjectDocs.length > 0 && (
-            <button
-              onClick={() => setShareDocs(selectedProjectDocs)}
-              className="inline-flex items-center gap-1.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
-            >
-              <LinkIcon size={14} />
-              Share selected
-            </button>
-          )}
-          <button
-            onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-1.5 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
-          >
-            <Plus size={14} />
-            Add document
-          </button>
-        </div>
-      </div>
-
-      {projectDocs.length === 0 ? (
-        <div className="text-center py-12 text-sm text-gray-400">No documents yet. Add links to consents, contracts, drawings and more.</div>
-      ) : (
-        <div className="space-y-2">
-          {openError && <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">{openError}</div>}
-          {projectDocs.map(doc => (
-            <div key={doc.id} className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-center gap-3 group hover:border-gray-200 transition-colors">
-              <input
-                type="checkbox"
-                checked={selectedDocs.has(doc.id)}
-                onChange={() => toggleDoc(doc.id)}
-                className="h-4 w-4 rounded border-gray-300 text-forest-600 focus:ring-forest-500"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openDocument(doc)}
-                    className="font-medium text-gray-800 hover:text-ocean-600 flex items-center gap-1.5 text-sm transition-colors"
-                  >
-                    {doc.name}
-                    <LinkIcon size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </button>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CAT_COLORS[doc.category] || CAT_COLORS.other}`}>
-                    {CAT_LABELS[doc.category] || doc.category}
-                  </span>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                    {STAGE_MAP[doc.stageId]?.short || 'General'}
-                  </span>
-                  {doc.source === 'google_drive' && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-forest-50 text-forest-700 px-2 py-0.5 rounded-full">
-                      <FolderOpen size={10} />
-                      Drive
-                    </span>
-                  )}
-                </div>
-                {(doc.drawingNumber || doc.revision || doc.discipline || doc.issuedFor || doc.documentStatus) && (
-                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-400">
-                    {doc.drawingNumber && <span>{doc.drawingNumber}</span>}
-                    {doc.revision && <span>Rev {doc.revision}</span>}
-                    {doc.discipline && <span>{doc.discipline}</span>}
-                    {doc.issuedFor && <span>{doc.issuedFor}</span>}
-                    {doc.documentStatus && <span>{doc.documentStatus}</span>}
-                  </div>
-                )}
-                {doc.notes && <p className="text-xs text-gray-400 mt-0.5 truncate">{doc.notes}</p>}
-              </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                <button onClick={() => setEditDoc(doc)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
-                  <Pencil size={13} />
-                </button>
-                {confirmDelete === doc.id ? (
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => { deleteDocument(doc.id); setConfirmDelete(null) }} className="text-xs text-red-600 font-medium px-2 py-1 rounded hover:bg-red-50">Delete</button>
-                    <button onClick={() => setConfirmDelete(null)} className="text-xs text-gray-400 px-1 py-1 rounded hover:bg-gray-100">Cancel</button>
-                  </div>
-                ) : (
-                  <button onClick={() => setConfirmDelete(doc.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50">
-                    <Trash2 size={13} />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {showForm && <DocForm projectId={project.id} onClose={() => setShowForm(false)} onSave={handleAdd} />}
-      {editDoc && <DocForm doc={editDoc} projectId={project.id} onClose={() => setEditDoc(null)} onSave={handleEdit} />}
-      {shareDocs && <ShareDocumentsModal project={project} documents={shareDocs} onClose={() => setShareDocs(null)} />}
+      <DocumentHub
+        projects={projects}
+        documents={documents}
+        profile={profile}
+        currentUser={currentUser}
+        addDocument={addDocument}
+        updateDocument={updateDocument}
+        deleteDocument={deleteDocument}
+        updateBatchDocuments={updateBatchDocuments}
+        deleteBatchDocuments={deleteBatchDocuments}
+        fixedProjectId={project.id}
+        defaultProjectId={project.id}
+        title={`${project.name} documents`}
+        showMainRegisterLink
+      />
     </div>
   )
 }

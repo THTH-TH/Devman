@@ -23,6 +23,8 @@ import {
   UserCircle,
 } from 'lucide-react'
 import useSalesStore from './useSalesStore'
+import useStore from '../store/useStore'
+import DocumentHub, { salesDocumentProjectId, salesDocumentProjectOption } from '../components/DocumentHub'
 import {
   ASSIGNEES,
   BUYER_TYPES,
@@ -258,6 +260,7 @@ function SalesShell() {
           <Route path="pipeline" element={<PipelinePage openLead={openLead} onAddLead={() => setShowAddLead(true)} />} />
           <Route path="leads" element={<LeadsPage openLead={openLead} onAddLead={() => setShowAddLead(true)} />} />
           <Route path="leads/:leadId" element={<LeadDeepLink openLead={openLead} onAddLead={() => setShowAddLead(true)} />} />
+          <Route path="documents" element={<SalesDocumentsPage />} />
           <Route path="presales" element={<PresalesPage openLead={openLead} />} />
           <Route path="sheets" element={<SheetSyncPage />} />
           <Route path="units/*" element={<Navigate to="/sales/presales" replace />} />
@@ -1189,6 +1192,7 @@ function ProjectSalesPage({ openLead, onAddLead }) {
             ['leads', 'Leads'],
             ['pipeline', 'Pipeline'],
             ['units', 'Units'],
+            ['documents', 'Documents'],
             ['settings', 'Sales Settings'],
           ].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} className={`rounded-lg px-3 py-2 text-sm font-semibold ${tab === id ? 'bg-forest-600 text-white' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
@@ -1221,6 +1225,8 @@ function ProjectSalesPage({ openLead, onAddLead }) {
 
         {tab === 'units' && <ProjectUnitTable units={projectUnits} leads={leads} openLead={openLead} updateUnit={updateUnit} />}
 
+        {tab === 'documents' && <SalesProjectDocuments project={project} />}
+
         {tab === 'settings' && (
           <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
             <h2 className="font-bold text-gray-900">Sales Settings</h2>
@@ -1235,6 +1241,80 @@ function ProjectSalesPage({ openLead, onAddLead }) {
         )}
       </div>
     </>
+  )
+}
+
+function SalesDocumentsPage() {
+  const { projects } = useSalesStore()
+  const {
+    documents,
+    profile,
+    currentUser,
+    addDocument,
+    updateDocument,
+    deleteDocument,
+    updateBatchDocuments,
+    deleteBatchDocuments,
+  } = useStore()
+
+  const salesProjectOptions = useMemo(() => projects.map(salesDocumentProjectOption), [projects])
+  const salesProjectIds = new Set(salesProjectOptions.map(project => project.id))
+  const salesDocuments = documents.filter(doc => salesProjectIds.has(doc.projectId))
+
+  return (
+    <>
+      <PageHeader title="Sales Documents" subtitle="Sales brochures, plans, price lists, buyer packs and shared links." />
+      <div className="mx-auto max-w-7xl p-6">
+        <DocumentHub
+          projects={salesProjectOptions}
+          documents={salesDocuments}
+          profile={profile}
+          currentUser={currentUser}
+          addDocument={addDocument}
+          updateDocument={updateDocument}
+          deleteDocument={deleteDocument}
+          updateBatchDocuments={updateBatchDocuments}
+          deleteBatchDocuments={deleteBatchDocuments}
+          defaultProjectId={salesProjectOptions[0]?.id || ''}
+          title="Sales documents"
+          showMainRegisterLink
+        />
+      </div>
+    </>
+  )
+}
+
+function SalesProjectDocuments({ project }) {
+  const {
+    documents,
+    profile,
+    currentUser,
+    addDocument,
+    updateDocument,
+    deleteDocument,
+    updateBatchDocuments,
+    deleteBatchDocuments,
+  } = useStore()
+  const { projects } = useSalesStore()
+  const salesProjectOptions = useMemo(() => projects.map(salesDocumentProjectOption), [projects])
+  const documentProjectId = salesDocumentProjectId(project.id)
+
+  return (
+    <DocumentHub
+      projects={salesProjectOptions}
+      documents={documents}
+      profile={profile}
+      currentUser={currentUser}
+      addDocument={addDocument}
+      updateDocument={updateDocument}
+      deleteDocument={deleteDocument}
+      updateBatchDocuments={updateBatchDocuments}
+      deleteBatchDocuments={deleteBatchDocuments}
+      fixedProjectId={documentProjectId}
+      defaultProjectId={documentProjectId}
+      title={`${project.name} sales documents`}
+      showMainRegisterLink
+    />
   )
 }
 

@@ -147,6 +147,7 @@ export const SALES_NAV = [
   { to: '/sales/projects', label: 'Projects' },
   { to: '/sales/pipeline', label: 'Pipeline' },
   { to: '/sales/leads', label: 'Leads' },
+  { to: '/sales/documents', label: 'Documents' },
   { to: '/sales/presales', label: 'Presales' },
   { to: '/sales/sheets', label: 'Sheet Sync' },
 ]

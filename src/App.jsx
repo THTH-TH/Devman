@@ -14,6 +14,7 @@ const ChecklistPage = lazy(() => import('./pages/ChecklistPage'))
 const Tasks = lazy(() => import('./pages/Tasks'))
 const Calendar = lazy(() => import('./pages/Calendar'))
 const Documents = lazy(() => import('./pages/Documents'))
+const Contacts = lazy(() => import('./pages/Contacts'))
 const Team = lazy(() => import('./pages/Team'))
 const Settings = lazy(() => import('./pages/Settings'))
 const SharePage = lazy(() => import('./pages/SharePage'))
@@ -77,6 +78,7 @@ function ProtectedApp({ authLoading, session, loading, error }) {
           <Route path="calendar" element={<Calendar />} />
           <Route path="schedule" element={<Navigate to="/calendar" replace />} />
           <Route path="documents" element={<Documents />} />
+          <Route path="contacts" element={<Contacts />} />
           <Route path="team" element={<Team />} />
           <Route path="settings" element={<Settings />} />
           <Route path="sales/*" element={<SalesHub />} />

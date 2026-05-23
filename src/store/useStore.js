@@ -136,6 +136,9 @@ const mapTeamMember = r => ({
 const mapTask = r => ({
   id: r.id,
   projectId: r.project_id || '',
+  companyId: r.company_id || '',
+  contactId: r.contact_id || '',
+  projectContactId: r.project_contact_id || '',
   title: r.title,
   description: r.description || '',
   assignee: r.assignee || '',
@@ -1076,6 +1079,9 @@ const useStore = create((set, get) => ({
     const row = {
       id,
       project_id: data.projectId || null,
+      company_id: data.companyId || null,
+      contact_id: data.contactId || null,
+      project_contact_id: data.projectContactId || null,
       title: data.title,
       description: data.description || '',
       assignee: data.assignee || '',
@@ -1087,7 +1093,11 @@ const useStore = create((set, get) => ({
     }
     const task = mapTask(row)
     set(s => ({ tasks: [task, ...s.tasks] }))
-    const { error } = await supabase.from('tasks').insert(row)
+    let { error } = await supabase.from('tasks').insert(row)
+    if (error && String(error.message || '').includes('project_contact_id')) {
+      const { company_id, contact_id, project_contact_id, ...fallbackRow } = row
+      ;({ error } = await supabase.from('tasks').insert(fallbackRow))
+    }
     if (error) {
       console.error('addTask error:', error)
       set(s => ({ tasks: s.tasks.filter(t => t.id !== id) }))
@@ -1100,12 +1110,19 @@ const useStore = create((set, get) => ({
     if (data.title !== undefined) updates.title = data.title
     if (data.description !== undefined) updates.description = data.description
     if (data.assignee !== undefined) updates.assignee = data.assignee
+    if (data.companyId !== undefined) updates.company_id = data.companyId || null
+    if (data.contactId !== undefined) updates.contact_id = data.contactId || null
+    if (data.projectContactId !== undefined) updates.project_contact_id = data.projectContactId || null
     if (data.dueDate !== undefined) updates.due_date = data.dueDate || null
     if (data.priority !== undefined) updates.priority = data.priority
     if (data.status !== undefined) updates.status = data.status
     if (data.projectId !== undefined) updates.project_id = data.projectId || null
     set(s => ({ tasks: s.tasks.map(t => t.id === id ? { ...t, ...data } : t) }))
-    const { error } = await supabase.from('tasks').update(updates).eq('id', id)
+    let { error } = await supabase.from('tasks').update(updates).eq('id', id)
+    if (error && String(error.message || '').includes('project_contact_id')) {
+      const { company_id, contact_id, project_contact_id, ...fallbackUpdates } = updates
+      ;({ error } = await supabase.from('tasks').update(fallbackUpdates).eq('id', id))
+    }
     if (error) console.error('updateTask error:', error)
   },
 
@@ -1119,11 +1136,18 @@ const useStore = create((set, get) => ({
     if (!ids.length) return
     const updates = { updated_at: new Date().toISOString() }
     if (data.assignee !== undefined) updates.assignee = data.assignee
+    if (data.companyId !== undefined) updates.company_id = data.companyId || null
+    if (data.contactId !== undefined) updates.contact_id = data.contactId || null
+    if (data.projectContactId !== undefined) updates.project_contact_id = data.projectContactId || null
     if (data.status !== undefined) updates.status = data.status
     if (data.priority !== undefined) updates.priority = data.priority
     if (data.dueDate !== undefined) updates.due_date = data.dueDate || null
     set(s => ({ tasks: s.tasks.map(t => ids.includes(t.id) ? { ...t, ...data, updatedAt: updates.updated_at } : t) }))
-    const { error } = await supabase.from('tasks').update(updates).in('id', ids)
+    let { error } = await supabase.from('tasks').update(updates).in('id', ids)
+    if (error && String(error.message || '').includes('project_contact_id')) {
+      const { company_id, contact_id, project_contact_id, ...fallbackUpdates } = updates
+      ;({ error } = await supabase.from('tasks').update(fallbackUpdates).in('id', ids))
+    }
     if (error) console.error('updateBatchTasks error:', error)
   },
 

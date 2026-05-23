@@ -23,6 +23,7 @@ const mainNav = [
 
 const toolsNav = [
   { to: '/documents', label: 'Documents', icon: FileText },
+  { to: '/contacts', label: 'Contacts', icon: Users },
   { to: '/calendar', label: 'Calendar', icon: Calendar },
   { to: '/tasks', label: 'Tasks', icon: ListTodo },
   { to: '/team', label: 'Team', icon: Users },

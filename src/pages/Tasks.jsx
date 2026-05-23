@@ -26,7 +26,7 @@ function fmtDate(date) {
   return date ? new Date(date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : ''
 }
 
-function TaskModal({ task, projects, teamMembers, currentUser, onClose }) {
+function TaskModal({ task, projects, teamMembers, currentUser, contacts, companies, projectContacts, onClose }) {
   const { addTask, updateTask, deleteTask } = useStore()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -35,6 +35,10 @@ function TaskModal({ task, projects, teamMembers, currentUser, onClose }) {
     description: task?.description || '',
     projectId: task?.projectId || '',
     assignee: task?.assignee || currentUser || '',
+    contactRef: task?.projectContactId ? `project:${task.projectContactId}` : task?.contactId ? `contact:${task.contactId}` : task?.companyId ? `company:${task.companyId}` : '',
+    companyId: task?.companyId || '',
+    contactId: task?.contactId || '',
+    projectContactId: task?.projectContactId || '',
     dueDate: task?.dueDate || '',
     priority: task?.priority || 'medium',
     status: task?.status || 'open',
@@ -42,10 +46,63 @@ function TaskModal({ task, projects, teamMembers, currentUser, onClose }) {
 
   const set = (key, value) => setForm(f => ({ ...f, [key]: value }))
 
+  const contactOptions = useMemo(() => {
+    const projectScoped = projectContacts
+      .filter(item => !form.projectId || item.projectId === form.projectId)
+      .map(item => {
+        const contact = contacts.find(person => person.id === item.contactId)
+        const company = companies.find(entry => entry.id === item.companyId)
+        return {
+          value: `project:${item.id}`,
+          label: [contact?.name, company?.name, item.projectRole].filter(Boolean).join(' - ') || 'Project contact',
+          companyId: item.companyId || '',
+          contactId: item.contactId || '',
+          projectContactId: item.id,
+        }
+      })
+    const directContacts = contacts.map(contact => {
+      const company = companies.find(entry => entry.id === contact.companyId)
+      return {
+        value: `contact:${contact.id}`,
+        label: [contact.name, company?.name].filter(Boolean).join(' - '),
+        companyId: contact.companyId || '',
+        contactId: contact.id,
+        projectContactId: '',
+      }
+    })
+    const companyOnly = companies
+      .filter(company => !contacts.some(contact => contact.companyId === company.id))
+      .map(company => ({
+        value: `company:${company.id}`,
+        label: company.name,
+        companyId: company.id,
+        contactId: '',
+        projectContactId: '',
+      }))
+    const seen = new Set()
+    return [...projectScoped, ...directContacts, ...companyOnly].filter(option => {
+      if (!option.label || seen.has(option.value)) return false
+      seen.add(option.value)
+      return true
+    })
+  }, [companies, contacts, form.projectId, projectContacts])
+
+  const setContactRef = value => {
+    const option = contactOptions.find(item => item.value === value)
+    setForm(f => ({
+      ...f,
+      contactRef: value,
+      companyId: option?.companyId || '',
+      contactId: option?.contactId || '',
+      projectContactId: option?.projectContactId || '',
+    }))
+  }
+
   const handleSave = async () => {
     if (!form.title.trim()) return
     setSaving(true)
-    const payload = { ...form, title: form.title.trim(), description: form.description.trim() }
+    const { contactRef, ...rest } = form
+    const payload = { ...rest, title: form.title.trim(), description: form.description.trim() }
     if (task) await updateTask(task.id, payload)
     else await addTask(payload)
     setSaving(false)
@@ -87,6 +144,13 @@ function TaskModal({ task, projects, teamMembers, currentUser, onClose }) {
                 {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
               </select>
             </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Related contact / contractor</label>
+            <select className={inputCls} value={form.contactRef} onChange={e => setContactRef(e.target.value)}>
+              <option value="">None</option>
+              {contactOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -138,7 +202,7 @@ function TaskModal({ task, projects, teamMembers, currentUser, onClose }) {
 }
 
 export default function Tasks() {
-  const { projects, tasks, teamMembers, currentUser, updateTask } = useStore()
+  const { projects, tasks, teamMembers, currentUser, updateTask, contacts, companies, projectContacts } = useStore()
   const [searchParams, setSearchParams] = useSearchParams()
   const [modalTask, setModalTask] = useState(null)
   const [showNew, setShowNew] = useState(false)
@@ -166,10 +230,13 @@ export default function Tasks() {
   const enriched = useMemo(() => tasks.map(task => ({
     ...task,
     project: projects.find(p => p.id === task.projectId),
+    contact: contacts.find(contact => contact.id === task.contactId),
+    company: companies.find(company => company.id === task.companyId),
+    projectContact: projectContacts.find(item => item.id === task.projectContactId),
     isDone: task.status === 'done',
     isOverdue: task.dueDate && task.status !== 'done' && new Date(task.dueDate) < today,
     isDueSoon: task.dueDate && task.status !== 'done' && new Date(task.dueDate) >= today && new Date(task.dueDate) <= in7,
-  })), [tasks, projects, today, in7])
+  })), [tasks, projects, contacts, companies, projectContacts, today, in7])
 
   const filtered = useMemo(() => enriched.filter(task => {
     if (filterProject && task.projectId !== filterProject) return false
@@ -304,6 +371,7 @@ export default function Tasks() {
                     <th className="text-left px-4 py-3 font-medium">Task</th>
                     <th className="text-left px-4 py-3 font-medium">Project</th>
                     <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Assignee</th>
+                    <th className="text-left px-4 py-3 font-medium hidden xl:table-cell">Contact</th>
                     <th className="text-left px-4 py-3 font-medium">Due</th>
                     <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Priority</th>
                     <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">Status</th>
@@ -326,6 +394,7 @@ export default function Tasks() {
                         {task.project ? <Link to={`/projects/${task.project.id}`} className="text-ocean-600 hover:underline">{task.project.name}</Link> : <span className="text-gray-400">General</span>}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500 hidden md:table-cell">{task.assignee || '-'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500 hidden xl:table-cell">{task.contact?.name || task.company?.name || '-'}</td>
                       <td className="px-4 py-3 text-xs">
                         {task.dueDate ? (
                           <span className={task.isOverdue ? 'inline-flex items-center gap-1 text-red-600 font-medium' : task.isDueSoon ? 'text-amber-600' : 'text-gray-500'}>
@@ -350,8 +419,8 @@ export default function Tasks() {
         </div>
       </div>
 
-      {showNew && <TaskModal projects={projects} teamMembers={teamMembers} currentUser={currentUser} onClose={() => setShowNew(false)} />}
-      {modalTask && <TaskModal task={modalTask} projects={projects} teamMembers={teamMembers} currentUser={currentUser} onClose={() => setModalTask(null)} />}
+      {showNew && <TaskModal projects={projects} teamMembers={teamMembers} currentUser={currentUser} contacts={contacts} companies={companies} projectContacts={projectContacts} onClose={() => setShowNew(false)} />}
+      {modalTask && <TaskModal task={modalTask} projects={projects} teamMembers={teamMembers} currentUser={currentUser} contacts={contacts} companies={companies} projectContacts={projectContacts} onClose={() => setModalTask(null)} />}
     </div>
   )
 }

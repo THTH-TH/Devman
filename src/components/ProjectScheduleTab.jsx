@@ -13,8 +13,8 @@ import {
   FileText,
   FileSpreadsheet,
   List,
-  Minus,
   Plus,
+  Save,
   Search,
   Trash2,
   Upload,
@@ -23,6 +23,7 @@ import {
 import Papa from 'papaparse'
 import useStore from '../store/useStore'
 import { buildScheduleTasksFromTemplateItems } from '../data/scheduleTemplate'
+import { STAGES } from '../data/stages'
 
 const DAY_MS = 86_400_000
 
@@ -119,6 +120,54 @@ function groupTasks(tasks) {
       map.get(phase).push(task)
     })
   return Array.from(map.entries()).map(([phase, items]) => ({ phase, items }))
+}
+
+const FALLBACK_PHASE_TONES = [
+  { bg: 'bg-blue-500', light: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-300', dot: 'bg-blue-500' },
+  { bg: 'bg-teal-500', light: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-300', dot: 'bg-teal-500' },
+  { bg: 'bg-purple-500', light: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-300', dot: 'bg-purple-500' },
+  { bg: 'bg-orange-500', light: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-300', dot: 'bg-orange-500' },
+  { bg: 'bg-indigo-800', light: 'bg-indigo-50', text: 'text-indigo-800', border: 'border-indigo-300', dot: 'bg-indigo-800' },
+  { bg: 'bg-emerald-800', light: 'bg-emerald-50', text: 'text-emerald-800', border: 'border-emerald-300', dot: 'bg-emerald-800' },
+]
+
+function stageForPhase(phase) {
+  const key = String(phase || '').toLowerCase()
+  return STAGES.find(stage => {
+    const options = [stage.id, stage.label, stage.short].map(value => String(value || '').toLowerCase())
+    return options.includes(key) || options.some(option => option && key.includes(option))
+  })
+}
+
+function phaseTone(phase, index = 0) {
+  return stageForPhase(phase) || FALLBACK_PHASE_TONES[index % FALLBACK_PHASE_TONES.length]
+}
+
+function getSchedulePhaseRollups(tasks = []) {
+  return groupTasks(tasks).map((group, index) => {
+    const dated = group.items.filter(task => task.startDate || task.endDate)
+    const startDates = dated.map(task => parseDate(task.startDate || task.endDate)).filter(Boolean)
+    const endDates = dated.map(task => parseDate(task.endDate || task.startDate)).filter(Boolean)
+    const startDate = startDates.length ? new Date(Math.min(...startDates.map(date => date.getTime()))) : null
+    const endDate = endDates.length ? new Date(Math.max(...endDates.map(date => date.getTime()))) : null
+    const complete = group.items.filter(task => smartStatus(task) === 'complete').length
+    const delayed = group.items.filter(task => smartStatus(task) === 'delayed').length
+    const blocked = group.items.filter(task => smartStatus(task) === 'blocked').length
+    const pct = group.items.length ? Math.round((complete / group.items.length) * 100) : 0
+    return {
+      phase: group.phase,
+      items: group.items,
+      startDate: startDate ? formatInput(startDate) : '',
+      endDate: endDate ? formatInput(endDate) : '',
+      durationDays: startDate && endDate ? diffDays(startDate, endDate) + 1 : null,
+      complete,
+      delayed,
+      blocked,
+      pct,
+      status: blocked ? 'blocked' : delayed ? 'delayed' : pct === 100 ? 'complete' : 'in-progress',
+      tone: phaseTone(group.phase, index),
+    }
+  })
 }
 
 function parseBool(value) {
@@ -697,6 +746,7 @@ function TaskListView({ projectId, projectStartDate, project = null, tasks, show
     updateBatchScheduleTasks,
     deleteBatchScheduleTasks,
     addBatchScheduleTasks,
+    addScheduleTemplate,
     scheduleTemplates,
     scheduleTemplateItems,
     projectContacts,
@@ -718,7 +768,10 @@ function TaskListView({ projectId, projectStartDate, project = null, tasks, show
   const [csvImport, setCsvImport] = useState(null)
   const [templateOpen, setTemplateOpen] = useState(false)
   const [templateMode, setTemplateMode] = useState('missing')
-  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState([])
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [templateScope, setTemplateScope] = useState('selected')
 
   const phases = useMemo(() => [...new Set(tasks.map(t => t.phase).filter(Boolean))], [tasks])
 
@@ -739,7 +792,9 @@ function TaskListView({ projectId, projectStartDate, project = null, tasks, show
   const availableTemplates = scheduleTemplates.length
     ? scheduleTemplates
     : [{ id: 'archispace-standard-development-programme', name: 'Archispace Standard Development Programme', isDefault: true }]
-  const activeTemplateId = selectedTemplateId || availableTemplates.find(t => t.isDefault)?.id || availableTemplates[0]?.id || ''
+  const activeTemplateIds = selectedTemplateIds.length
+    ? selectedTemplateIds
+    : [availableTemplates.find(t => t.isDefault)?.id || availableTemplates[0]?.id].filter(Boolean)
   const availableProjectContacts = projectContacts.filter(item => item.projectId === projectId)
   const contactLabel = item => projectContactLabel(item, contacts, companies)
   const teamAssignees = useMemo(() => {
@@ -848,19 +903,60 @@ function TaskListView({ projectId, projectStartDate, project = null, tasks, show
 
   const applyTemplate = async () => {
     if (!projectId) return
-    const selectedTemplateItems = scheduleTemplateItems.filter(item => item.templateId === activeTemplateId)
-    const generated = buildScheduleTasksFromTemplateItems(projectId, projectStartDate || tasks[0]?.startDate || new Date(), selectedTemplateItems)
+    const generated = activeTemplateIds.flatMap(templateId => {
+      const selectedTemplateItems = scheduleTemplateItems.filter(item => item.templateId === templateId)
+      if (!selectedTemplateItems.length && templateId !== 'archispace-standard-development-programme') return []
+      return buildScheduleTasksFromTemplateItems(projectId, projectStartDate || tasks[0]?.startDate || new Date(), selectedTemplateItems)
+    })
     const existingKeys = new Set(tasks.map(task => `${String(task.phase || '').toLowerCase()}::${String(task.name || '').toLowerCase()}`))
+    const generatedKeys = new Set()
+    const uniqueGenerated = generated.filter(task => {
+      const key = `${String(task.phase || '').toLowerCase()}::${String(task.name || '').toLowerCase()}`
+      if (generatedKeys.has(key)) return false
+      generatedKeys.add(key)
+      return true
+    })
     const toAdd = templateMode === 'replace'
-      ? generated
-      : generated.filter(task => !existingKeys.has(`${String(task.phase || '').toLowerCase()}::${String(task.name || '').toLowerCase()}`))
+      ? uniqueGenerated
+      : uniqueGenerated.filter(task => !existingKeys.has(`${String(task.phase || '').toLowerCase()}::${String(task.name || '').toLowerCase()}`))
     if (templateMode === 'replace') {
-      const ok = window.confirm('Replace the current project schedule with this template? This deletes existing schedule rows for this project.')
+      const ok = window.confirm('Replace the current project schedule with the selected template set? This deletes existing schedule rows for this project.')
       if (!ok) return
       await deleteBatchScheduleTasks(tasks.map(task => task.id))
     }
     if (toAdd.length) await addBatchScheduleTasks(toAdd)
     setTemplateOpen(false)
+  }
+
+  const toggleTemplateSelection = templateId => {
+    setSelectedTemplateIds(current => {
+      const next = new Set(current)
+      if (next.has(templateId)) next.delete(templateId)
+      else next.add(templateId)
+      return [...next]
+    })
+  }
+
+  const sourceTasksForTemplate = () => {
+    if (templateScope === 'selected' && selectedIds.length) return tasks.filter(task => selectedIds.includes(task.id))
+    if (templateScope === 'visible') return filtered
+    return tasks
+  }
+
+  const saveTemplate = async () => {
+    const sourceTasks = sourceTasksForTemplate()
+    if (!sourceTasks.length) return
+    const name = templateName.trim() || `${project?.name || 'Project'} schedule template`
+    const result = await addScheduleTemplate({
+      name,
+      description: `${sourceTasks.length} rows saved from ${project?.name || 'project schedule'}.`,
+      tasks: sourceTasks,
+    })
+    if (result?.template?.id) setSelectedTemplateIds([result.template.id])
+    setTemplateName('')
+    setTemplateScope('selected')
+    setSaveTemplateOpen(false)
+    setSelected(new Set())
   }
 
   const tableCols = showProject
@@ -894,6 +990,9 @@ function TaskListView({ projectId, projectStartDate, project = null, tasks, show
           <>
             <button onClick={() => setTemplateOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
               <FileSpreadsheet size={14} /> Template
+            </button>
+            <button onClick={() => setSaveTemplateOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              <Save size={14} /> Save template
             </button>
             <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
               <Upload size={14} /> Import CSV
@@ -956,15 +1055,57 @@ function TaskListView({ projectId, projectStartDate, project = null, tasks, show
             </div>
             <button onClick={() => setTemplateOpen(false)} className="rounded-md p-1 text-gray-400 hover:bg-gray-50"><X size={15} /></button>
           </div>
-          <div className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
-            <select className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-ocean-400" value={activeTemplateId} onChange={e => setSelectedTemplateId(e.target.value)}>
-              {availableTemplates.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}
-            </select>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
+            <div className="max-h-44 overflow-auto rounded-lg border border-gray-200 bg-gray-50/60 p-2">
+              {availableTemplates.map(template => {
+                const checked = activeTemplateIds.includes(template.id)
+                return (
+                  <label key={template.id} className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-2 text-sm hover:bg-white">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleTemplateSelection(template.id)}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-forest-600 focus:ring-forest-500"
+                    />
+                    <span>
+                      <span className="block font-medium text-gray-800">{template.name}</span>
+                      {template.description && <span className="mt-0.5 block text-xs text-gray-400">{template.description}</span>}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
             <select className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-ocean-400" value={templateMode} onChange={e => setTemplateMode(e.target.value)}>
               <option value="missing">Add missing tasks only</option>
               <option value="replace">Replace current schedule</option>
             </select>
-            <button onClick={applyTemplate} className="h-9 rounded-lg bg-forest-600 px-4 text-sm font-semibold text-white hover:bg-forest-700">Apply</button>
+            <button onClick={applyTemplate} disabled={!activeTemplateIds.length} className="h-9 rounded-lg bg-forest-600 px-4 text-sm font-semibold text-white hover:bg-forest-700 disabled:opacity-50">Apply</button>
+          </div>
+        </div>
+      )}
+
+      {saveTemplateOpen && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-gray-800">Save schedule template</div>
+              <div className="text-xs text-gray-400">Save selected rows, filtered rows, or the full schedule for reuse on another project.</div>
+            </div>
+            <button onClick={() => setSaveTemplateOpen(false)} className="rounded-md p-1 text-gray-400 hover:bg-gray-50"><X size={15} /></button>
+          </div>
+          <div className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
+            <input
+              className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-ocean-400"
+              placeholder="Template name, e.g. Preconstruction approvals"
+              value={templateName}
+              onChange={e => setTemplateName(e.target.value)}
+            />
+            <select className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-ocean-400" value={templateScope} onChange={e => setTemplateScope(e.target.value)}>
+              <option value="selected">Selected rows ({selectedIds.length || 'none'})</option>
+              <option value="visible">Current filtered view ({filtered.length})</option>
+              <option value="all">Whole project schedule ({tasks.length})</option>
+            </select>
+            <button onClick={saveTemplate} disabled={!sourceTasksForTemplate().length} className="h-9 rounded-lg bg-forest-600 px-4 text-sm font-semibold text-white hover:bg-forest-700 disabled:opacity-50">Save</button>
           </div>
         </div>
       )}
@@ -1108,20 +1249,26 @@ function TaskListView({ projectId, projectStartDate, project = null, tasks, show
 }
 
 function GanttView({ tasks }) {
-  const [zoom, setZoom] = useState(46)
-  const [groupByStage, setGroupByStage] = useState(true)
+  const SCALE_OPTIONS = {
+    days: { label: 'Days', colW: 28 },
+    weeks: { label: 'Weeks', colW: 14 },
+    months: { label: 'Months', colW: 5 },
+  }
+  const [scale, setScale] = useState('weeks')
+  const [collapsed, setCollapsed] = useState(new Set())
   const scrollRef = useRef(null)
 
   const datedTasks = tasks.filter(t => t.startDate || t.endDate)
+  const rollups = useMemo(() => getSchedulePhaseRollups(datedTasks).filter(group => group.startDate || group.endDate), [datedTasks])
   const allDates = datedTasks.flatMap(t => [parseDate(t.startDate), parseDate(t.endDate)]).filter(Boolean)
   const minDate = allDates.length ? addDays(new Date(Math.min(...allDates.map(d => d.getTime()))), -7) : addDays(new Date(), -14)
   const maxDate = allDates.length ? addDays(new Date(Math.max(...allDates.map(d => d.getTime()))), 14) : addDays(new Date(), 60)
   const totalDays = Math.max(30, diffDays(minDate, maxDate) + 1)
-  const colW = Math.round(4 + (zoom / 100) * 36)
-  const rowH = 36
-  const labelW = 260
-  const now = today()
-  const todayOffset = diffDays(minDate, now)
+  const colW = SCALE_OPTIONS[scale].colW
+  const stageRowH = 40
+  const taskRowH = 28
+  const labelW = 460
+  const todayOffset = diffDays(minDate, today())
 
   useEffect(() => {
     if (scrollRef.current && todayOffset > 0) {
@@ -1130,14 +1277,17 @@ function GanttView({ tasks }) {
   }, [todayOffset, colW])
 
   const rows = useMemo(() => {
-    if (!groupByStage) return datedTasks.map(task => ({ type: 'task', task }))
     const result = []
-    groupTasks(datedTasks).forEach(group => {
-      result.push({ type: 'header', phase: group.phase })
-      group.items.forEach(task => result.push({ type: 'task', task }))
+    rollups.forEach(rollup => {
+      result.push({ type: 'phase', rollup })
+      if (!collapsed.has(rollup.phase)) {
+        rollup.items
+          .filter(task => task.startDate || task.endDate)
+          .forEach(task => result.push({ type: 'task', task, rollup }))
+      }
     })
     return result
-  }, [datedTasks, groupByStage])
+  }, [rollups, collapsed])
 
   const dates = useMemo(() => {
     const list = []
@@ -1145,23 +1295,53 @@ function GanttView({ tasks }) {
     return list
   }, [minDate.getTime(), totalDays])
 
-  const labelMode = colW >= 28 ? 'day' : colW >= 12 ? 'week' : 'month'
+  const togglePhase = phase => {
+    setCollapsed(current => {
+      const next = new Set(current)
+      if (next.has(phase)) next.delete(phase)
+      else next.add(phase)
+      return next
+    })
+  }
 
   const scrollToToday = () => {
     if (!scrollRef.current) return
     scrollRef.current.scrollTo({ left: Math.max(0, todayOffset * colW - scrollRef.current.clientWidth / 3), behavior: 'smooth' })
   }
 
-  const barFor = task => {
-    const start = parseDate(task.startDate || task.endDate)
-    const end = parseDate(task.endDate || task.startDate)
+  const barForRange = (startValue, endValue, minimumWidth = colW) => {
+    const start = parseDate(startValue || endValue)
+    const end = parseDate(endValue || startValue)
     if (!start || !end) return null
     return {
       left: Math.max(0, diffDays(minDate, start) * colW),
-      width: Math.max(colW, (diffDays(start, end) + 1) * colW),
+      width: Math.max(minimumWidth, (diffDays(start, end) + 1) * colW),
       endLeft: Math.max(0, diffDays(minDate, end) * colW),
     }
   }
+
+  const renderDateLabels = () => dates.map((date, index) => {
+    const firstOfMonth = date.getDate() === 1
+    const monday = date.getDay() === 1
+    let show = false
+    let label = ''
+    if (scale === 'days') {
+      show = true
+      label = String(date.getDate()).padStart(2, '0')
+    } else if (scale === 'weeks') {
+      show = monday || firstOfMonth
+      label = firstOfMonth ? `${formatMonth(date)} ${date.getDate()}` : String(date.getDate()).padStart(2, '0')
+    } else {
+      show = firstOfMonth
+      label = formatMonth(date)
+    }
+    if (!show) return null
+    return (
+      <div key={index} className={`absolute top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] ${firstOfMonth ? 'font-semibold text-gray-800' : 'text-gray-500'}`} style={{ left: index * colW }}>
+        {label}
+      </div>
+    )
+  })
 
   if (!datedTasks.length) {
     return <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">No tasks with dates yet.</div>
@@ -1169,101 +1349,115 @@ function GanttView({ tasks }) {
 
   return (
     <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-      <div className="flex flex-wrap items-center gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2">
-        <button
-          onClick={() => setGroupByStage(v => !v)}
-          className={`rounded px-3 py-1.5 text-xs font-medium ${groupByStage ? 'bg-forest-600 text-white' : 'text-gray-600 hover:bg-white'}`}
-        >
-          Group by Stage
-        </button>
-        <button onClick={scrollToToday} className="inline-flex items-center gap-1 rounded px-2.5 py-1.5 text-xs text-gray-700 hover:bg-white">
+      <div className="flex flex-wrap items-center gap-3 border-b border-gray-200 bg-white px-3 py-2">
+        <div className="flex overflow-hidden rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+          {Object.entries(SCALE_OPTIONS).map(([key, option]) => (
+            <button
+              key={key}
+              onClick={() => setScale(key)}
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold ${scale === key ? 'bg-forest-600 text-white shadow-sm' : 'text-gray-600 hover:bg-white'}`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <button onClick={scrollToToday} className="inline-flex items-center gap-1 rounded px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
           <CalendarDays size={13} /> Today
         </button>
-        <div className="mx-1 h-5 w-px bg-gray-200" />
-        <div className="flex items-center gap-2">
-          <Minus size={13} className="text-gray-500" />
-          <input className="w-28 accent-forest-600" type="range" min="0" max="100" value={zoom} onChange={e => setZoom(Number(e.target.value))} />
-          <Plus size={13} className="text-gray-500" />
-        </div>
+        <button onClick={() => setCollapsed(new Set())} className="rounded px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50">Expand stages</button>
+        <button onClick={() => setCollapsed(new Set(rollups.map(group => group.phase)))} className="rounded px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50">Collapse stages</button>
         <div className="flex-1" />
         <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-500">
-          <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-5 rounded bg-forest-600" />In Progress</span>
-          <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-5 rounded bg-emerald-600" />Complete</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-5 rounded bg-gray-400" />Stage span</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-5 rounded bg-forest-600" />In progress</span>
           <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-5 rounded bg-red-600" />Delayed</span>
           <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rotate-45 bg-forest-600" />Milestone</span>
         </div>
       </div>
 
-      <div className="flex overflow-hidden" style={{ maxHeight: 'calc(100vh - 310px)', minHeight: 430 }}>
+      <div className="flex overflow-hidden" style={{ maxHeight: 'calc(100vh - 310px)', minHeight: 470 }}>
         <div className="shrink-0 overflow-y-auto border-r border-gray-200" style={{ width: labelW }}>
-          <div className="sticky top-0 z-10 flex h-10 items-center border-b border-gray-200 bg-gray-50 px-4 text-xs font-medium text-gray-500">Task</div>
-          {rows.map((row, index) => row.type === 'header' ? (
-            <div key={`${row.phase}-${index}`} className="flex items-center border-b border-gray-200 bg-forest-50/30 px-4 text-xs font-bold uppercase tracking-wide text-forest-700" style={{ height: 28 }}>
-              <span className="truncate">{row.phase}</span>
-            </div>
-          ) : (
-            <div key={row.task.id} className="flex items-center border-b border-gray-200 px-4 hover:bg-gray-50" style={{ height: rowH }}>
-              <div className="flex min-w-0 items-center gap-2">
-                {row.task.isMilestone && <span className="h-2.5 w-2.5 rotate-45 bg-forest-600" />}
-                <span className="truncate text-sm text-gray-800">{row.task.name}</span>
+          <div className="sticky top-0 z-10 grid h-10 grid-cols-[minmax(210px,1fr)_82px_82px_76px_70px] items-center border-b border-gray-200 bg-gray-50 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+            <div className="px-4">Name</div>
+            <div className="px-2">Start</div>
+            <div className="px-2">Finish</div>
+            <div className="px-2">Duration</div>
+            <div className="px-2">Done</div>
+          </div>
+          {rows.map((row, index) => {
+            if (row.type === 'phase') {
+              const { rollup } = row
+              const isCollapsed = collapsed.has(rollup.phase)
+              return (
+                <button
+                  key={`${rollup.phase}-${index}`}
+                  onClick={() => togglePhase(rollup.phase)}
+                  className={`grid w-full grid-cols-[minmax(210px,1fr)_82px_82px_76px_70px] items-center border-b border-gray-200 text-left ${rollup.tone.light} hover:bg-white`}
+                  style={{ height: stageRowH }}
+                >
+                  <div className="flex min-w-0 items-center gap-2 px-4">
+                    {isCollapsed ? <ChevronRight size={14} className="shrink-0 text-gray-500" /> : <ChevronDown size={14} className="shrink-0 text-gray-500" />}
+                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${rollup.tone.dot}`} />
+                    <span className={`truncate text-xs font-bold uppercase tracking-wide ${rollup.tone.text}`}>{rollup.phase}</span>
+                  </div>
+                  <div className="px-2 text-[11px] font-medium text-gray-600">{formatShort(rollup.startDate)}</div>
+                  <div className="px-2 text-[11px] font-medium text-gray-600">{formatShort(rollup.endDate)}</div>
+                  <div className="px-2 text-[11px] text-gray-500">{rollup.durationDays ? `${rollup.durationDays}d` : '-'}</div>
+                  <div className="px-2 text-[11px] font-semibold text-gray-600">{rollup.pct}%</div>
+                </button>
+              )
+            }
+            const task = row.task
+            return (
+              <div key={task.id} className="grid grid-cols-[minmax(210px,1fr)_82px_82px_76px_70px] items-center border-b border-gray-100 hover:bg-gray-50" style={{ height: taskRowH }}>
+                <div className="flex min-w-0 items-center gap-2 px-8">
+                  {task.isMilestone && <span className="h-2 w-2 shrink-0 rotate-45 bg-forest-600" />}
+                  <span className="truncate text-xs text-gray-700">{task.name}</span>
+                </div>
+                <div className="px-2 text-[11px] text-gray-500">{formatShort(task.startDate)}</div>
+                <div className="px-2 text-[11px] text-gray-500">{formatShort(task.endDate)}</div>
+                <div className="px-2 text-[11px] text-gray-400">{durationDays(task) ? `${durationDays(task)}d` : '-'}</div>
+                <div className="px-2 text-[11px] text-gray-400">{task.progress ?? 0}%</div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         <div ref={scrollRef} className="flex-1 overflow-auto">
           <div style={{ width: totalDays * colW, minWidth: '100%' }}>
-            <div className="sticky top-0 z-10 flex h-10 border-b border-gray-200 bg-gray-50">
-              {dates.map((date, index) => {
-                const firstOfMonth = date.getDate() === 1
-                const monday = date.getDay() === 1
-                let show = false
-                let label = ''
-                if (labelMode === 'day') {
-                  show = true
-                  label = String(date.getDate())
-                } else if (labelMode === 'week') {
-                  show = monday || firstOfMonth
-                  label = firstOfMonth ? `${formatMonth(date)} ${date.getDate()}` : String(date.getDate())
-                } else {
-                  show = firstOfMonth
-                  label = formatMonth(date)
-                }
-                if (!show) return null
-                return <div key={index} className={`absolute top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] ${firstOfMonth ? 'font-medium text-gray-800' : 'text-gray-500'}`} style={{ left: index * colW }}>{label}</div>
-              })}
+            <div className="sticky top-0 z-10 h-10 border-b border-gray-200 bg-gray-50">
+              {renderDateLabels()}
             </div>
-
             {rows.map((row, index) => {
-              if (row.type === 'header') {
-                return (
-                  <div key={`${row.phase}-${index}`} className="relative border-b border-gray-200 bg-forest-50/10" style={{ height: 28 }}>
-                    {todayOffset >= 0 && todayOffset <= totalDays && <div className="absolute top-0 bottom-0 z-10 w-px bg-red-400" style={{ left: todayOffset * colW }} />}
-                  </div>
-                )
-              }
-
-              const task = row.task
-              const bar = barFor(task)
-              const status = smartStatus(task)
+              const height = row.type === 'phase' ? stageRowH : taskRowH
+              const range = row.type === 'phase'
+                ? barForRange(row.rollup.startDate, row.rollup.endDate, colW * 2)
+                : barForRange(row.task.startDate || row.task.endDate, row.task.endDate || row.task.startDate, colW)
+              const status = row.type === 'phase' ? row.rollup.status : smartStatus(row.task)
               const cfg = STATUS_MAP[status] || STATUS_MAP['not-started']
               return (
-                <div key={task.id} className="relative border-b border-gray-200 hover:bg-gray-50/50" style={{ height: rowH }}>
-                  {labelMode === 'day' && dates.map((date, dayIndex) => (date.getDay() === 0 || date.getDay() === 6) ? (
+                <div key={`${row.type}-${row.type === 'phase' ? row.rollup.phase : row.task.id}-${index}`} className={`relative border-b ${row.type === 'phase' ? 'border-gray-200 bg-gray-50/40' : 'border-gray-100 hover:bg-gray-50/50'}`} style={{ height }}>
+                  {scale === 'days' && dates.map((date, dayIndex) => (date.getDay() === 0 || date.getDay() === 6) ? (
                     <div key={dayIndex} className="absolute top-0 bottom-0 bg-gray-50" style={{ left: dayIndex * colW, width: colW }} />
                   ) : null)}
                   {todayOffset >= 0 && todayOffset <= totalDays && <div className="absolute top-0 bottom-0 z-10 w-px bg-red-400" style={{ left: todayOffset * colW }} />}
-                  {bar && task.isMilestone ? (
-                    <div className="absolute top-1/2 z-20 flex -translate-y-1/2 items-center gap-2" style={{ left: bar.endLeft }}>
-                      <span className={`h-3.5 w-3.5 -translate-x-1/2 rotate-45 ${cfg.bar}`} />
-                      <span className="max-w-[150px] truncate text-[11px] font-medium text-gray-800">{task.name}</span>
+                  {range && row.type === 'phase' && (
+                    <div className="absolute top-1/2 z-20 -translate-y-1/2" style={{ left: range.left }}>
+                      <div className={`h-5 rounded ${row.rollup.tone.bg} opacity-85`} style={{ width: range.width }} title={`${row.rollup.phase}: ${formatShort(row.rollup.startDate)} - ${formatShort(row.rollup.endDate)}`} />
                     </div>
-                  ) : bar ? (
-                    <div className="absolute top-1/2 z-20 flex -translate-y-1/2 items-center" style={{ left: bar.left }}>
-                      <div className={`h-5 rounded ${cfg.bar}`} style={{ width: bar.width }} title={`${task.name}: ${formatShort(task.startDate)} - ${formatShort(task.endDate)}`} />
-                      <span className="ml-2 max-w-[170px] truncate text-[11px] font-medium text-gray-800">{task.name}</span>
+                  )}
+                  {range && row.type === 'task' && row.task.isMilestone && (
+                    <div className="absolute top-1/2 z-20 flex -translate-y-1/2 items-center gap-2" style={{ left: range.endLeft }}>
+                      <span className={`h-3 w-3 -translate-x-1/2 rotate-45 ${cfg.bar}`} />
+                      <span className="max-w-[160px] truncate text-[11px] font-medium text-gray-700">{row.task.name}</span>
                     </div>
-                  ) : null}
+                  )}
+                  {range && row.type === 'task' && !row.task.isMilestone && (
+                    <div className="absolute top-1/2 z-20 flex -translate-y-1/2 items-center" style={{ left: range.left }}>
+                      <div className={`h-3 rounded ${cfg.bar} opacity-80`} style={{ width: range.width }} title={`${row.task.name}: ${formatShort(row.task.startDate)} - ${formatShort(row.task.endDate)}`} />
+                      <span className="ml-2 max-w-[170px] truncate text-[11px] text-gray-500">{row.task.name}</span>
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -1328,17 +1522,17 @@ function CalendarView({ tasks }) {
   )
 }
 
-export { CalendarView as ScheduleCalendarView, GanttView as ScheduleGanttView, TaskListView as ScheduleTaskListView, smartStatus as getScheduleSmartStatus }
+export { CalendarView as ScheduleCalendarView, GanttView as ScheduleGanttView, TaskListView as ScheduleTaskListView, getSchedulePhaseRollups, smartStatus as getScheduleSmartStatus }
 
 export default function ScheduleTab({ project }) {
   const { scheduleTasks } = useStore()
-  const [view, setView] = useState('list')
+  const [view, setView] = useState('gantt')
   const tasks = useMemo(() => scheduleTasks.filter(t => t.projectId === project.id), [scheduleTasks, project.id])
 
   const tabs = [
     { key: 'list', label: 'Task List', Icon: List },
-    { key: 'gantt', label: 'Gantt', Icon: BarChart2 },
-    { key: 'calendar', label: 'Calendar', Icon: Calendar },
+    { key: 'gantt', label: 'Task Gantt', Icon: BarChart2 },
+    { key: 'calendar', label: 'Task Calendar', Icon: Calendar },
   ]
 
   return (

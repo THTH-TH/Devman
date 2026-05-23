@@ -23,7 +23,7 @@ import StageTracker from '../components/StageTracker'
 import ChecklistItemModal from '../modals/ChecklistItemModal'
 import { STAGE_MAP, STAGES } from '../data/stages'
 import ChecklistView from './ChecklistView'
-import ScheduleTab from '../components/ProjectScheduleTab'
+import ScheduleTab, { getSchedulePhaseRollups } from '../components/ProjectScheduleTab'
 import ProjectDirectoryTab from '../components/ProjectDirectoryTab'
 import ProjectDailyLogTab from '../components/ProjectDailyLogTab'
 import PropertyIntelligenceTab from '../components/PropertyIntelligenceTab'
@@ -809,7 +809,7 @@ function DocumentsTab({ project }) {
 
 // ── Overview Tab ──────────────────────────────────────────────────────────────
 
-function OverviewTab({ project, onOpenProperty }) {
+function OverviewTab({ project, onOpenProperty, onOpenSchedule }) {
   const { checklistItems, activityLog, documents, projectContacts, companies, contacts, dailyLogs, milestones, scheduleTasks, propertyProfiles } = useStore()
   const items = checklistItems.filter(i => i.projectId === project.id)
   const activeStageIds = project.activeStageIds?.length ? project.activeStageIds : [project.currentStage]
@@ -826,6 +826,8 @@ function OverviewTab({ project, onOpenProperty }) {
     .slice()
     .sort((a, b) => String(b.logDate || b.createdAt || '').localeCompare(String(a.logDate || a.createdAt || '')))
     .slice(0, 3)
+  const projectScheduleTasks = scheduleTasks.filter(task => task.projectId === project.id)
+  const schedulePhaseRollups = getSchedulePhaseRollups(projectScheduleTasks).filter(phase => phase.startDate || phase.endDate)
 
   const stageStats = useMemo(() => {
     return STAGES.map(stage => {
@@ -870,6 +872,11 @@ function OverviewTab({ project, onOpenProperty }) {
     const d = new Date(ts)
     return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) +
       ' at ' + d.toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit' })
+  }
+  const fmtDate = value => {
+    if (!value) return '-'
+    const d = new Date(value)
+    return Number.isNaN(d.getTime()) ? '-' : d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })
   }
 
   return (
@@ -960,6 +967,46 @@ function OverviewTab({ project, onOpenProperty }) {
               <span className="rounded-full bg-ocean-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-ocean-700">
                 {propertyProfile.sourceStatus?.council || 'linked'}
               </span>
+            </div>
+          </div>
+        )}
+
+        {schedulePhaseRollups.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700">Schedule dates</h3>
+                <p className="mt-1 text-xs text-gray-400">Programme stage spans reported from the project schedule.</p>
+              </div>
+              <button onClick={onOpenSchedule} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+                Open schedule
+              </button>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {schedulePhaseRollups.slice(0, 6).map(phase => (
+                <div key={phase.phase} className="rounded-lg border border-gray-100 bg-gray-50/50 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${phase.tone.dot}`} />
+                      <span className="truncate text-xs font-bold uppercase tracking-wide text-gray-700">{phase.phase}</span>
+                    </div>
+                    <span className="text-[11px] font-semibold text-gray-500">{phase.pct}%</span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-gray-500">
+                    <span>{fmtDate(phase.startDate)} - {fmtDate(phase.endDate)}</span>
+                    <span>{phase.durationDays ? `${phase.durationDays} days` : '-'}</span>
+                  </div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white">
+                    <div className={`h-full rounded-full ${phase.tone.bg}`} style={{ width: `${phase.pct}%` }} />
+                  </div>
+                  {(phase.delayed > 0 || phase.blocked > 0) && (
+                    <div className="mt-2 flex gap-1.5">
+                      {phase.delayed > 0 && <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">{phase.delayed} delayed</span>}
+                      {phase.blocked > 0 && <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">{phase.blocked} blocked</span>}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -1430,7 +1477,7 @@ export default function ProjectWorkspace() {
       {/* Tab content */}
       <div className="flex-1 overflow-auto">
         <div className="p-6 max-w-7xl mx-auto">
-          {activeTab === 'Overview' && <OverviewTab project={project} onOpenProperty={() => setActiveTab('Property')} />}
+          {activeTab === 'Overview' && <OverviewTab project={project} onOpenProperty={() => setActiveTab('Property')} onOpenSchedule={() => setActiveTab('Schedule')} />}
           {activeTab === 'Property' && <PropertyIntelligenceTab project={project} />}
           {activeTab === 'Checklist' && <ChecklistView projectId={project.id} />}
           {activeTab === 'Tasks' && <AssignedTasksTab project={project} />}

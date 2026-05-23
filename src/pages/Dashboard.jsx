@@ -14,6 +14,7 @@ import useStore from '../store/useStore'
 import EmptyState from '../components/EmptyState'
 import ProgressBar from '../components/ProgressBar'
 import StatusPill from '../components/StatusPill'
+import { getSchedulePhaseRollups } from '../components/ProjectScheduleTab'
 import { STAGE_MAP, STAGES } from '../data/stages'
 import { buildAttentionItems } from '../lib/attention'
 
@@ -135,7 +136,10 @@ export default function Dashboard() {
         const due = parseDate(task.dueDate)
         return due && due < today && openTask(task)
       })
-      const delayedSchedule = scheduleTasks.filter(task => task.projectId === project.id && task.status === 'delayed')
+      const projectScheduleTasks = scheduleTasks.filter(task => task.projectId === project.id)
+      const delayedSchedule = projectScheduleTasks.filter(task => task.status === 'delayed')
+      const schedulePhases = getSchedulePhaseRollups(projectScheduleTasks).filter(phase => phase.startDate || phase.endDate)
+      const currentSchedulePhase = schedulePhases.find(phase => phase.pct < 100) || schedulePhases[0] || null
       const openBlockers = items.filter(item => item.isBlocker && !item.done)
       const activeStageIds = project.activeStageIds?.length ? project.activeStageIds : [project.currentStage]
       const projectMilestones = [
@@ -166,6 +170,7 @@ export default function Dashboard() {
         documents: docs.length,
         contacts: directory.length,
         nextMilestone: projectMilestones[0] || null,
+        currentSchedulePhase,
         propertyAddress: profile?.formattedAddress || profile?.address || project.address,
         riskScore,
       }
@@ -303,12 +308,13 @@ export default function Dashboard() {
               action={<Link to="/projects" className="text-xs font-semibold text-ocean-600 hover:underline">Open projects</Link>}
             >
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[920px] text-sm">
+                <table className="w-full min-w-[1040px] text-sm">
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50 text-[11px] uppercase tracking-wide text-gray-400">
                       <th className="px-5 py-3 text-left font-semibold">Project</th>
                       <th className="px-3 py-3 text-left font-semibold">Stages</th>
                       <th className="px-3 py-3 text-left font-semibold">Progress</th>
+                      <th className="px-3 py-3 text-left font-semibold">Schedule</th>
                       <th className="px-3 py-3 text-left font-semibold">Attention</th>
                       <th className="px-3 py-3 text-left font-semibold">Next milestone</th>
                       <th className="px-3 py-3 text-left font-semibold">Docs</th>
@@ -341,6 +347,21 @@ export default function Dashboard() {
                               <ProgressBar value={project.checklistProgress} height="h-1.5" color={project.checklistProgress >= 80 ? 'bg-green-500' : 'bg-forest-600'} />
                               <span className="w-8 text-right text-xs font-semibold text-gray-500">{project.checklistProgress}%</span>
                             </div>
+                          </td>
+                          <td className="px-3 py-3">
+                            {project.currentSchedulePhase ? (
+                              <div className="min-w-[145px]">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`h-2 w-2 shrink-0 rounded-full ${project.currentSchedulePhase.tone.dot}`} />
+                                  <span className="max-w-[135px] truncate text-xs font-semibold text-gray-700">{project.currentSchedulePhase.phase}</span>
+                                </div>
+                                <div className="mt-0.5 text-[11px] text-gray-400">
+                                  {formatShortDate(project.currentSchedulePhase.startDate)} - {formatShortDate(project.currentSchedulePhase.endDate)}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-gray-300">No programme</span>
+                            )}
                           </td>
                           <td className="px-3 py-3">
                             {hasRisk ? (

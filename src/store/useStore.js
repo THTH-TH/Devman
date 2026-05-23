@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 
 // ── ID generator ─────────────────────────────────────────────────────────────
 const genId = () => crypto.randomUUID()
+const DAY_MS = 86_400_000
 
 // ── Row mappers (snake_case DB → camelCase app) ───────────────────────────────
 const mapProfile = r => ({
@@ -1324,6 +1325,80 @@ const useStore = create((set, get) => ({
   },
 
   // ── Documents ─────────────────────────────────────────────────────────────
+  async addScheduleTemplate(data) {
+    const tasks = Array.isArray(data.tasks) ? data.tasks.filter(task => task?.name) : []
+    if (!tasks.length) return null
+
+    const id = genId()
+    const now = new Date().toISOString()
+    const parseLocalDate = value => {
+      if (!value) return null
+      const parts = String(value).split('-').map(Number)
+      if (parts.length === 3 && parts.every(Boolean)) return new Date(parts[0], parts[1] - 1, parts[2])
+      const date = new Date(value)
+      return Number.isNaN(date.getTime()) ? null : date
+    }
+    const datedStarts = tasks
+      .map(task => parseLocalDate(task.startDate || task.endDate))
+      .filter(Boolean)
+    const baseDate = datedStarts.length ? new Date(Math.min(...datedStarts.map(date => date.getTime()))) : new Date()
+    baseDate.setHours(0, 0, 0, 0)
+    const templateRow = {
+      id,
+      name: data.name || 'Schedule template',
+      description: data.description || '',
+      is_default: false,
+      created_at: now,
+      updated_at: now,
+    }
+    const itemRows = tasks.map((task, index) => {
+      const start = parseLocalDate(task.startDate || task.endDate) || baseDate
+      const end = parseLocalDate(task.endDate || task.startDate) || start
+      const duration = task.durationDays ?? Math.max(1, Math.round((end - start) / DAY_MS) + 1)
+      return {
+        id: genId(),
+        template_id: id,
+        phase: task.phase || 'Uncategorised',
+        name: task.name || '',
+        offset_days: Math.max(0, Math.round((start - baseDate) / DAY_MS)),
+        duration_days: Math.max(1, Number(duration) || 1),
+        is_milestone: Boolean(task.isMilestone),
+        dependency_key: task.dependencyKey || '',
+        notes: task.notes || '',
+        sort_order: task.sortOrder ?? index,
+        created_at: now,
+        updated_at: now,
+      }
+    })
+    const template = mapScheduleTemplate(templateRow)
+    const items = itemRows.map(mapScheduleTemplateItem)
+    set(s => ({
+      scheduleTemplates: [...s.scheduleTemplates, template],
+      scheduleTemplateItems: [...s.scheduleTemplateItems, ...items],
+    }))
+
+    const { error } = await supabase.from('schedule_templates').insert(templateRow)
+    if (error) {
+      console.error('addScheduleTemplate error:', error)
+      set(s => ({
+        scheduleTemplates: s.scheduleTemplates.filter(item => item.id !== id),
+        scheduleTemplateItems: s.scheduleTemplateItems.filter(item => item.templateId !== id),
+      }))
+      return null
+    }
+    const { error: itemError } = await supabase.from('schedule_template_items').insert(itemRows)
+    if (itemError) {
+      console.error('addScheduleTemplate items error:', itemError)
+      set(s => ({
+        scheduleTemplates: s.scheduleTemplates.filter(item => item.id !== id),
+        scheduleTemplateItems: s.scheduleTemplateItems.filter(item => item.templateId !== id),
+      }))
+      await supabase.from('schedule_templates').delete().eq('id', id)
+      return null
+    }
+    return { template, items }
+  },
+
   async addDocument(data) {
     const id = genId()
     const row = {

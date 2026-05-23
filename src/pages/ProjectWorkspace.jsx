@@ -1476,7 +1476,7 @@ export default function ProjectWorkspace() {
 
       {/* Tab content */}
       <div className="flex-1 overflow-auto">
-        <div className="p-6 max-w-7xl mx-auto">
+        <div className={`p-6 ${activeTab === 'Schedule' ? 'max-w-none' : 'mx-auto max-w-7xl'}`}>
           {activeTab === 'Overview' && <OverviewTab project={project} onOpenProperty={() => setActiveTab('Property')} onOpenSchedule={() => setActiveTab('Schedule')} />}
           {activeTab === 'Property' && <PropertyIntelligenceTab project={project} />}
           {activeTab === 'Checklist' && <ChecklistView projectId={project.id} />}

@@ -43,7 +43,7 @@ export default function Schedule() {
   ]
 
   return (
-    <div className="mx-auto max-w-7xl p-6">
+    <div className={`${view === 'gantt' ? 'max-w-none' : 'mx-auto max-w-7xl'} p-6`}>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Schedule</h1>
@@ -95,7 +95,15 @@ export default function Schedule() {
           exportTitle={selectedProject ? `${selectedProject.name} schedule` : 'Portfolio schedule'}
         />
       )}
-      {view === 'gantt' && <ScheduleGanttView tasks={tasks} />}
+      {view === 'gantt' && (
+        <ScheduleGanttView
+          projectId={selectedProject?.id || ''}
+          projectStartDate={selectedProject?.startDate}
+          project={selectedProject}
+          tasks={tasks}
+          exportTitle={selectedProject ? `${selectedProject.name} schedule` : 'Portfolio schedule'}
+        />
+      )}
       {view === 'calendar' && <ScheduleCalendarView tasks={tasks} />}
     </div>
   )

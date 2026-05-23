@@ -464,7 +464,7 @@ function StatusSelect({ task, onChange }) {
   const cfg = STATUS_MAP[status] || STATUS_MAP['not-started']
 
   return (
-    <div className="relative inline-flex min-w-[120px] items-center rounded-md bg-gray-50">
+    <div className="relative inline-flex min-w-[108px] items-center rounded-md bg-gray-50">
       <span className={`pointer-events-none absolute left-3 h-2 w-2 rounded-full ${cfg.dot}`} />
       <select
         className="h-7 w-full appearance-none rounded-md border border-transparent bg-transparent pl-7 pr-8 text-xs text-gray-700 outline-none hover:border-gray-200 focus:border-ocean-400 focus:bg-white"
@@ -486,7 +486,7 @@ function DateCell({ value, onCommit }) {
   return (
     <input
       type="date"
-      className="h-7 w-[118px] rounded-md border border-transparent bg-transparent px-1.5 text-xs text-gray-700 outline-none hover:border-gray-200 focus:border-ocean-400 focus:bg-white"
+      className="h-7 w-full min-w-[92px] rounded-md border border-transparent bg-transparent px-1.5 text-xs text-gray-700 outline-none hover:border-gray-200 focus:border-ocean-400 focus:bg-white"
       value={draft}
       onChange={e => setDraft(e.target.value)}
       onBlur={() => {
@@ -1286,6 +1286,7 @@ function GanttView({ projectId, projectStartDate, project = null, tasks, exportT
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
   const [templateName, setTemplateName] = useState('')
   const [templateScope, setTemplateScope] = useState('selected')
+  const [leftW, setLeftW] = useState(680)
   const scrollRef = useRef(null)
 
   const phases = useMemo(() => [...new Set(tasks.map(t => t.phase).filter(Boolean))], [tasks])
@@ -1307,11 +1308,11 @@ function GanttView({ projectId, projectStartDate, project = null, tasks, exportT
   const totalDays = Math.max(30, diffDays(minDate, maxDate) + 1)
   const zoomFactor = 0.72 + (zoom / 100) * 1.35
   const colW = Math.max(5, Math.round(SCALE_OPTIONS[scale].baseColW * zoomFactor))
-  const leftW = 980
   const timelineWidth = Math.max(900, totalDays * colW)
-  const stageRowH = 46
-  const taskRowH = 42
-  const headerH = 58
+  const stageRowH = 38
+  const taskRowH = 36
+  const headerH = 56
+  const leftGridTemplate = '34px minmax(130px,1fr) 96px 96px 46px 108px 116px 28px'
   const todayOffset = diffDays(minDate, today())
   const selectedIds = [...selected].filter(id => filtered.some(task => task.id === id))
   const visibleIds = filtered.map(task => task.id)
@@ -1410,6 +1411,22 @@ function GanttView({ projectId, projectStartDate, project = null, tasks, exportT
   const scrollToToday = () => {
     if (!scrollRef.current) return
     scrollRef.current.scrollTo({ left: Math.max(0, leftW + todayOffset * colW - scrollRef.current.clientWidth / 3), behavior: 'smooth' })
+  }
+
+  const startLeftResize = event => {
+    event.preventDefault()
+    const startX = event.clientX
+    const startW = leftW
+    const onMove = moveEvent => {
+      const nextW = startW + moveEvent.clientX - startX
+      setLeftW(Math.min(940, Math.max(560, nextW)))
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
   }
 
   const barForRange = (startValue, endValue, minimumWidth = colW) => {
@@ -1754,7 +1771,12 @@ function GanttView({ projectId, projectStartDate, project = null, tasks, exportT
         >
           <div className="flex" style={{ width: leftW + timelineWidth }}>
             <div className="sticky left-0 z-30 shrink-0 border-r border-gray-200 bg-white shadow-[6px_0_12px_rgba(15,23,42,0.04)]" style={{ width: leftW }}>
-              <div className="grid h-[58px] grid-cols-[42px_minmax(270px,1fr)_126px_126px_64px_170px_150px_42px] items-center border-b border-gray-200 bg-gray-50 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+              <div
+                onPointerDown={startLeftResize}
+                className="absolute right-[-4px] top-0 z-50 h-full w-2 cursor-col-resize bg-transparent hover:bg-ocean-300/40"
+                title="Drag to resize task list"
+              />
+              <div className="grid items-center border-b border-gray-200 bg-gray-50 text-[11px] font-semibold uppercase tracking-wide text-gray-500" style={{ height: headerH, gridTemplateColumns: leftGridTemplate }}>
                 <div className="px-3">
                   <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} className="h-4 w-4 rounded border-gray-300 text-forest-600 focus:ring-forest-500" />
                 </div>
@@ -1775,8 +1797,8 @@ function GanttView({ projectId, projectStartDate, project = null, tasks, exportT
                     <button
                       key={`${rollup.phase}-${index}`}
                       onClick={() => togglePhase(rollup.phase)}
-                      className={`grid w-full grid-cols-[42px_minmax(270px,1fr)_126px_126px_64px_170px_150px_42px] items-center border-b border-gray-200 text-left ${rollup.tone.light} hover:bg-white`}
-                      style={{ height: stageRowH }}
+                      className={`grid w-full items-center border-b border-gray-200 text-left ${rollup.tone.light} hover:bg-white`}
+                      style={{ height: stageRowH, gridTemplateColumns: leftGridTemplate }}
                     >
                       <div />
                       <div className="flex min-w-0 items-center gap-2 px-4">
@@ -1805,8 +1827,8 @@ function GanttView({ projectId, projectStartDate, project = null, tasks, exportT
                 return (
                   <div
                     key={task.id}
-                    className={`group grid grid-cols-[42px_minmax(270px,1fr)_126px_126px_64px_170px_150px_42px] items-center border-b border-gray-100 ${cfg.row} hover:bg-gray-50`}
-                    style={{ height: taskRowH }}
+                    className={`group grid items-center border-b border-gray-100 ${cfg.row} hover:bg-gray-50`}
+                    style={{ height: taskRowH, gridTemplateColumns: leftGridTemplate }}
                   >
                     <div className="px-3">
                       <input type="checkbox" checked={selected.has(task.id)} onChange={() => toggleSelected(task.id)} className="h-4 w-4 rounded border-gray-300 text-forest-600 focus:ring-forest-500" />

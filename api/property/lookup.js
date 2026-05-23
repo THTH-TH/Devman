@@ -16,6 +16,13 @@ const linzSearchUrl = address =>
 const taurangaMapsUrl = address =>
   `https://maps.tauranga.govt.nz/?search=${encodeURIComponent(address || '')}`
 
+const searchUrl = (site, address) =>
+  `https://www.google.com/search?q=${encodeURIComponent(`${address || 'New Zealand property'} site:${site}`)}`
+
+const homesSearchUrl = address => searchUrl('homes.co.nz', address)
+const oneRoofSearchUrl = address => searchUrl('oneroof.co.nz', address)
+const propertyValueSearchUrl = address => searchUrl('propertyvalue.co.nz', address)
+
 const TAURANGA_SERVICES = {
   hazards: 'https://gis.tauranga.govt.nz/server/rest/services/Natural_Hazards__multiple_data_sources/MapServer',
   zoning: 'https://gis.tauranga.govt.nz/server/rest/services/ePlan/ePlan_DistrictPlanBase/MapServer',
@@ -288,33 +295,17 @@ export default async function handler(req, res) {
   const latitude = placeDetails.lat ?? placeDetails.latitude ?? project.latitude ?? null
   const longitude = placeDetails.lng ?? placeDetails.longitude ?? project.longitude ?? null
   const inTaurangaBop = isTaurangaBop({ ...placeDetails, address: formattedAddress })
-  const [hazard, zoning, services] = inTaurangaBop
-    ? await Promise.all([
-      identifyTaurangaHazards(latitude, longitude),
-      identifyTaurangaZoning(latitude, longitude),
-      identifyTaurangaUtilities(latitude, longitude),
-    ])
-    : [
-      {
-        status: 'linked',
-        summary: 'Outside the Tauranga/BOP-first lookup area. Link relevant council GIS evidence manually for now.',
-        sourceUrl: '',
-      },
-      {
-        status: 'manual',
-        summary: 'Outside the Tauranga/BOP-first lookup area. Add the relevant council district plan zoning manually.',
-        sourceUrl: '',
-      },
-      {
-        status: 'manual',
-        summary: 'Outside the Tauranga/BOP-first lookup area. Add stormwater, wastewater and water services manually.',
-        sourceUrl: '',
-      },
-    ]
+  const legalDescription = project.legalDescription || project.propertySnapshot?.legalDescription || ''
+  const owner = project.owner || project.clientEntity || ''
+  const landArea = project.propertySnapshot?.landArea || project.propertySnapshot?.land_area || ''
+  const zoning = project.propertySnapshot?.zoning || project.propertySnapshot?.zone || ''
 
   const mapLinks = {
     googleMaps: googleMapsUrl({ latitude, longitude, address: formattedAddress }),
     streetView: streetViewUrl({ latitude, longitude, address: formattedAddress }),
+    homesSearch: homesSearchUrl(formattedAddress),
+    oneRoofSearch: oneRoofSearchUrl(formattedAddress),
+    propertyValueSearch: propertyValueSearchUrl(formattedAddress),
     linzSearch: linzSearchUrl(formattedAddress),
     councilMaps: inTaurangaBop ? taurangaMapsUrl(formattedAddress) : '',
     taurangaNaturalHazards: TAURANGA_SERVICES.hazards,
@@ -337,61 +328,64 @@ export default async function handler(req, res) {
     sourceStatus: {
       googleMaps: latitude && longitude ? 'live' : 'manual',
       linz: 'linked',
-      council: inTaurangaBop ? hazard.status : 'linked',
-      zoning: zoning.status,
-      hazards: hazard.status,
-      services: services.status,
+      council: inTaurangaBop ? 'linked' : 'manual',
+      zoning: zoning ? 'manual' : 'linked',
+      hazards: 'linked',
+      services: 'manual',
       titleOwnership: 'manual',
-      valuation: 'not available',
+      valuation: 'linked',
       demographics: 'not available',
     },
     titleSummary: {
       status: 'manual',
-      summary: project.legalDescription || 'Title and ownership evidence should be uploaded or linked. Do not treat ownership as live until licensed access is confirmed.',
-      legalDescription: project.legalDescription || '',
-      owner: project.owner || '',
+      summary: legalDescription || 'Open Homes.co.nz, OneRoof, LINZ or council records, then save the verified legal description here.',
+      legalDescription,
+      owner,
+      sourceUrl: mapLinks.homesSearch,
     },
     parcelSummary: {
       status: 'linked',
-      summary: 'Use LINZ parcel and cadastral layers as the open-source check, then save any verified notes here.',
+      summary: landArea ? `Land area: ${landArea}` : 'Use Homes.co.nz, OneRoof, PropertyValue, LINZ or council records to verify land area, then save it here.',
+      landArea,
       sourceUrl: mapLinks.linzSearch,
     },
     councilSummary: {
       status: inTaurangaBop ? 'linked' : 'manual',
-      summary: inTaurangaBop ? 'Tauranga/BOP council map links are attached for planning and records checks.' : 'Add the relevant council property/GIS links manually.',
+      summary: inTaurangaBop ? 'Tauranga council map link attached for planning, property and records checks.' : 'Add the relevant council property/GIS link manually.',
       sourceUrl: mapLinks.councilMaps,
     },
     zoningSummary: {
-      status: zoning.status,
-      summary: zoning.summary,
-      sourceUrl: zoning.sourceUrl || mapLinks.taurangaZoning || mapLinks.councilMaps,
-      details: zoning.details || {},
-      results: zoning.results || [],
+      status: zoning ? 'manual' : 'linked',
+      summary: zoning || 'Zoning is not automatically confirmed. Check Homes.co.nz/OneRoof/council map and save the verified zone here.',
+      sourceUrl: mapLinks.councilMaps || mapLinks.homesSearch,
+      details: { zone: zoning },
+      results: [],
     },
     hazardSummary: {
-      status: hazard.status,
-      summary: hazard.summary,
-      sourceUrl: hazard.sourceUrl || mapLinks.taurangaNaturalHazards,
-      items: hazard.items || [],
-      results: hazard.results || [],
+      status: 'linked',
+      summary: 'Hazards/flooding are linked for manual council review only in this simplified property record.',
+      sourceUrl: mapLinks.taurangaNaturalHazards,
+      items: [],
+      results: [],
     },
     servicesSummary: {
-      status: services.status,
-      summary: services.summary,
-      sourceUrl: services.sourceUrl || mapLinks.taurangaUtilities,
-      searchRadiusMeters: services.searchRadiusMeters || null,
-      groups: services.groups || {},
+      status: 'manual',
+      summary: 'Services are manual notes for now. Confirm stormwater, wastewater, water, power and access from council/utility evidence.',
+      sourceUrl: mapLinks.taurangaUtilities,
+      searchRadiusMeters: null,
+      groups: {},
     },
     valuationSummary: {
-      status: 'not available',
-      summary: 'Council valuation, rental estimate and market estimate are placeholders until a licensed/source feed is connected.',
+      status: 'linked',
+      summary: 'Use Homes.co.nz, OneRoof or PropertyValue as quick market evidence, then save the useful valuation notes here.',
+      sourceUrl: mapLinks.homesSearch,
     },
     demographicsSummary: {
       status: 'not available',
-      summary: 'Schools and demographics are placeholders for a later data source.',
+      summary: 'Demographics are not connected yet.',
     },
     mapLinks,
-    rawPayload: { placeDetails, hazard, zoning, services },
+    rawPayload: { placeDetails, sources: mapLinks },
     lastRefreshedAt: new Date().toISOString(),
   }
 
@@ -399,10 +393,9 @@ export default async function handler(req, res) {
     profile,
     sourceRuns: [
       { source: 'Google Maps', status: profile.sourceStatus.googleMaps, message: latitude && longitude ? 'Coordinates stored from address selection.' : 'Manual address without coordinates.' },
-      { source: 'LINZ Data Service', status: 'linked', message: 'Open LINZ search link generated for cadastral/title evidence checks.' },
-      { source: 'Tauranga zoning', status: zoning.status, message: zoning.summary },
-      { source: 'Tauranga flooding and hazards', status: hazard.status, message: hazard.summary },
-      { source: 'Tauranga services', status: services.status, message: services.summary },
+      { source: 'Homes.co.nz / OneRoof', status: 'linked', message: 'Property evidence search links generated. Save verified legal, land area and zoning details manually.' },
+      { source: 'LINZ Data Service', status: 'linked', message: 'Open LINZ search link generated for parcel/title evidence checks.' },
+      { source: 'Council records', status: profile.sourceStatus.council, message: profile.councilSummary.summary },
     ],
   })
 }

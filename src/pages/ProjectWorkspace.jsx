@@ -809,7 +809,7 @@ function DocumentsTab({ project }) {
 
 // ── Overview Tab ──────────────────────────────────────────────────────────────
 
-function OverviewTab({ project }) {
+function OverviewTab({ project, onOpenProperty }) {
   const { checklistItems, activityLog, documents, projectContacts, companies, contacts, dailyLogs, milestones, scheduleTasks, propertyProfiles } = useStore()
   const items = checklistItems.filter(i => i.projectId === project.id)
   const activeStageIds = project.activeStageIds?.length ? project.activeStageIds : [project.currentStage]
@@ -817,6 +817,10 @@ function OverviewTab({ project }) {
   const projectDocs = documents.filter(doc => doc.projectId === project.id).slice(0, 5)
   const projectDirectory = projectContacts.filter(item => item.projectId === project.id)
   const propertyProfile = propertyProfiles.find(item => item.projectId === project.id)
+  const legalDescription = propertyProfile?.titleSummary?.legalDescription || project.legalDescription || ''
+  const landArea = propertyProfile?.parcelSummary?.landArea || ''
+  const zoning = propertyProfile?.zoningSummary?.details?.zone || propertyProfile?.zoningSummary?.manualZone || ''
+  const propertyAddress = propertyProfile?.formattedAddress || propertyProfile?.address || project.address || ''
   const recentLogs = dailyLogs
     .filter(log => log.projectId === project.id)
     .slice()
@@ -876,7 +880,22 @@ function OverviewTab({ project }) {
 
         {/* Project info card */}
         <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3 text-sm">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700">Project information</h3>
+              <p className="mt-1 text-xs text-gray-400">Key property and scope details for this project.</p>
+            </div>
+            <button onClick={onOpenProperty} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+              Property tab
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            {propertyAddress && (
+              <div className="lg:col-span-2">
+                <div className="text-xs text-gray-400 mb-0.5">Address</div>
+                <div className="font-medium text-gray-800">{propertyAddress}</div>
+              </div>
+            )}
             {project.clientEntity && (
               <div>
                 <div className="text-xs text-gray-400 mb-0.5">Client / Entity</div>
@@ -887,6 +906,30 @@ function OverviewTab({ project }) {
               <div>
                 <div className="text-xs text-gray-400 mb-0.5">Owner</div>
                 <div className="font-medium text-gray-800">{project.owner}</div>
+              </div>
+            )}
+            {(project.buildingWorkDescription || project.description) && (
+              <div className="lg:col-span-2">
+                <div className="text-xs text-gray-400 mb-0.5">Scope / work</div>
+                <div className="font-medium text-gray-800">{project.buildingWorkDescription || project.description}</div>
+              </div>
+            )}
+            {legalDescription && (
+              <div className="lg:col-span-2">
+                <div className="text-xs text-gray-400 mb-0.5">Legal description</div>
+                <div className="font-medium text-gray-800">{legalDescription}</div>
+              </div>
+            )}
+            {landArea && (
+              <div>
+                <div className="text-xs text-gray-400 mb-0.5">Land area</div>
+                <div className="font-medium text-gray-800">{landArea}</div>
+              </div>
+            )}
+            {zoning && (
+              <div>
+                <div className="text-xs text-gray-400 mb-0.5">Zoning</div>
+                <div className="font-medium text-gray-800">{zoning}</div>
               </div>
             )}
             {project.startDate && (
@@ -1387,7 +1430,7 @@ export default function ProjectWorkspace() {
       {/* Tab content */}
       <div className="flex-1 overflow-auto">
         <div className="p-6 max-w-7xl mx-auto">
-          {activeTab === 'Overview' && <OverviewTab project={project} />}
+          {activeTab === 'Overview' && <OverviewTab project={project} onOpenProperty={() => setActiveTab('Property')} />}
           {activeTab === 'Property' && <PropertyIntelligenceTab project={project} />}
           {activeTab === 'Checklist' && <ChecklistView projectId={project.id} />}
           {activeTab === 'Tasks' && <AssignedTasksTab project={project} />}

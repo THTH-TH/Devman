@@ -176,6 +176,7 @@ function formatDateTime(value) {
 }
 
 function buildFallbackProfile(project) {
+  const searchUrl = site => `https://www.google.com/search?q=${encodeURIComponent(`${project.address || project.name || 'New Zealand property'} site:${site}`)}`
   return {
     projectId: project.id,
     formattedAddress: project.address,
@@ -209,7 +210,12 @@ function buildFallbackProfile(project) {
     servicesSummary: { status: 'manual', summary: 'Services notes not captured yet.' },
     valuationSummary: { status: 'not available', summary: 'Valuation/rental placeholders only.' },
     demographicsSummary: { status: 'not available', summary: 'Schools/demographics placeholders only.' },
-    mapLinks: {},
+    mapLinks: {
+      homesSearch: searchUrl('homes.co.nz'),
+      oneRoofSearch: searchUrl('oneroof.co.nz'),
+      propertyValueSearch: searchUrl('propertyvalue.co.nz'),
+      linzSearch: `https://data.linz.govt.nz/layers/?q=${encodeURIComponent(project.address || 'New Zealand property parcel')}`,
+    },
   }
 }
 
@@ -230,6 +236,8 @@ export default function PropertyIntelligenceTab({ project }) {
     legalDescription: existingProfile?.titleSummary?.legalDescription || project.legalDescription || '',
     owner: existingProfile?.titleSummary?.owner || project.owner || '',
     titleSummary: existingProfile?.titleSummary?.summary || '',
+    landArea: existingProfile?.parcelSummary?.landArea || '',
+    zoning: existingProfile?.zoningSummary?.details?.zone || existingProfile?.zoningSummary?.manualZone || '',
     zoningSummary: existingProfile?.zoningSummary?.manualNotes || '',
     servicesSummary: existingProfile?.servicesSummary?.manualNotes || '',
     valuationSummary: existingProfile?.valuationSummary?.summary || '',
@@ -241,6 +249,8 @@ export default function PropertyIntelligenceTab({ project }) {
   const locationLabel = [activeProfile.suburb, activeProfile.city, activeProfile.region, activeProfile.postalCode].filter(Boolean).join(', ')
   const titleOwner = activeProfile.titleSummary?.owner || project.owner || 'Manual evidence required'
   const legalDescription = activeProfile.titleSummary?.legalDescription || project.legalDescription || 'Manual evidence required'
+  const landArea = activeProfile.parcelSummary?.landArea || manual.landArea || 'Manual evidence required'
+  const zoningLabel = activeProfile.zoningSummary?.details?.zone || activeProfile.zoningSummary?.manualZone || manual.zoning || 'Manual evidence required'
   const hazardSummary = activeProfile.hazardSummary?.summary || 'Hazard check not captured yet.'
   const zoningDetails = activeProfile.zoningSummary?.details || {}
   const hazardItems = activeProfile.hazardSummary?.items || []
@@ -299,11 +309,19 @@ export default function PropertyIntelligenceTab({ project }) {
         owner: manual.owner,
         summary: manual.titleSummary || manual.legalDescription || 'Manual title/legal notes saved.',
       },
+      parcelSummary: {
+        ...(activeProfile.parcelSummary || {}),
+        status: manual.landArea ? 'manual' : activeProfile.parcelSummary?.status || 'linked',
+        summary: manual.landArea ? `Land area: ${manual.landArea}` : activeProfile.parcelSummary?.summary,
+        landArea: manual.landArea,
+      },
       zoningSummary: {
         ...(activeProfile.zoningSummary || {}),
+        manualZone: manual.zoning,
         manualNotes: manual.zoningSummary,
-        status: activeProfile.zoningSummary?.status || 'manual',
-        summary: activeProfile.zoningSummary?.summary || manual.zoningSummary,
+        status: manual.zoning || manual.zoningSummary ? 'manual' : activeProfile.zoningSummary?.status || 'linked',
+        summary: manual.zoning || manual.zoningSummary || activeProfile.zoningSummary?.summary,
+        details: { ...(activeProfile.zoningSummary?.details || {}), zone: manual.zoning || activeProfile.zoningSummary?.details?.zone || '' },
       },
       servicesSummary: {
         ...(activeProfile.servicesSummary || {}),
@@ -331,7 +349,7 @@ export default function PropertyIntelligenceTab({ project }) {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-lg font-bold text-gray-900">Property Intelligence</h2>
-          <p className="text-sm text-gray-500">Map, title evidence, council checks, hazards, services, valuation notes and due-diligence source status.</p>
+          <p className="text-sm text-gray-500">Basic property record, map links, legal notes, land area and zoning evidence.</p>
         </div>
         <button
           onClick={refresh}
@@ -364,21 +382,47 @@ export default function PropertyIntelligenceTab({ project }) {
         <QuickFact label="Property" icon={MapPin} value={address} status={activeProfile.sourceStatus?.googleMaps} />
         <QuickFact label="Location" icon={Map} value={locationLabel || 'Manual location'} status={activeProfile.sourceStatus?.googleMaps} />
         <QuickFact label="Legal description" icon={LandPlot} value={legalDescription} status={activeProfile.titleSummary?.status || activeProfile.sourceStatus?.titleOwnership} />
-        <QuickFact label="Owner / entity" icon={Building2} value={titleOwner} status={activeProfile.sourceStatus?.titleOwnership} />
+        <QuickFact label="Land area" icon={Layers} value={landArea} status={activeProfile.parcelSummary?.status} />
       </div>
 
-      <SourceStrip sourceStatus={activeProfile.sourceStatus} />
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <QuickFact label="Zoning" icon={MapPin} value={zoningLabel} status={activeProfile.zoningSummary?.status || activeProfile.sourceStatus?.zoning} />
+        <QuickFact label="Owner / entity" icon={Building2} value={titleOwner} status={activeProfile.sourceStatus?.titleOwnership} />
+        <QuickFact label="Valuation source" icon={Gauge} value="Homes / OneRoof links" status={activeProfile.sourceStatus?.valuation} />
+        <QuickFact label="Council source" icon={Building2} value={activeProfile.councilSummary?.sourceUrl ? 'Council link saved' : 'Manual link required'} status={activeProfile.councilSummary?.status} />
+      </div>
 
       <section className="rounded-xl border border-ocean-100 bg-ocean-50/50 p-5">
         <div className="flex items-start gap-3">
           <ShieldAlert size={18} className="mt-0.5 shrink-0 text-ocean-700" />
           <div>
-            <h3 className="text-sm font-bold text-gray-900">Relab-style dossier, with clear evidence levels</h3>
+            <h3 className="text-sm font-bold text-gray-900">Keep this as a simple property record for now</h3>
             <p className="mt-1 text-sm leading-6 text-gray-600">
-              DevMan now shows the map and the intelligence panels directly. Live Google coordinates and Tauranga hazard checks can be captured automatically; title ownership, valuation, services and planning conclusions remain manual or linked until the right council/LINZ/licensed feeds are connected.
+              DevMan stores the useful basics against the project: address, legal description, land area, zoning, ownership/entity notes, source links and manual evidence. This avoids slow GIS scraping while keeping the project record useful.
             </p>
             <div className="mt-3 text-xs text-gray-500">Last refreshed: {formatDateTime(activeProfile.lastRefreshedAt)}</div>
           </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-gray-100 bg-white p-5">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-bold text-gray-900">Quick property sources</h3>
+          <span className="text-xs text-gray-400">Open, verify, then save the result below</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {[
+            ['Homes.co.nz search', activeProfile.mapLinks?.homesSearch],
+            ['OneRoof search', activeProfile.mapLinks?.oneRoofSearch],
+            ['PropertyValue search', activeProfile.mapLinks?.propertyValueSearch],
+            ['LINZ search', activeProfile.mapLinks?.linzSearch],
+            ['Council map', activeProfile.mapLinks?.councilMaps],
+          ].filter(([, url]) => url).map(([label, url]) => (
+            <a key={label} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+              {label}
+              <ExternalLink size={11} />
+            </a>
+          ))}
         </div>
       </section>
 
@@ -404,7 +448,11 @@ export default function PropertyIntelligenceTab({ project }) {
           </div>
         </InfoPanel>
 
-        <InfoPanel title="Parcel and boundary" icon={Layers} status={activeProfile.parcelSummary?.status} summary={activeProfile.parcelSummary?.summary} sourceUrl={activeProfile.parcelSummary?.sourceUrl || activeProfile.mapLinks?.linzSearch} />
+        <InfoPanel title="Parcel and boundary" icon={Layers} status={activeProfile.parcelSummary?.status} summary={activeProfile.parcelSummary?.summary} sourceUrl={activeProfile.parcelSummary?.sourceUrl || activeProfile.mapLinks?.linzSearch}>
+          <Field label="Land area">
+            <input className={`${inputCls} mt-3`} value={manual.landArea} onChange={e => set('landArea', e.target.value)} placeholder="e.g. 852 m2" />
+          </Field>
+        </InfoPanel>
 
         <InfoPanel title="Council records" icon={Building2} status={activeProfile.councilSummary?.status} summary={activeProfile.councilSummary?.summary} sourceUrl={activeProfile.councilSummary?.sourceUrl || activeProfile.mapLinks?.councilMaps} />
 
@@ -416,6 +464,9 @@ export default function PropertyIntelligenceTab({ project }) {
               <DetailPill label="Rule" value={zoningDetails.ruleId} />
             </div>
           )}
+          <Field label="Zoning">
+            <input className={`${inputCls} mt-3`} value={manual.zoning} onChange={e => set('zoning', e.target.value)} placeholder="e.g. Medium Density Residential Zone" />
+          </Field>
           <Field label="Planning notes">
             <textarea className={`${inputCls} mt-3 min-h-[72px] resize-none`} value={manual.zoningSummary} onChange={e => set('zoningSummary', e.target.value)} placeholder="Zone, overlays, activity status, density constraints, setbacks..." />
           </Field>
@@ -448,7 +499,7 @@ export default function PropertyIntelligenceTab({ project }) {
           </Field>
         </InfoPanel>
 
-        <InfoPanel title="Valuation and rental" icon={Gauge} status={activeProfile.valuationSummary?.status} summary={activeProfile.valuationSummary?.summary}>
+        <InfoPanel title="Valuation and rental" icon={Gauge} status={activeProfile.valuationSummary?.status} summary={activeProfile.valuationSummary?.summary} sourceUrl={activeProfile.valuationSummary?.sourceUrl || activeProfile.mapLinks?.homesSearch || activeProfile.mapLinks?.oneRoofSearch}>
           <Field label="Manual valuation notes">
             <textarea className={`${inputCls} mt-3 min-h-[72px] resize-none`} value={manual.valuationSummary} onChange={e => set('valuationSummary', e.target.value)} placeholder="CV, land value, market estimate, rental range, source date..." />
           </Field>

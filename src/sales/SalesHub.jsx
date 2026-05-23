@@ -1248,6 +1248,7 @@ function SalesDocumentsPage() {
   const { projects } = useSalesStore()
   const {
     documents,
+    documentFolders,
     profile,
     currentUser,
     addDocument,
@@ -1255,6 +1256,7 @@ function SalesDocumentsPage() {
     deleteDocument,
     updateBatchDocuments,
     deleteBatchDocuments,
+    addDocumentFolder,
   } = useStore()
 
   const salesProjectOptions = useMemo(() => projects.map(salesDocumentProjectOption), [projects])
@@ -1268,6 +1270,7 @@ function SalesDocumentsPage() {
         <DocumentHub
           projects={salesProjectOptions}
           documents={salesDocuments}
+          documentFolders={documentFolders}
           profile={profile}
           currentUser={currentUser}
           addDocument={addDocument}
@@ -1275,6 +1278,7 @@ function SalesDocumentsPage() {
           deleteDocument={deleteDocument}
           updateBatchDocuments={updateBatchDocuments}
           deleteBatchDocuments={deleteBatchDocuments}
+          addDocumentFolder={addDocumentFolder}
           defaultProjectId={salesProjectOptions[0]?.id || ''}
           title="Sales documents"
           showMainRegisterLink
@@ -1287,6 +1291,7 @@ function SalesDocumentsPage() {
 function SalesProjectDocuments({ project }) {
   const {
     documents,
+    documentFolders,
     profile,
     currentUser,
     addDocument,
@@ -1294,6 +1299,7 @@ function SalesProjectDocuments({ project }) {
     deleteDocument,
     updateBatchDocuments,
     deleteBatchDocuments,
+    addDocumentFolder,
   } = useStore()
   const { projects } = useSalesStore()
   const salesProjectOptions = useMemo(() => projects.map(salesDocumentProjectOption), [projects])
@@ -1303,6 +1309,7 @@ function SalesProjectDocuments({ project }) {
     <DocumentHub
       projects={salesProjectOptions}
       documents={documents}
+      documentFolders={documentFolders}
       profile={profile}
       currentUser={currentUser}
       addDocument={addDocument}
@@ -1310,6 +1317,7 @@ function SalesProjectDocuments({ project }) {
       deleteDocument={deleteDocument}
       updateBatchDocuments={updateBatchDocuments}
       deleteBatchDocuments={deleteBatchDocuments}
+      addDocumentFolder={addDocumentFolder}
       fixedProjectId={documentProjectId}
       defaultProjectId={documentProjectId}
       title={`${project.name} sales documents`}

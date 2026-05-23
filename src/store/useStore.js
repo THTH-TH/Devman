@@ -90,6 +90,7 @@ const mapDocument = r => ({
   id: r.id,
   projectId: r.project_id || '',
   stageId: r.stage_id || '',
+  folderPath: r.folder_path || '',
   name: r.name || r.title || r.filename || '',
   url: r.url || r.drive_url || r.file_url || '',
   category: r.category || 'other',
@@ -111,6 +112,17 @@ const mapDocument = r => ({
   issuedFor: r.issued_for || '',
   documentStatus: r.document_status || 'current',
   createdAt: r.created_at,
+})
+
+const mapDocumentFolder = r => ({
+  id: r.id,
+  projectId: r.project_id || '',
+  name: r.name || '',
+  path: r.path || r.name || '',
+  parentPath: r.parent_path || '',
+  createdBy: r.created_by || '',
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
 })
 
 const mapTeamMember = r => ({
@@ -391,6 +403,7 @@ const stripEnhancedDocumentColumns = row => {
     gmail_message_id,
     gmail_thread_id,
     stage_id,
+    folder_path,
     storage_path,
     file_name,
     mime_type,
@@ -408,7 +421,7 @@ const stripEnhancedDocumentColumns = row => {
 
 const missingEnhancedDocumentColumn = error =>
   error?.code === 'PGRST204' ||
-  /drive_file_id|drive_url|source|gmail_message_id|gmail_thread_id|stage_id|storage_path|file_name|mime_type|file_size|uploaded_by|revision|drawing_number|discipline|issued_for|document_status/i.test(error?.message || '')
+  /drive_file_id|drive_url|source|gmail_message_id|gmail_thread_id|stage_id|folder_path|storage_path|file_name|mime_type|file_size|uploaded_by|revision|drawing_number|discipline|issued_for|document_status/i.test(error?.message || '')
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 const useStore = create((set, get) => ({
@@ -417,6 +430,7 @@ const useStore = create((set, get) => ({
   milestones: [],
   activityLog: [],
   documents: [],
+  documentFolders: [],
   teamMembers: [],
   tasks: [],
   scheduleTasks: [],
@@ -445,6 +459,7 @@ const useStore = create((set, get) => ({
       milestones: [],
       activityLog: [],
       documents: [],
+      documentFolders: [],
       teamMembers: [],
       tasks: [],
       scheduleTasks: [],
@@ -541,9 +556,10 @@ const useStore = create((set, get) => ({
 
       // Secondary tables load after the shell opens so first paint is not blocked by large registers/logs.
       try {
-        const [a, d, tr, sr, ev, co, ct, pc, dl, st, sti, pp, pl, psr, ds, aid] = await Promise.all([
+        const [a, d, df, tr, sr, ev, co, ct, pc, dl, st, sti, pp, pl, psr, ds, aid] = await Promise.all([
           supabase.from('activity_log').select('*').order('occurred_at', { ascending: false }).limit(500),
           supabase.from('documents').select('*').order('created_at', { ascending: false }),
+          supabase.from('document_folders').select('*').order('path'),
           supabase.from('tasks').select('*').order('created_at', { ascending: false }),
           supabase.from('schedule_tasks').select('*').order('sort_order'),
           supabase.from('calendar_events').select('*').order('event_date'),
@@ -561,6 +577,7 @@ const useStore = create((set, get) => ({
         ])
         if (!a.error) set({ activityLog: a.data.map(mapActivity) })
         if (!d.error) set({ documents: d.data.map(mapDocument) })
+        if (!df.error) set({ documentFolders: df.data.map(mapDocumentFolder) })
         if (!tr.error) set({ tasks: tr.data.map(mapTask) })
         if (!sr.error) set({ scheduleTasks: sr.data.map(mapScheduleTask) })
         if (!ev.error) set({ calendarEvents: ev.data.map(mapCalendarEvent) })
@@ -629,6 +646,15 @@ const useStore = create((set, get) => ({
           if (eventType === 'INSERT') return { documents: [mapDocument(row), ...s.documents] }
           if (eventType === 'UPDATE') return { documents: s.documents.map(d => d.id === row.id ? mapDocument(row) : d) }
           if (eventType === 'DELETE') return { documents: s.documents.filter(d => d.id !== old.id) }
+          return s
+        })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'document_folders' }, payload => {
+        const { eventType, new: row, old } = payload
+        set(s => {
+          if (eventType === 'INSERT') return { documentFolders: [...s.documentFolders, mapDocumentFolder(row)].sort((a, b) => a.path.localeCompare(b.path)) }
+          if (eventType === 'UPDATE') return { documentFolders: s.documentFolders.map(folder => folder.id === row.id ? mapDocumentFolder(row) : folder).sort((a, b) => a.path.localeCompare(b.path)) }
+          if (eventType === 'DELETE') return { documentFolders: s.documentFolders.filter(folder => folder.id !== old.id) }
           return s
         })
       })
@@ -1275,6 +1301,7 @@ const useStore = create((set, get) => ({
       id,
       project_id: data.projectId || null,
       stage_id: data.stageId || '',
+      folder_path: data.folderPath || '',
       name: data.name,
       url: data.url || '',
       category: data.category || 'other',
@@ -1323,8 +1350,10 @@ const useStore = create((set, get) => ({
     if (data.url !== undefined) updates.url = data.url
     if (data.projectId !== undefined) updates.project_id = data.projectId || null
     if (data.stageId !== undefined) updates.stage_id = data.stageId || ''
+    if (data.folderPath !== undefined) updates.folder_path = data.folderPath || ''
     if (data.category !== undefined) updates.category = data.category
     if (data.notes !== undefined) updates.notes = data.notes
+    if (data.addedBy !== undefined) updates.added_by = data.addedBy
     if (data.source !== undefined) updates.source = data.source
     if (data.storagePath !== undefined) updates.storage_path = data.storagePath
     if (data.fileName !== undefined) updates.file_name = data.fileName
@@ -1368,6 +1397,7 @@ const useStore = create((set, get) => ({
     const updates = {}
     if (data.projectId !== undefined) updates.project_id = data.projectId || null
     if (data.stageId !== undefined) updates.stage_id = data.stageId || ''
+    if (data.folderPath !== undefined) updates.folder_path = data.folderPath || ''
     if (data.category !== undefined) updates.category = data.category
     if (data.revision !== undefined) updates.revision = data.revision
     if (data.drawingNumber !== undefined) updates.drawing_number = data.drawingNumber
@@ -1396,6 +1426,34 @@ const useStore = create((set, get) => ({
   },
 
   // ── Team Members ──────────────────────────────────────────────────────────
+  async addDocumentFolder(data) {
+    const path = data.path || data.name || ''
+    if (!path) return null
+    const existing = get().documentFolders.find(folder => folder.projectId === (data.projectId || '') && folder.path === path)
+    if (existing) return existing
+    const id = genId()
+    const now = new Date().toISOString()
+    const row = {
+      id,
+      project_id: data.projectId || null,
+      name: data.name || path.split('/').pop(),
+      path,
+      parent_path: data.parentPath || '',
+      created_by: data.createdBy || get().currentUser || '',
+      created_at: now,
+      updated_at: now,
+    }
+    const folder = mapDocumentFolder(row)
+    set(s => ({ documentFolders: [...s.documentFolders, folder].sort((a, b) => a.path.localeCompare(b.path)) }))
+    const { error } = await supabase.from('document_folders').insert(row)
+    if (error) {
+      console.error('addDocumentFolder error:', error)
+      set(s => ({ documentFolders: s.documentFolders.filter(item => item.id !== id) }))
+      return null
+    }
+    return folder
+  },
+
   // Property intelligence
   async upsertPropertyProfile(data) {
     const id = data.id || data.propertyProfileId || genId()

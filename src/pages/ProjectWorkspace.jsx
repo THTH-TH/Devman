@@ -723,6 +723,7 @@ function DocumentsTab({ project }) {
   const {
     projects,
     documents,
+    documentFolders,
     profile,
     currentUser,
     addDocument,
@@ -730,6 +731,7 @@ function DocumentsTab({ project }) {
     deleteDocument,
     updateBatchDocuments,
     deleteBatchDocuments,
+    addDocumentFolder,
     updateProject,
   } = useStore()
   const [editingDriveFolder, setEditingDriveFolder] = useState(false)
@@ -787,6 +789,7 @@ function DocumentsTab({ project }) {
       <DocumentHub
         projects={projects}
         documents={documents}
+        documentFolders={documentFolders}
         profile={profile}
         currentUser={currentUser}
         addDocument={addDocument}
@@ -794,6 +797,7 @@ function DocumentsTab({ project }) {
         deleteDocument={deleteDocument}
         updateBatchDocuments={updateBatchDocuments}
         deleteBatchDocuments={deleteBatchDocuments}
+        addDocumentFolder={addDocumentFolder}
         fixedProjectId={project.id}
         defaultProjectId={project.id}
         title={`${project.name} documents`}

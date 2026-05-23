@@ -12,6 +12,7 @@ export default function Documents() {
   const {
     projects,
     documents,
+    documentFolders,
     profile,
     currentUser,
     addDocument,
@@ -19,6 +20,7 @@ export default function Documents() {
     deleteDocument,
     updateBatchDocuments,
     deleteBatchDocuments,
+    addDocumentFolder,
   } = useStore()
   const projectOptions = useMemo(() => [
     ...projects,
@@ -29,6 +31,7 @@ export default function Documents() {
     <DocumentHub
       projects={projectOptions}
       documents={documents}
+      documentFolders={documentFolders}
       profile={profile}
       currentUser={currentUser}
       addDocument={addDocument}
@@ -36,6 +39,7 @@ export default function Documents() {
       deleteDocument={deleteDocument}
       updateBatchDocuments={updateBatchDocuments}
       deleteBatchDocuments={deleteBatchDocuments}
+      addDocumentFolder={addDocumentFolder}
       title="Documents"
       showHeader
     />

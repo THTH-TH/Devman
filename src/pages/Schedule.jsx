@@ -89,8 +89,10 @@ export default function Schedule() {
       {view === 'list' && (
         <ScheduleTaskListView
           projectId={selectedProject?.id || ''}
+          project={selectedProject}
           tasks={tasks}
           showProject={!selectedProject}
+          exportTitle={selectedProject ? `${selectedProject.name} schedule` : 'Portfolio schedule'}
         />
       )}
       {view === 'gantt' && <ScheduleGanttView tasks={tasks} />}

@@ -10,6 +10,7 @@ import {
   Diamond,
   Download,
   Edit3,
+  FileText,
   FileSpreadsheet,
   List,
   Minus,
@@ -186,6 +187,224 @@ function exportScheduleCsv(tasks, fileName = 'schedule.csv') {
   const link = document.createElement('a')
   link.href = url
   link.download = fileName
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function pdfSafe(value) {
+  return String(value || '')
+    .replace(/[–—]/g, '-')
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '?')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function truncateText(value, max = 60) {
+  const text = String(value || '').trim()
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+}
+
+function fileSafe(value) {
+  return String(value || 'schedule')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'schedule'
+}
+
+function formatPdfDateTime(value = new Date()) {
+  return value.toLocaleString('en-NZ', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function statusLabel(task) {
+  return STATUS_MAP[smartStatus(task)]?.label || 'Not Started'
+}
+
+function buildSchedulePdf({ project, tasks, includeProject = false, title = 'Schedule' }) {
+  const page = { width: 842, height: 595 }
+  const margin = 34
+  const grouped = groupTasks(tasks)
+  const complete = tasks.filter(task => smartStatus(task) === 'complete').length
+  const delayed = tasks.filter(task => smartStatus(task) === 'delayed').length
+  const blocked = tasks.filter(task => smartStatus(task) === 'blocked').length
+  const pct = tasks.length ? Math.round((complete / tasks.length) * 100) : 0
+  const dates = tasks.flatMap(task => [parseDate(task.startDate), parseDate(task.endDate)]).filter(Boolean).sort((a, b) => a - b)
+  const dateRange = dates.length ? `${formatShort(dates[0])} - ${formatShort(dates[dates.length - 1])}` : 'No dates set'
+  const columns = includeProject
+    ? [
+        { key: 'projectName', label: 'Project', width: 102, max: 24 },
+        { key: 'name', label: 'Task', width: 270, max: 54 },
+        { key: 'startDate', label: 'Start', width: 64, max: 12 },
+        { key: 'endDate', label: 'Finish', width: 64, max: 12 },
+        { key: 'days', label: 'Days', width: 42, max: 5 },
+        { key: 'assignee', label: 'Assignee', width: 130, max: 28 },
+        { key: 'status', label: 'Status', width: 78, max: 18 },
+      ]
+    : [
+        { key: 'name', label: 'Task', width: 356, max: 72 },
+        { key: 'startDate', label: 'Start', width: 70, max: 12 },
+        { key: 'endDate', label: 'Finish', width: 70, max: 12 },
+        { key: 'days', label: 'Days', width: 44, max: 5 },
+        { key: 'assignee', label: 'Assignee', width: 156, max: 34 },
+        { key: 'status', label: 'Status', width: 80, max: 18 },
+      ]
+  const actualTableWidth = columns.reduce((sum, column) => sum + column.width, 0)
+  const pages = []
+  let ops = []
+  let y = margin
+
+  const rgb = (values = [0, 0, 0]) => values.map(value => Number(value).toFixed(3)).join(' ')
+  const rect = (x, yTop, width, height, fill) => {
+    ops.push(`q ${rgb(fill)} rg ${x.toFixed(2)} ${(page.height - yTop - height).toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)} re f Q`)
+  }
+  const stroke = (x1, y1, x2, y2, color = [0.86, 0.88, 0.91], width = 0.5) => {
+    ops.push(`q ${rgb(color)} RG ${width} w ${x1.toFixed(2)} ${(page.height - y1).toFixed(2)} m ${x2.toFixed(2)} ${(page.height - y2).toFixed(2)} l S Q`)
+  }
+  const text = (x, yTop, value, size = 9, color = [0.12, 0.16, 0.23], font = 'F1') => {
+    ops.push(`BT /${font} ${size} Tf ${rgb(color)} rg ${x.toFixed(2)} ${(page.height - yTop).toFixed(2)} Td (${pdfSafe(value)}) Tj ET`)
+  }
+  const addPage = () => {
+    pages.push(ops.join('\n'))
+    ops = []
+    y = margin
+    drawHeader(false)
+    drawTableHeader()
+  }
+  const ensureSpace = height => {
+    if (y + height > page.height - margin) addPage()
+  }
+  const drawHeader = (firstPage = true) => {
+    text(margin, y, project?.name || title, firstPage ? 18 : 13, [0.06, 0.09, 0.16], 'F2')
+    text(page.width - margin - 150, y, `Generated ${formatPdfDateTime()}`, 8, [0.43, 0.47, 0.55])
+    y += firstPage ? 18 : 16
+    if (firstPage) {
+      const details = [
+        project?.address ? `Address: ${project.address}` : '',
+        project?.status ? `Status: ${project.status}` : '',
+        project?.currentStage ? `Primary stage: ${project.currentStage}` : '',
+        project?.startDate ? `Start: ${formatShort(project.startDate)}` : '',
+        project?.targetCompletion ? `Target: ${formatShort(project.targetCompletion)}` : '',
+      ].filter(Boolean)
+      details.forEach(item => {
+        text(margin, y, item, 8.5, [0.37, 0.41, 0.49])
+        y += 12
+      })
+      if (project?.buildingWorkDescription || project?.description) {
+        text(margin, y, `Scope: ${truncateText(project.buildingWorkDescription || project.description, 130)}`, 8.5, [0.37, 0.41, 0.49])
+        y += 12
+      }
+      y += 5
+      const metricWidth = 92
+      const metrics = [
+        ['Tasks', tasks.length],
+        ['Complete', complete],
+        ['Delayed', delayed],
+        ['Blocked', blocked],
+        ['Done', `${pct}%`],
+        ['Date range', dateRange],
+      ]
+      metrics.forEach((item, index) => {
+        const width = index === metrics.length - 1 ? 186 : metricWidth
+        const x = margin + metrics.slice(0, index).reduce((sum, current, currentIndex) => sum + (currentIndex === metrics.length - 1 ? 186 : metricWidth) + 8, 0)
+        rect(x, y, width, 34, [0.96, 0.97, 0.96])
+        text(x + 8, y + 12, item[0], 7.5, [0.55, 0.59, 0.66], 'F2')
+        text(x + 8, y + 26, item[1], 10, [0.06, 0.09, 0.16], 'F2')
+      })
+      y += 48
+    }
+    stroke(margin, y - 4, page.width - margin, y - 4, [0.82, 0.85, 0.88], 0.6)
+  }
+  const drawTableHeader = () => {
+    rect(margin, y, actualTableWidth, 22, [0.95, 0.96, 0.97])
+    let x = margin
+    columns.forEach(column => {
+      text(x + 6, y + 14, column.label, 7.5, [0.43, 0.47, 0.55], 'F2')
+      x += column.width
+    })
+    y += 22
+  }
+  const valueFor = (task, key) => {
+    if (key === 'startDate') return formatShort(task.startDate) || '-'
+    if (key === 'endDate') return formatShort(task.endDate) || '-'
+    if (key === 'days') return durationDays(task) ? `${durationDays(task)}d` : '-'
+    if (key === 'status') return statusLabel(task)
+    return task[key] || '-'
+  }
+
+  drawHeader(true)
+  drawTableHeader()
+
+  grouped.forEach(group => {
+    ensureSpace(44)
+    const completeInGroup = group.items.filter(task => smartStatus(task) === 'complete').length
+    const groupPct = group.items.length ? Math.round((completeInGroup / group.items.length) * 100) : 0
+    rect(margin, y, actualTableWidth, 20, [0.91, 0.95, 0.91])
+    text(margin + 6, y + 13, `${group.phase}  ${completeInGroup}/${group.items.length} complete  ${groupPct}%`, 8.5, [0.20, 0.29, 0.17], 'F2')
+    y += 20
+    group.items.forEach(task => {
+      ensureSpace(18)
+      let x = margin
+      columns.forEach(column => {
+        const raw = valueFor(task, column.key)
+        const color = column.key === 'status'
+          ? smartStatus(task) === 'complete' ? [0.04, 0.42, 0.23] : smartStatus(task) === 'delayed' || smartStatus(task) === 'blocked' ? [0.72, 0.10, 0.10] : [0.25, 0.29, 0.35]
+          : [0.17, 0.21, 0.27]
+        text(x + 6, y + 12, truncateText(raw, column.max), 7.8, color, column.key === 'name' ? 'F2' : 'F1')
+        x += column.width
+      })
+      stroke(margin, y + 18, margin + actualTableWidth, y + 18, [0.89, 0.91, 0.93], 0.4)
+      y += 18
+    })
+  })
+  if (!tasks.length) text(margin + 6, y + 18, 'No schedule tasks found.', 9, [0.43, 0.47, 0.55])
+  pages.push(ops.join('\n'))
+
+  const objects = ['', '', '', '']
+  objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
+  objects[4] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>'
+  const pageIds = []
+  pages.forEach(content => {
+    const contentId = objects.length
+    objects.push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`)
+    const pageId = objects.length
+    pageIds.push(pageId)
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page.width} ${page.height}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentId} 0 R >>`)
+  })
+  objects[1] = '<< /Type /Catalog /Pages 2 0 R >>'
+  objects[2] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`
+  const encoder = new TextEncoder()
+  const byteLength = value => encoder.encode(value).length
+  let pdf = '%PDF-1.4\n'
+  const offsets = [0]
+  for (let i = 1; i < objects.length; i += 1) {
+    offsets[i] = byteLength(pdf)
+    pdf += `${i} 0 obj\n${objects[i]}\nendobj\n`
+  }
+  const xrefOffset = byteLength(pdf)
+  pdf += `xref\n0 ${objects.length}\n0000000000 65535 f \n`
+  for (let i = 1; i < objects.length; i += 1) pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`
+  pdf += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`
+  return new Blob([pdf], { type: 'application/pdf' })
+}
+
+function exportSchedulePdf({ project, tasks, includeProject = false, title = 'Schedule' }) {
+  const blob = buildSchedulePdf({ project, tasks, includeProject, title })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  const name = project?.name || title
+  link.href = url
+  link.download = `${fileSafe(name)}-schedule.pdf`
   link.click()
   URL.revokeObjectURL(url)
 }
@@ -471,7 +690,7 @@ function TaskEditDrawer({ task, phaseOptions, onClose }) {
   )
 }
 
-function TaskListView({ projectId, projectStartDate, tasks, showProject = false }) {
+function TaskListView({ projectId, projectStartDate, project = null, tasks, showProject = false, exportTitle = 'Schedule' }) {
   const {
     updateScheduleTask,
     deleteScheduleTask,
@@ -680,8 +899,11 @@ function TaskListView({ projectId, projectStartDate, tasks, showProject = false 
               <Upload size={14} /> Import CSV
               <input type="file" accept=".csv,text/csv" className="hidden" onChange={e => handleCsvFile(e.target.files?.[0])} />
             </label>
-            <button onClick={() => exportScheduleCsv(tasks, 'devman-schedule.csv')} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
-              <Download size={14} /> Export
+            <button onClick={() => exportScheduleCsv(tasks, `${fileSafe(project?.name || exportTitle)}-schedule.csv`)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              <Download size={14} /> CSV
+            </button>
+            <button onClick={() => exportSchedulePdf({ project, tasks: filtered, includeProject: showProject, title: exportTitle })} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              <FileText size={14} /> PDF
             </button>
             <button onClick={() => setShowNewTask(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-forest-600 px-3 text-sm font-medium text-white hover:bg-forest-700">
               <Plus size={14} /> Add Task
@@ -1134,7 +1356,7 @@ export default function ScheduleTab({ project }) {
         ))}
       </div>
 
-      {view === 'list' && <TaskListView projectId={project.id} projectStartDate={project.startDate} tasks={tasks} />}
+      {view === 'list' && <TaskListView projectId={project.id} projectStartDate={project.startDate} project={project} tasks={tasks} exportTitle={`${project.name} schedule`} />}
       {view === 'gantt' && <GanttView tasks={tasks} />}
       {view === 'calendar' && <CalendarView tasks={tasks} />}
     </div>

@@ -515,7 +515,7 @@ export default function Dashboard() {
               </div>
             </Panel>
 
-            <Panel title="Directory coverage" subtitle="Contacts linked into project work">
+            <Panel title="Contacts coverage" subtitle="People and companies linked into project work">
               <div className="grid grid-cols-2 gap-3 p-5">
                 <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Project contacts</div>

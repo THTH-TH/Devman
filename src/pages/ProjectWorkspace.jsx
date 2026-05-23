@@ -31,7 +31,7 @@ import AiDraftActionsPanel from '../components/AiDraftActionsPanel'
 import ShareDocumentsModal from '../components/ShareDocumentsModal'
 import DocumentHub from '../components/DocumentHub'
 
-const TABS = ['Overview', 'Property', 'Schedule', 'Checklist', 'Tasks', 'Documents', 'Directory', 'Daily Log']
+const TABS = ['Overview', 'Property', 'Schedule', 'Checklist', 'Tasks', 'Documents', 'Contacts', 'Daily Log']
 
 const inputCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-transparent'
 
@@ -1436,7 +1436,7 @@ export default function ProjectWorkspace() {
           {activeTab === 'Tasks' && <AssignedTasksTab project={project} />}
           {activeTab === 'Schedule' && <ScheduleTab project={project} />}
           {activeTab === 'Documents' && <DocumentsTab project={project} />}
-          {activeTab === 'Directory' && <ProjectDirectoryTab project={project} />}
+          {activeTab === 'Contacts' && <ProjectDirectoryTab project={project} />}
           {activeTab === 'Daily Log' && <ProjectDailyLogTab project={project} />}
         </div>
       </div>

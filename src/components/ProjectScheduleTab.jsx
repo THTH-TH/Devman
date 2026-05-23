@@ -142,6 +142,7 @@ function csvRowsToScheduleTasks(projectId, rows, existingCount = 0) {
       const startDate = normaliseDate(lower.start || lower['start date'] || lower.start_date)
       const endDate = normaliseDate(lower.finish || lower.end || lower['end date'] || lower.finish_date)
       const duration = Number(lower.duration || lower.days || lower['duration days'] || lower.duration_days || 1)
+      const assignee = lower.assignee || lower['assigned to'] || lower.contractor || lower.contact || lower['project contact'] || ''
       return {
         projectId,
         name: String(name).trim(),
@@ -152,13 +153,19 @@ function csvRowsToScheduleTasks(projectId, rows, existingCount = 0) {
         status: lower.status || 'not-started',
         progress: Number(lower.progress || 0),
         isMilestone: parseBool(lower.milestone || lower.is_milestone || lower['is milestone']),
-        assignee: lower.assignee || '',
-        internalOwner: lower.owner || lower['internal owner'] || '',
+        assignee,
+        internalOwner: lower.owner || lower['internal owner'] || lower['internal lead'] || '',
         notes: lower.notes || '',
         sortOrder: existingCount + index,
       }
     })
     .filter(Boolean)
+}
+
+function projectContactLabel(item, contacts, companies) {
+  const person = contacts.find(contact => contact.id === item.contactId)
+  const company = companies.find(company => company.id === item.companyId)
+  return [person?.name, company?.name, item.projectRole || item.discipline].filter(Boolean).join(' / ') || 'Project contact'
 }
 
 function exportScheduleCsv(tasks, fileName = 'schedule.csv') {
@@ -250,16 +257,33 @@ function EmptySchedule({ onAddTask }) {
 }
 
 function TaskForm({ projectId, phaseOptions, onClose }) {
-  const { addScheduleTask } = useStore()
+  const { addScheduleTask, projectContacts, contacts, companies, teamMembers, currentUser } = useStore()
   const [form, setForm] = useState({
     name: '',
     phase: phaseOptions[0] || 'Project Commencement',
     startDate: '',
     endDate: '',
+    assignee: '',
+    projectContactId: '',
     status: 'not-started',
   })
+  const projectContactOptions = projectContacts.filter(item => item.projectId === projectId)
+  const teamOptions = [...new Set([currentUser, ...teamMembers.map(member => member.name)].filter(Boolean))]
 
   const set = (key, value) => setForm(current => ({ ...current, [key]: value }))
+  const setAssigneeTarget = value => {
+    if (!value) {
+      setForm(current => ({ ...current, assignee: '', projectContactId: '' }))
+      return
+    }
+    if (value.startsWith('pc:')) {
+      const id = value.slice(3)
+      const item = projectContactOptions.find(option => option.id === id)
+      setForm(current => ({ ...current, projectContactId: id, assignee: item ? projectContactLabel(item, contacts, companies) : '' }))
+      return
+    }
+    setForm(current => ({ ...current, assignee: value.slice(5), projectContactId: '' }))
+  }
 
   const save = async () => {
     if (!form.name.trim()) return
@@ -270,6 +294,8 @@ function TaskForm({ projectId, phaseOptions, onClose }) {
       startDate: form.startDate,
       endDate: form.endDate,
       durationDays: durationDays(form),
+      assignee: form.assignee,
+      projectContactId: form.projectContactId,
       status: form.status,
       progress: form.status === 'complete' ? 100 : 0,
     })
@@ -279,7 +305,7 @@ function TaskForm({ projectId, phaseOptions, onClose }) {
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
       <div className="mb-3 text-sm font-semibold text-gray-800">New schedule task</div>
-      <div className="grid gap-3 md:grid-cols-[1fr_210px_150px_150px_140px]">
+      <div className="grid gap-3 md:grid-cols-[1fr_190px_150px_150px_180px_140px]">
         <input
           autoFocus
           className="h-9 rounded-md border border-gray-200 px-3 text-sm outline-none focus:border-ocean-400"
@@ -300,6 +326,11 @@ function TaskForm({ projectId, phaseOptions, onClose }) {
         </datalist>
         <input type="date" className="h-9 rounded-md border border-gray-200 px-3 text-sm outline-none focus:border-ocean-400" value={form.startDate} onChange={e => set('startDate', e.target.value)} />
         <input type="date" className="h-9 rounded-md border border-gray-200 px-3 text-sm outline-none focus:border-ocean-400" value={form.endDate} onChange={e => set('endDate', e.target.value)} />
+        <select className="h-9 rounded-md border border-gray-200 px-3 text-sm outline-none focus:border-ocean-400" value={form.projectContactId ? `pc:${form.projectContactId}` : form.assignee ? `team:${form.assignee}` : ''} onChange={e => setAssigneeTarget(e.target.value)}>
+          <option value="">Unassigned</option>
+          {teamOptions.map(name => <option key={`team:${name}`} value={`team:${name}`}>{name}</option>)}
+          {projectContactOptions.map(item => <option key={`pc:${item.id}`} value={`pc:${item.id}`}>{projectContactLabel(item, contacts, companies)}</option>)}
+        </select>
         <select className="h-9 rounded-md border border-gray-200 px-3 text-sm outline-none focus:border-ocean-400" value={form.status} onChange={e => set('status', e.target.value)}>
           {SELECTABLE_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
@@ -314,11 +345,7 @@ function TaskForm({ projectId, phaseOptions, onClose }) {
 
 function TaskEditDrawer({ task, phaseOptions, onClose }) {
   const { updateScheduleTask, deleteScheduleTask, projectContacts, contacts, companies } = useStore()
-  const contactLabel = item => {
-    const person = contacts.find(contact => contact.id === item.contactId)
-    const company = companies.find(company => company.id === item.companyId)
-    return [person?.name, company?.name, item.projectRole || item.discipline].filter(Boolean).join(' / ') || 'Project contact'
-  }
+  const contactLabel = item => projectContactLabel(item, contacts, companies)
   const availableProjectContacts = projectContacts.filter(item => item.projectId === task.projectId)
   const [form, setForm] = useState({
     name: task.name || '',
@@ -456,6 +483,8 @@ function TaskListView({ projectId, projectStartDate, tasks, showProject = false 
     projectContacts,
     contacts,
     companies,
+    teamMembers,
+    currentUser,
   } = useStore()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -493,10 +522,24 @@ function TaskListView({ projectId, projectStartDate, tasks, showProject = false 
     : [{ id: 'archispace-standard-development-programme', name: 'Archispace Standard Development Programme', isDefault: true }]
   const activeTemplateId = selectedTemplateId || availableTemplates.find(t => t.isDefault)?.id || availableTemplates[0]?.id || ''
   const availableProjectContacts = projectContacts.filter(item => item.projectId === projectId)
-  const contactLabel = item => {
-    const person = contacts.find(contact => contact.id === item.contactId)
-    const company = companies.find(company => company.id === item.companyId)
-    return [person?.name, company?.name, item.projectRole || item.discipline].filter(Boolean).join(' / ') || 'Project contact'
+  const contactLabel = item => projectContactLabel(item, contacts, companies)
+  const teamAssignees = useMemo(() => {
+    const names = new Set([currentUser, ...teamMembers.map(member => member.name), ...tasks.filter(task => !task.projectContactId).map(task => task.assignee)].filter(Boolean))
+    return [...names].sort((a, b) => a.localeCompare(b))
+  }, [currentUser, teamMembers, tasks])
+  const assigneeValue = task => task.projectContactId ? `pc:${task.projectContactId}` : task.assignee ? `team:${task.assignee}` : ''
+  const updateAssignee = async (task, value) => {
+    if (!value) {
+      await updateScheduleTask(task.id, { assignee: '', projectContactId: '' })
+      return
+    }
+    if (value.startsWith('pc:')) {
+      const id = value.slice(3)
+      const item = availableProjectContacts.find(option => option.id === id)
+      await updateScheduleTask(task.id, { projectContactId: id, assignee: item ? contactLabel(item) : task.assignee || '' })
+      return
+    }
+    await updateScheduleTask(task.id, { projectContactId: '', assignee: value.slice(5) })
   }
 
   const toggleGroup = phase => {
@@ -602,8 +645,8 @@ function TaskListView({ projectId, projectStartDate, tasks, showProject = false 
   }
 
   const tableCols = showProject
-    ? 'grid-cols-[42px_minmax(320px,1fr)_150px_132px_132px_80px_150px_48px]'
-    : 'grid-cols-[42px_minmax(320px,1fr)_132px_132px_80px_150px_48px]'
+    ? 'grid-cols-[42px_minmax(280px,1fr)_140px_132px_132px_70px_170px_150px_48px]'
+    : 'grid-cols-[42px_minmax(300px,1fr)_132px_132px_70px_170px_150px_48px]'
 
   return (
     <div className="space-y-3">
@@ -709,20 +752,21 @@ function TaskListView({ projectId, projectStartDate, tasks, showProject = false 
           <div className="mb-3 flex items-center justify-between">
             <div>
               <div className="text-sm font-semibold text-gray-800">CSV import preview</div>
-              <div className="text-xs text-gray-500">{csvImport.tasks.length} usable task rows found. Headers can be phase/stage, task/name, start, finish, duration, milestone, owner, notes.</div>
+              <div className="text-xs text-gray-500">{csvImport.tasks.length} usable task rows found. Useful headers: phase/stage, task/name, start, finish, duration, assignee, contractor, milestone, owner, notes.</div>
             </div>
             <button onClick={() => setCsvImport(null)} className="rounded-md p-1 text-gray-400 hover:bg-white"><X size={15} /></button>
           </div>
           <div className="mb-3 max-h-48 overflow-auto rounded-lg border border-ocean-100 bg-white">
             <table className="w-full text-xs">
               <thead className="bg-gray-50 text-gray-500">
-                <tr><th className="px-3 py-2 text-left">Phase</th><th className="px-3 py-2 text-left">Task</th><th className="px-3 py-2 text-left">Start</th><th className="px-3 py-2 text-left">Finish</th></tr>
+                <tr><th className="px-3 py-2 text-left">Phase</th><th className="px-3 py-2 text-left">Task</th><th className="px-3 py-2 text-left">Assignee</th><th className="px-3 py-2 text-left">Start</th><th className="px-3 py-2 text-left">Finish</th></tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {csvImport.tasks.slice(0, 8).map((task, index) => (
                   <tr key={`${task.name}-${index}`}>
                     <td className="px-3 py-2">{task.phase}</td>
                     <td className="px-3 py-2">{task.name}</td>
+                    <td className="px-3 py-2">{task.assignee || '-'}</td>
                     <td className="px-3 py-2">{task.startDate || '-'}</td>
                     <td className="px-3 py-2">{task.endDate || '-'}</td>
                   </tr>
@@ -746,6 +790,7 @@ function TaskListView({ projectId, projectStartDate, tasks, showProject = false 
           <div className="px-3 py-3">Start</div>
           <div className="px-3 py-3">Finish</div>
           <div className="px-3 py-3">Days</div>
+          <div className="px-3 py-3">Assignee</div>
           <div className="px-3 py-3">Status</div>
           <div />
         </div>
@@ -803,6 +848,17 @@ function TaskListView({ projectId, projectStartDate, tasks, showProject = false 
                     <div className="px-2"><DateCell value={task.startDate} onCommit={value => updateDate(task, 'startDate', value)} /></div>
                     <div className="px-2"><DateCell value={task.endDate} onCommit={value => updateDate(task, 'endDate', value)} /></div>
                     <div className="px-3 text-sm text-gray-500">{days ? `${days}d` : '-'}</div>
+                    <div className="px-2">
+                      <select
+                        className="h-7 w-full truncate rounded-md border border-transparent bg-gray-50 px-2 text-xs text-gray-700 outline-none hover:border-gray-200 focus:border-ocean-400 focus:bg-white"
+                        value={assigneeValue(task)}
+                        onChange={event => updateAssignee(task, event.target.value)}
+                      >
+                        <option value="">Unassigned</option>
+                        {teamAssignees.map(name => <option key={`team:${name}`} value={`team:${name}`}>{name}</option>)}
+                        {availableProjectContacts.map(item => <option key={`pc:${item.id}`} value={`pc:${item.id}`}>{contactLabel(item)}</option>)}
+                      </select>
+                    </div>
                     <div className="px-2"><StatusSelect task={task} onChange={updateStatus} /></div>
                     <div className="px-2 text-right">
                       {confirmDelete === task.id ? (

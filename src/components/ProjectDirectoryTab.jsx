@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import Papa from 'papaparse'
 import { Mail, Phone, Plus, Search, Trash2, Upload, X } from 'lucide-react'
 import useStore from '../store/useStore'
 import { STAGES, STAGE_MAP } from '../data/stages'
 
 const inputCls = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-ocean-400 focus:ring-2 focus:ring-ocean-100'
-const ROLE_OPTIONS = ['Architect', 'Planner', 'Engineer', 'Surveyor', 'Geotech', 'Traffic', 'Council', 'Lawyer', 'Agent', 'Builder', 'Supplier', 'Other']
+const ROLE_OPTIONS = ['Archispace', 'Architect', 'Planner', 'Engineer', 'Surveyor', 'Geotech', 'Traffic', 'Council', 'Lawyer', 'Agent', 'Builder', 'Supplier', 'Other']
 const STATUS_OPTIONS = ['active', 'tendering', 'waiting', 'inactive']
 
 const normalise = value => String(value || '').trim().toLowerCase()
@@ -71,7 +72,7 @@ function AssignmentModal({ project, item, onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={event => event.target === event.currentTarget && onClose()}>
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-          <h3 className="text-sm font-semibold text-gray-900">{item ? 'Edit directory assignment' : 'Add project contact'}</h3>
+          <h3 className="text-sm font-semibold text-gray-900">{item ? 'Edit project contact' : 'Add project contact'}</h3>
           <button onClick={onClose} className="rounded p-1 text-gray-400 hover:bg-gray-50 hover:text-gray-600"><X size={16} /></button>
         </div>
         <div className="space-y-4 px-6 py-5">
@@ -211,7 +212,7 @@ function ContactImport({ project, onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={event => event.target === event.currentTarget && onClose()}>
       <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-          <h3 className="text-sm font-semibold text-gray-900">Import contacts CSV</h3>
+          <h3 className="text-sm font-semibold text-gray-900">Import project contacts CSV</h3>
           <button onClick={onClose} className="rounded p-1 text-gray-400 hover:bg-gray-50 hover:text-gray-600"><X size={16} /></button>
         </div>
         <div className="space-y-4 px-6 py-5">
@@ -253,7 +254,7 @@ function ContactImport({ project, onClose }) {
 }
 
 export default function ProjectDirectoryTab({ project }) {
-  const { companies, contacts, projectContacts, updateBatchProjectContacts, deleteBatchProjectContacts, deleteProjectContact } = useStore()
+  const { companies, contacts, projectContacts, teamMembers, currentUser, updateBatchProjectContacts, deleteBatchProjectContacts, deleteProjectContact } = useStore()
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null)
   const [showImport, setShowImport] = useState(false)
@@ -273,6 +274,27 @@ export default function ProjectDirectoryTab({ project }) {
       return [item.company?.name, item.contact?.name, item.projectRole, item.discipline, item.notes].some(value => String(value || '').toLowerCase().includes(q))
     }), [projectContacts, companies, contacts, project.id, search])
 
+  const groups = useMemo(() => {
+    const grouped = new Map()
+    rows.forEach(item => {
+      const key = item.projectRole || 'Other'
+      if (!grouped.has(key)) grouped.set(key, [])
+      grouped.get(key).push(item)
+    })
+    if (!search.trim() && !grouped.has('Archispace')) grouped.set('Archispace', [])
+    return [...grouped.entries()]
+      .sort(([a], [b]) => (a === 'Archispace' ? -1 : b === 'Archispace' ? 1 : a.localeCompare(b)))
+      .map(([role, items]) => ({ role, items }))
+  }, [rows, search])
+
+  const archispacePeople = useMemo(() => {
+    const projectTeam = (project.teamMembers || [])
+      .map(member => typeof member === 'string' ? member : member?.name || member?.email || '')
+      .filter(Boolean)
+    const globalTeam = teamMembers.map(member => member.name).filter(Boolean)
+    return [...new Set([...projectTeam, ...globalTeam, currentUser].filter(Boolean))]
+  }, [currentUser, project.teamMembers, teamMembers])
+
   const toggleSelected = id => setSelected(current => {
     const next = new Set(current)
     if (next.has(id)) next.delete(id)
@@ -284,14 +306,22 @@ export default function ProjectDirectoryTab({ project }) {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-xl border border-forest-100 bg-forest-50/50 p-4">
+        <div className="text-sm font-semibold text-forest-900">Project contacts</div>
+        <p className="mt-1 text-sm text-forest-800/75">
+          People appear here once assigned to this project from the main Contacts page or imported into this project. Select multiple people in Contacts, then assign them to a project with a role.
+        </p>
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
           <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input className={`${inputCls} w-72 pl-8`} placeholder="Search contractors, consultants..." value={search} onChange={event => setSearch(event.target.value)} />
+          <input className={`${inputCls} w-72 pl-8`} placeholder="Search contacts, companies, roles..." value={search} onChange={event => setSearch(event.target.value)} />
         </div>
         <div className="flex-1" />
+        <Link to="/contacts" className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">Open main Contacts</Link>
         <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"><Upload size={14} /> Import CSV</button>
-        <button onClick={() => setModal({})} className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 px-3 py-2 text-sm font-medium text-white hover:bg-forest-700"><Plus size={14} /> Add contact</button>
+        <button onClick={() => setModal({})} className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 px-3 py-2 text-sm font-medium text-white hover:bg-forest-700"><Plus size={14} /> Assign contact</button>
       </div>
 
       {selectedIds.length > 0 && (
@@ -319,33 +349,59 @@ export default function ProjectDirectoryTab({ project }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {rows.map(item => (
-              <tr key={item.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3"><input type="checkbox" checked={selected.has(item.id)} onChange={() => toggleSelected(item.id)} /></td>
-                <td className="px-4 py-3">
-                  <button onClick={() => setModal(item)} className="text-left">
-                    <div className="font-medium text-gray-900">{item.company?.name || item.contact?.name || 'Unassigned contact'}</div>
-                    {item.contact && <div className="text-xs text-gray-500">{item.contact.name}{item.contact.title ? `, ${item.contact.title}` : ''}</div>}
-                    <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-400">
-                      {item.contact?.email && <span className="inline-flex items-center gap-1"><Mail size={10} /> {item.contact.email}</span>}
-                      {(item.contact?.phone || item.company?.phone) && <span className="inline-flex items-center gap-1"><Phone size={10} /> {item.contact?.phone || item.company?.phone}</span>}
+            {groups.map(group => (
+              <Fragment key={group.role}>
+                <tr className="bg-gray-50/80">
+                  <td colSpan={6} className="px-4 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`h-2 w-2 rounded-full ${group.role === 'Archispace' ? 'bg-forest-600' : 'bg-ocean-500'}`} />
+                      <span className="text-xs font-bold uppercase tracking-wide text-gray-700">{group.role}</span>
+                      <span className="text-xs text-gray-400">{group.items.length || (group.role === 'Archispace' ? archispacePeople.length : 0)} people</span>
                     </div>
-                  </button>
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-600">{item.projectRole || '-'}{item.discipline ? <div className="text-xs text-gray-400">{item.discipline}</div> : null}</td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-1">
-                    {(item.stageIds || []).slice(0, 4).map(stageId => <span key={stageId} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">{STAGE_MAP[stageId]?.short || stageId}</span>)}
-                    {item.stageIds?.length > 4 && <span className="text-[10px] text-gray-400">+{item.stageIds.length - 4}</span>}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-xs capitalize text-gray-500">{item.status}{item.isPrimary ? <span className="ml-2 rounded-full bg-forest-50 px-2 py-0.5 font-medium text-forest-700">Primary</span> : null}</td>
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => deleteProjectContact(item.id)} className="rounded p-1.5 text-gray-300 hover:bg-red-50 hover:text-red-600"><Trash2 size={13} /></button>
-                </td>
-              </tr>
+                  </td>
+                </tr>
+                {group.items.length === 0 && group.role === 'Archispace' ? (
+                  <tr className="hover:bg-gray-50">
+                    <td className="px-4 py-3" />
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-gray-900">Archispace</div>
+                      <div className="text-xs text-gray-500">{archispacePeople.length ? archispacePeople.join(', ') : 'Default internal project group'}</div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">Internal team</td>
+                    <td className="px-4 py-3 text-xs text-gray-400">All stages</td>
+                    <td className="px-4 py-3 text-xs capitalize text-gray-500"><span className="rounded-full bg-forest-50 px-2 py-0.5 font-medium text-forest-700">Default</span></td>
+                    <td />
+                  </tr>
+                ) : group.items.map(item => (
+                  <tr key={item.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3"><input type="checkbox" checked={selected.has(item.id)} onChange={() => toggleSelected(item.id)} /></td>
+                    <td className="px-4 py-3">
+                      <button onClick={() => setModal(item)} className="text-left">
+                        <div className="font-medium text-gray-900">{item.company?.name || item.contact?.name || 'Unassigned contact'}</div>
+                        {item.contact && <div className="text-xs text-gray-500">{item.contact.name}{item.contact.title ? `, ${item.contact.title}` : ''}</div>}
+                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-400">
+                          {item.contact?.email && <span className="inline-flex items-center gap-1"><Mail size={10} /> {item.contact.email}</span>}
+                          {(item.contact?.phone || item.company?.phone) && <span className="inline-flex items-center gap-1"><Phone size={10} /> {item.contact?.phone || item.company?.phone}</span>}
+                        </div>
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{item.projectRole || '-'}{item.discipline ? <div className="text-xs text-gray-400">{item.discipline}</div> : null}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {(item.stageIds || []).slice(0, 4).map(stageId => <span key={stageId} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">{STAGE_MAP[stageId]?.short || stageId}</span>)}
+                        {item.stageIds?.length > 4 && <span className="text-[10px] text-gray-400">+{item.stageIds.length - 4}</span>}
+                        {!item.stageIds?.length && <span className="text-xs text-gray-300">All stages</span>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-xs capitalize text-gray-500">{item.status}{item.isPrimary ? <span className="ml-2 rounded-full bg-forest-50 px-2 py-0.5 font-medium text-forest-700">Primary</span> : null}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button onClick={() => deleteProjectContact(item.id)} className="rounded p-1.5 text-gray-300 hover:bg-red-50 hover:text-red-600"><Trash2 size={13} /></button>
+                    </td>
+                  </tr>
+                ))}
+              </Fragment>
             ))}
-            {rows.length === 0 && <tr><td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">No project contacts yet.</td></tr>}
+            {rows.length === 0 && search && <tr><td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">No contacts match this search.</td></tr>}
           </tbody>
         </table>
       </div>

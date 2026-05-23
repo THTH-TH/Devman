@@ -78,7 +78,7 @@ export default function ShareDocumentsModal({ project, documents, onClose }) {
         const contact = contacts.find(person => person.id === item.contactId)
         const company = companies.find(entry => entry.id === item.companyId)
         const recipients = []
-        if (contact?.email) recipients.push({ name: contact.name || contact.email, email: contact.email, source: 'Project directory' })
+        if (contact?.email) recipients.push({ name: contact.name || contact.email, email: contact.email, source: 'Project contacts' })
         if (company?.email) recipients.push({ name: company.name || company.email, email: company.email, source: 'Project company' })
         return recipients
       })
@@ -92,7 +92,7 @@ export default function ShareDocumentsModal({ project, documents, onClose }) {
 
   const recipientGroups = useMemo(() => [
     { id: 'project-team', label: 'Project team', count: internalRecipients.length, recipients: internalRecipients },
-    { id: 'project-directory', label: 'Project directory', count: projectDirectoryRecipients.length, recipients: projectDirectoryRecipients },
+    { id: 'project-directory', label: 'Project contacts', count: projectDirectoryRecipients.length, recipients: projectDirectoryRecipients },
   ], [internalRecipients, projectDirectoryRecipients])
 
   const allRecipients = useMemo(() => uniqueRecipients([

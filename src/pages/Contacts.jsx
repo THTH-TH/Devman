@@ -19,7 +19,7 @@ import useStore from '../store/useStore'
 import { STAGES, STAGE_MAP } from '../data/stages'
 
 const inputCls = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-ocean-400 focus:ring-2 focus:ring-ocean-100'
-const ROLE_OPTIONS = ['Architect', 'Planner', 'Engineer', 'Surveyor', 'Geotech', 'Traffic', 'Council', 'Lawyer', 'Agent', 'Builder', 'Supplier', 'Broker', 'Solicitor', 'Other']
+const ROLE_OPTIONS = ['Archispace', 'Architect', 'Planner', 'Engineer', 'Surveyor', 'Geotech', 'Traffic', 'Council', 'Lawyer', 'Agent', 'Builder', 'Supplier', 'Broker', 'Solicitor', 'Other']
 const STATUS_OPTIONS = ['active', 'tendering', 'waiting', 'inactive']
 
 const normalise = value => String(value || '').trim().toLowerCase()
@@ -431,7 +431,7 @@ function ImportModal({ onClose }) {
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
           <div>
             <h2 className="text-sm font-semibold text-gray-900">Import contacts CSV</h2>
-            <p className="text-sm text-gray-400">Works with contractor lists, exported Google contacts, and project directory CSV files.</p>
+            <p className="text-sm text-gray-400">Works with contractor lists, exported Google contacts, and project contact CSV files.</p>
           </div>
           <button onClick={onClose} className="rounded p-1 text-gray-400 hover:bg-gray-50"><X size={16} /></button>
         </div>
@@ -587,7 +587,7 @@ export default function Contacts() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <div>
             <h1 className="text-lg font-bold text-gray-900">Contacts</h1>
-            <p className="mt-0.5 text-sm text-gray-400">Companies, contractors, consultants, project groups and imported email contacts.</p>
+            <p className="mt-0.5 text-sm text-gray-400">Companies, contractors, consultants, project contact groups and imported email contacts.</p>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"><Upload size={14} /> Import CSV</button>
@@ -645,11 +645,11 @@ export default function Contacts() {
                   {typeOptions.map(type => <option key={type} value={type}>{type}</option>)}
                 </select>
                 <div className="flex-1" />
-                <button onClick={() => setShowAssign(true)} disabled={!selectedRecords.length} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"><FolderKanban size={14} /> Add to project</button>
+                <button onClick={() => setShowAssign(true)} disabled={!selectedRecords.length} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"><FolderKanban size={14} /> Assign to project</button>
               </div>
               {selectedRecords.length > 0 && (
                 <div className="mt-3 rounded-lg border border-forest-100 bg-forest-50 px-3 py-2 text-sm text-forest-800">
-                  {selectedRecords.length} selected. Use Add to project to create a project group/role.
+                  {selectedRecords.length} selected. Use Assign to project to add everyone to a project with the same role/group.
                 </div>
               )}
             </div>
